@@ -4,6 +4,7 @@ import (
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web/params"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"bbs-go/internal/models"
 )
@@ -90,5 +91,9 @@ func (r *sysConfigRepository) GetByKey(db *gorm.DB, key string) *models.SysConfi
 	if len(key) == 0 {
 		return nil
 	}
-	return r.Take(db, "`key` = ?", key)
+	ret := &models.SysConfig{}
+	if err := db.Where(clause.Eq{Column: clause.Column{Name: "key"}, Value: key}).Take(ret).Error; err != nil {
+		return nil
+	}
+	return ret
 }

@@ -16,6 +16,8 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -26,6 +28,7 @@ import (
 	"github.com/mlogclub/simple/common/strs"
 	"github.com/mlogclub/simple/sqls"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 
 	// "gorm.io/driver/sqlite" // Sqlite driver based on CGO
 	"github.com/glebarez/sqlite" // Pure go SQLite driver, checkout https://github.com/glebarez/sqlite for details
@@ -41,12 +44,12 @@ var (
 
 // 测试数据库连接
 type DbConfigReq struct {
-	Type     string `json:"type"`               // mysql | sqlite
-	Host     string `json:"host,omitempty"`     // mysql
-	Port     string `json:"port,omitempty"`     // mysql
-	Database string `json:"database,omitempty"` // mysql
-	Username string `json:"username,omitempty"` // mysql
-	Password string `json:"password,omitempty"` // mysql
+	Type     string `json:"type"`               // mysql | postgres | sqlite
+	Host     string `json:"host,omitempty"`     // mysql | postgres
+	Port     string `json:"port,omitempty"`     // mysql | postgres
+	Database string `json:"database,omitempty"` // mysql | postgres
+	Username string `json:"username,omitempty"` // mysql | postgres
+	Password string `json:"password,omitempty"` // mysql | postgres
 }
 
 // 执行安装
@@ -68,9 +71,24 @@ func (r DbConfigReq) GetConnStr() string {
 	switch r.Type {
 	case config.DbTypeSQLite:
 		return buildSqliteDSN()
+	case config.DbTypePostgres:
+		return buildPostgresDSN(r)
 	default:
 		return r.Username + ":" + r.Password + "@tcp(" + r.Host + ":" + r.Port + ")/" + r.Database + "?charset=utf8mb4&parseTime=True&multiStatements=true&loc=Local"
 	}
+}
+
+func buildPostgresDSN(r DbConfigReq) string {
+	pgURL := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(r.Username, r.Password),
+		Host:   net.JoinHostPort(r.Host, r.Port),
+		Path:   r.Database,
+	}
+	query := pgURL.Query()
+	query.Set("sslmode", "disable")
+	pgURL.RawQuery = query.Encode()
+	return pgURL.String()
 }
 
 func TestDbConnection(req DbConfigReq) error {
@@ -98,6 +116,35 @@ func TestDbConnection(req DbConfigReq) error {
 			return err
 		}
 		if name != "" {
+			return errors.New("please use an empty database for installation")
+		}
+	case config.DbTypePostgres:
+		db, err := gorm.Open(postgres.Open(dsn))
+		if err != nil {
+			return err
+		}
+		sqlDB, err := db.DB()
+		if err != nil {
+			return err
+		}
+		if err = sqlDB.Ping(); err != nil {
+			return err
+		}
+		// Ensure install user can use/create objects in public schema before migration.
+		var canUseCreate bool
+		if err := db.Raw(
+			"SELECT has_schema_privilege(current_user, 'public', 'USAGE') AND has_schema_privilege(current_user, 'public', 'CREATE')",
+		).Scan(&canUseCreate).Error; err != nil {
+			return err
+		}
+		if !canUseCreate {
+			return errors.New("postgres user requires USAGE and CREATE privileges on schema public")
+		}
+		var tableCount int64
+		if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'").Scan(&tableCount).Error; err != nil {
+			return err
+		}
+		if tableCount > 0 {
 			return errors.New("please use an empty database for installation")
 		}
 	default:
@@ -197,6 +244,8 @@ func InitDB() error {
 		dsn := conf.Url
 		dsn = buildSqliteDSN()
 		dialector = sqlite.Open(dsn)
+	case config.DbTypePostgres:
+		dialector = postgres.Open(conf.Url)
 	default:
 		dialector = mysql.Open(conf.Url)
 	}

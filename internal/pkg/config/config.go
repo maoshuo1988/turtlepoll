@@ -229,8 +229,9 @@ func getLogFilename() string {
 }
 
 const (
-	DbTypeMySQL  = "mysql"
-	DbTypeSQLite = "sqlite"
+	DbTypeMySQL    = "mysql"
+	DbTypePostgres = "postgres"
+	DbTypeSQLite   = "sqlite"
 )
 
 func SetDbDefaults(c *sqls.DbConfig) {
