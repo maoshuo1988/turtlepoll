@@ -225,14 +225,15 @@ func (s *userService) SignUp(username, email, nickname, password, rePassword str
 		return nil, errors.New("请输入邮箱")
 	}
 
-	// 验证用户名
-	if len(username) > 0 {
-		if err := validate.IsUsername(username); err != nil {
-			return nil, err
-		}
-		if s.isUsernameExists(username) {
-			return nil, errors.New("用户名：" + username + " 已被占用")
-		}
+	// 验证用户名（注册时必填）
+	if len(username) == 0 {
+		return nil, errors.New("请输入用户名")
+	}
+	if err := validate.IsUsername(username); err != nil {
+		return nil, err
+	}
+	if s.isUsernameExists(username) {
+		return nil, errors.New("用户名：" + username + " 已被占用")
 	}
 
 	user := &models.User{
