@@ -27,11 +27,7 @@ import (
 	"github.com/mlogclub/simple/common/passwd"
 	"github.com/mlogclub/simple/common/strs"
 	"github.com/mlogclub/simple/sqls"
-	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-
-	// "gorm.io/driver/sqlite" // Sqlite driver based on CGO
-	"github.com/glebarez/sqlite" // Pure go SQLite driver, checkout https://github.com/glebarez/sqlite for details
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -44,12 +40,12 @@ var (
 
 // 测试数据库连接
 type DbConfigReq struct {
-	Type     string `json:"type"`               // mysql | postgres | sqlite
-	Host     string `json:"host,omitempty"`     // mysql | postgres
-	Port     string `json:"port,omitempty"`     // mysql | postgres
-	Database string `json:"database,omitempty"` // mysql | postgres
-	Username string `json:"username,omitempty"` // mysql | postgres
-	Password string `json:"password,omitempty"` // mysql | postgres
+	Type     string `json:"type"`               // postgres
+	Host     string `json:"host,omitempty"`     // postgres
+	Port     string `json:"port,omitempty"`     // postgres
+	Database string `json:"database,omitempty"` // postgres
+	Username string `json:"username,omitempty"` // postgres
+	Password string `json:"password,omitempty"` // postgres
 }
 
 // 执行安装
@@ -66,16 +62,9 @@ type InstallReq struct {
 
 func (r DbConfigReq) GetConnStr() string {
 	if r.Type == "" {
-		r.Type = config.DbTypeMySQL
+		r.Type = config.DbTypePostgres
 	}
-	switch r.Type {
-	case config.DbTypeSQLite:
-		return buildSqliteDSN()
-	case config.DbTypePostgres:
-		return buildPostgresDSN(r)
-	default:
-		return r.Username + ":" + r.Password + "@tcp(" + r.Host + ":" + r.Port + ")/" + r.Database + "?charset=utf8mb4&parseTime=True&multiStatements=true&loc=Local"
-	}
+	return buildPostgresDSN(r)
 }
 
 func buildPostgresDSN(r DbConfigReq) string {
@@ -93,79 +82,39 @@ func buildPostgresDSN(r DbConfigReq) string {
 
 func TestDbConnection(req DbConfigReq) error {
 	if req.Type == "" {
-		req.Type = config.DbTypeMySQL
+		req.Type = config.DbTypePostgres
+	}
+	if req.Type != config.DbTypePostgres {
+		return errors.New("only postgres is supported")
 	}
 	dsn := req.GetConnStr()
-
-	switch req.Type {
-	case config.DbTypeSQLite:
-		db, err := gorm.Open(sqlite.Open(dsn))
-		if err != nil {
-			return err
-		}
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-		if err = sqlDB.Ping(); err != nil {
-			return err
-		}
-		var name string
-		err = db.Raw("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1").Scan(&name).Error
-		if err != nil {
-			return err
-		}
-		if name != "" {
-			return errors.New("please use an empty database for installation")
-		}
-	case config.DbTypePostgres:
-		db, err := gorm.Open(postgres.Open(dsn))
-		if err != nil {
-			return err
-		}
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-		if err = sqlDB.Ping(); err != nil {
-			return err
-		}
-		// Ensure install user can use/create objects in public schema before migration.
-		var canUseCreate bool
-		if err := db.Raw(
-			"SELECT has_schema_privilege(current_user, 'public', 'USAGE') AND has_schema_privilege(current_user, 'public', 'CREATE')",
-		).Scan(&canUseCreate).Error; err != nil {
-			return err
-		}
-		if !canUseCreate {
-			return errors.New("postgres user requires USAGE and CREATE privileges on schema public")
-		}
-		var tableCount int64
-		if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'").Scan(&tableCount).Error; err != nil {
-			return err
-		}
-		if tableCount > 0 {
-			return errors.New("please use an empty database for installation")
-		}
-	default:
-		db, err := gorm.Open(mysql.Open(dsn))
-		if err != nil {
-			return err
-		}
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-		if err = sqlDB.Ping(); err != nil {
-			return err
-		}
-		var tables []string
-		if err := db.Raw("SHOW TABLES").Scan(&tables).Error; err != nil {
-			return err
-		}
-		if len(tables) > 0 {
-			return errors.New("please use an empty database for installation")
-		}
+	db, err := gorm.Open(postgres.Open(dsn))
+	if err != nil {
+		return err
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	if err = sqlDB.Ping(); err != nil {
+		return err
+	}
+	// Ensure install user can use/create objects in public schema before migration.
+	var canUseCreate bool
+	if err := db.Raw(
+		"SELECT has_schema_privilege(current_user, 'public', 'USAGE') AND has_schema_privilege(current_user, 'public', 'CREATE')",
+	).Scan(&canUseCreate).Error; err != nil {
+		return err
+	}
+	if !canUseCreate {
+		return errors.New("postgres user requires USAGE and CREATE privileges on schema public")
+	}
+	var tableCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'").Scan(&tableCount).Error; err != nil {
+		return err
+	}
+	if tableCount > 0 {
+		return errors.New("please use an empty database for installation")
 	}
 	return nil
 }
@@ -202,10 +151,8 @@ func WriteConfig(req InstallReq) error {
 	cfg := config.Instance
 	cfg.Language = req.Language
 	cfg.IDCodec.Key = idcodec.GenerateRandomKey()
-	if req.DbConfig.Type == "" {
-		req.DbConfig.Type = config.DbTypeMySQL
-	}
-	cfg.DB.Type = req.DbConfig.Type
+	req.DbConfig.Type = config.DbTypePostgres
+	cfg.DB.Type = config.DbTypePostgres
 	cfg.DB.Url = req.DbConfig.GetConnStr()
 	if strs.IsBlank(cfg.Search.IndexPath) {
 		cfg.Search.IndexPath = filepath.Join(config.GetConfigDir(), "data", "topic_index")
@@ -227,28 +174,15 @@ func InitConfig() {
 	config.Instance = cfg
 }
 
-// ResolveSqlitePath 将配置的 sqlite 相对路径转换为绝对路径（相对 bbs-go.yaml 所在目录）
-func buildSqliteDSN() string {
-	filepath := filepath.Join(config.GetConfigDir(), "bbs-go.db")
-	return "file:" + filepath + "?cache=shared&_fk=0&mode=rwc&_journal_mode=wal"
-}
-
 func InitDB() error {
 	conf := config.Instance.DB
 	config.SetDbDefaults(&conf)
 	config.Instance.DB = conf
-
-	var dialector gorm.Dialector
-	switch conf.Type {
-	case config.DbTypeSQLite:
-		dsn := conf.Url
-		dsn = buildSqliteDSN()
-		dialector = sqlite.Open(dsn)
-	case config.DbTypePostgres:
-		dialector = postgres.Open(conf.Url)
-	default:
-		dialector = mysql.Open(conf.Url)
+	if conf.Type != config.DbTypePostgres {
+		return errors.New("only postgres is supported")
 	}
+
+	dialector := postgres.Open(conf.Url)
 
 	db, err := gorm.Open(dialector, &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
@@ -269,15 +203,10 @@ func InitDB() error {
 	}
 
 	if sqlDB, err := db.DB(); err == nil {
-		if conf.Type == config.DbTypeSQLite {
-			sqlDB.SetMaxOpenConns(1)
-			sqlDB.SetMaxIdleConns(1)
-		} else {
-			sqlDB.SetMaxIdleConns(conf.MaxIdleConns)
-			sqlDB.SetMaxOpenConns(conf.MaxOpenConns)
-			sqlDB.SetConnMaxIdleTime(time.Duration(conf.ConnMaxIdleTimeSeconds) * time.Second)
-			sqlDB.SetConnMaxLifetime(time.Duration(conf.ConnMaxLifetimeSeconds) * time.Second)
-		}
+		sqlDB.SetMaxIdleConns(conf.MaxIdleConns)
+		sqlDB.SetMaxOpenConns(conf.MaxOpenConns)
+		sqlDB.SetConnMaxIdleTime(time.Duration(conf.ConnMaxIdleTimeSeconds) * time.Second)
+		sqlDB.SetConnMaxLifetime(time.Duration(conf.ConnMaxLifetimeSeconds) * time.Second)
 	}
 
 	sqls.SetDB(db)

@@ -21,7 +21,8 @@ Logger:
 
 # 数据库连接
 DB:
-  Url: username:password@tcp(localhost:3306)/bbsgo_db?charset=utf8mb4&parseTime=True&multiStatements=true&loc=Local
+  Type: postgres
+  Url: postgres://username:password@127.0.0.1:5432/bbsgo_db?sslmode=disable
   MaxIdleConns: 50
   MaxOpenConns: 200
 

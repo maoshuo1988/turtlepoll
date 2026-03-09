@@ -4,16 +4,14 @@ import (
 	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
 	"bbs-go/internal/repositories"
-	"fmt"
+	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/mlogclub/simple/sqls"
 
-	// "gorm.io/driver/sqlite" // Sqlite driver based on CGO
-	"github.com/glebarez/sqlite" // Pure go SQLite driver, checkout https://github.com/glebarez/sqlite for details
-
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
@@ -22,8 +20,12 @@ import (
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:task_engine_test_%d?mode=memory&cache=shared&_fk=1", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+	dsn := os.Getenv("BBSGO_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("BBSGO_TEST_POSTGRES_DSN is not set")
+	}
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			TablePrefix:   "t_",
 			SingularTable: true,
@@ -31,20 +33,24 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		t.Fatalf("open sqlite db: %v", err)
+		t.Fatalf("open postgres db: %v", err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatalf("get sql db: %v", err)
 	}
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetMaxOpenConns(5)
+	sqlDB.SetMaxIdleConns(2)
 	t.Cleanup(func() {
+		_ = db.Exec("DROP TABLE IF EXISTS t_user_badge, t_user_exp_log, t_user_score_log, t_user_task_log, t_user_task_event, t_task_config, t_level_config, t_user CASCADE").Error
 		_ = sqlDB.Close()
 	})
 
 	sqls.SetDB(db)
+	if err := db.Exec("DROP TABLE IF EXISTS t_user_badge, t_user_exp_log, t_user_score_log, t_user_task_log, t_user_task_event, t_task_config, t_level_config, t_user CASCADE").Error; err != nil {
+		t.Fatalf("drop tables: %v", err)
+	}
 
 	if err := db.AutoMigrate(
 		&models.User{},

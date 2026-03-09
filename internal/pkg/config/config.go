@@ -229,14 +229,12 @@ func getLogFilename() string {
 }
 
 const (
-	DbTypeMySQL    = "mysql"
 	DbTypePostgres = "postgres"
-	DbTypeSQLite   = "sqlite"
 )
 
 func SetDbDefaults(c *sqls.DbConfig) {
-	if c.Type == "" {
-		c.Type = DbTypeMySQL
+	if c.Type == "" || c.Type != DbTypePostgres {
+		c.Type = DbTypePostgres
 	}
 	if c.MaxIdleConns == 0 {
 		c.MaxIdleConns = 50
@@ -254,7 +252,7 @@ func SetDbDefaults(c *sqls.DbConfig) {
 
 func defaultDbConfig() sqls.DbConfig {
 	return sqls.DbConfig{
-		Type:                   DbTypeMySQL,
+		Type:                   DbTypePostgres,
 		MaxIdleConns:           50,
 		MaxOpenConns:           200,
 		ConnMaxIdleTimeSeconds: 300,
