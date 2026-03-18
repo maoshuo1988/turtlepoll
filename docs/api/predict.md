@@ -5,6 +5,12 @@
 - 路由组：`/api/football`
 - 说明：挂在 `/api` 下，默认经过 `AuthMiddleware`（需要登录）
 
+## 下注与金币接口
+
+预测市场的“金币下注/锁赔率/池子”相关接口已独立整理到：
+
+- `docs/api/coin.md`
+
 ## 数据模型
 
 ### PredictMarket（预测市场）
