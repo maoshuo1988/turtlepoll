@@ -25,6 +25,8 @@ var Models = []interface{}{
 	&PredictMarket{},
 	&PredictContext{},
 	&UserCoin{},
+	&UserCoinLog{},
+	&PredictBet{},
 }
 
 type Model struct {
@@ -194,6 +196,15 @@ type PredictMarket struct {
 	Result      string `gorm:"size:32" json:"result" form:"result"`                  // HOME/DRAW/AWAY（先预留）
 	ExternalKey string `gorm:"size:128" json:"externalKey" form:"externalKey"`       // 预留：外部业务 key
 
+	// ============ TurtlePoll：二元预测市场（A/B）下注池与赔率 ============
+	// baseA/baseB：系统默认投放的虚拟底池（用于早期赔率稳定）
+	// poolA/poolB：所有用户对 A/B 的下注累计（真实用户下注池）
+	// 注意：赔率在下注时锁定到订单里，不在结算时按最新赔率重算。
+	BaseA int64 `gorm:"not null;default:500" json:"baseA" form:"baseA"`
+	BaseB int64 `gorm:"not null;default:500" json:"baseB" form:"baseB"`
+	PoolA int64 `gorm:"not null;default:0" json:"poolA" form:"poolA"`
+	PoolB int64 `gorm:"not null;default:0" json:"poolB" form:"poolB"`
+
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
 }
@@ -240,6 +251,46 @@ type UserCoin struct {
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// UserCoinLog 金币流水
+// 说明：
+// - 铸币（管理员）：bizType=MINT，amount>0
+// - 下注扣减：bizType=BET，amount<0
+type UserCoinLog struct {
+	Model
+	UserId int64 `gorm:"not null;index" json:"userId" form:"userId"`
+	// 业务类型：MINT/BET/SETTLE/REFUND...
+	BizType string `gorm:"size:32;not null;index" json:"bizType" form:"bizType"`
+	// 业务关联（如下注单 id）
+	BizId int64 `gorm:"not null;default:0;index" json:"bizId" form:"bizId"`
+	// 变更金额：正数入账、负数出账
+	Amount int64 `gorm:"not null" json:"amount" form:"amount"`
+	// 变更后余额（便于审计）
+	BalanceAfter int64 `gorm:"not null" json:"balanceAfter" form:"balanceAfter"`
+	Remark       string `gorm:"size:256" json:"remark" form:"remark"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+}
+
+// PredictBet 预测下注单
+type PredictBet struct {
+	Model
+	UserId   int64 `gorm:"not null;index" json:"userId" form:"userId"`
+	MarketId int64 `gorm:"not null;index" json:"marketId" form:"marketId"`
+	// 下注选项：A/B
+	Option string `gorm:"size:8;not null;index" json:"option" form:"option"`
+	// 下注金额（金币）
+	Amount int64 `gorm:"not null" json:"amount" form:"amount"`
+	// 下单时锁定赔率（范围 1.2 ~ 5.0）
+	Odds float64 `gorm:"not null" json:"odds" form:"odds"`
+	// 下单时的有效池（用于审计/展示）
+	EffA int64 `gorm:"not null" json:"effA" form:"effA"`
+	EffB int64 `gorm:"not null" json:"effB" form:"effB"`
+
+	Status string `gorm:"size:16;not null;default:'OPEN'" json:"status" form:"status"` // OPEN/SETTLED/CANCELED
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 }
 
 type UserToken struct {
