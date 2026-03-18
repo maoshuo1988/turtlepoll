@@ -179,7 +179,11 @@ type MatchSchedule struct {
 // PredictMarket 预测市场（每个赛程一条市场记录）
 type PredictMarket struct {
 	Model
-	ScheduleId int64 `gorm:"not null;uniqueIndex" json:"scheduleId" form:"scheduleId"`
+
+	// 来源模型（例如：MatchSchedule）
+	SourceModel string `gorm:"size:64;not null;uniqueIndex:idx_predict_market_source" json:"sourceModel" form:"sourceModel"`
+	// 来源模型 ID（例如：MatchSchedule.Id）
+	SourceModelId int64 `gorm:"not null;uniqueIndex:idx_predict_market_source" json:"sourceModelId" form:"sourceModelId"`
 
 	// 市场基础信息
 	Title       string `gorm:"size:256;not null" json:"title" form:"title"`

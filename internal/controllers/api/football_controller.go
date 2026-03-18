@@ -73,6 +73,14 @@ func (c *FootballController) GetSchedules() *web.JsonResult {
 // 查询预测市场：GET /api/football/markets?page=1&limit=20
 func (c *FootballController) GetMarkets() *web.JsonResult {
 	p := params.NewQueryParams(c.Ctx)
+	sourceModel := c.Ctx.URLParamDefault("sourceModel", "")
+	sourceModelId, _ := params.GetInt64(c.Ctx, "sourceModelId")
+	if sourceModel != "" {
+		p.Cnd.Where("source_model = ?", sourceModel)
+	}
+	if sourceModelId > 0 {
+		p.Cnd.Where("source_model_id = ?", sourceModelId)
+	}
 	p.Cnd.Desc("id")
 	var list []models.PredictMarket
 	p.Cnd.Find(sqls.DB(), &list)

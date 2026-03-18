@@ -86,8 +86,9 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 
 		// 每个赛程一个预测市场
 		market := &models.PredictMarket{}
-		if e := db.Where("schedule_id = ?", schedule.Id).First(market).Error; e != nil {
-			market.ScheduleId = schedule.Id
+		if e := db.Where("source_model = ? AND source_model_id = ?", "MatchSchedule", schedule.Id).First(market).Error; e != nil {
+			market.SourceModel = "MatchSchedule"
+			market.SourceModelId = schedule.Id
 			market.MarketType = "1x2"
 			market.Status = "OPEN"
 			// 默认在开赛前 10 分钟关闭（先占位规则）
