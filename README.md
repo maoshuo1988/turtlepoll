@@ -5,5 +5,6 @@ PGPASSWORD=root psql -h localhost -U appuser -d turtlepoll -Atc "SELECT 'DROP TA
 
 构建
 ``` bash
-make build
+make buildlinux
 ```
+

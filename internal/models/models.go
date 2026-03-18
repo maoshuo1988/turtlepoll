@@ -213,8 +213,14 @@ type PredictContext struct {
 	ParticipantCount int64 `gorm:"not null;default:0" json:"participantCount" form:"participantCount"`
 	// 正方文案
 	ProText string `gorm:"size:256" json:"proText" form:"proText"`
+	// 正方投票数
+	ProVoteCount int64 `gorm:"not null;default:0" json:"proVoteCount" form:"proVoteCount"`
 	// 反方文案
 	ConText string `gorm:"size:256" json:"conText" form:"conText"`
+	// 反方投票数
+	ConVoteCount int64 `gorm:"not null;default:0" json:"conVoteCount" form:"conVoteCount"`
+	// 热度（用于排序/榜单，可由定时任务或人工维护）
+	Heat int64 `gorm:"not null;default:0" json:"heat" form:"heat"`
 	// 预测事件详情
 	Detail string `gorm:"type:text" json:"detail" form:"detail"`
 	// 标签（先用逗号分隔，后续如需结构化可拆表）

@@ -2,7 +2,9 @@ package api
 
 import (
 	"bbs-go/internal/models"
+	"bbs-go/internal/pkg/common"
 	"bbs-go/internal/pkg/config"
+	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/services"
 	"context"
 	"log/slog"
@@ -20,6 +22,53 @@ import (
 
 type FootballController struct {
 	Ctx iris.Context
+}
+
+// 热度榜：GET /api/football/predict_context/hot?limit=10
+// 返回 heat 倒序的 PredictContext 列表。
+// 说明：当前挂在 /api 下，默认需要登录（AuthMiddleware）。
+func (c *FootballController) GetPredict_contextHot() *web.JsonResult {
+	limit, _ := params.GetInt(c.Ctx, "limit")
+	if limit <= 0 {
+		limit = 10
+	}
+	// 给个上限，避免被当作全表导出
+	if limit > 100 {
+		limit = 100
+	}
+
+	var list []models.PredictContext
+	sqls.DB().Order("heat desc, id desc").Limit(limit).Find(&list)
+	return web.JsonData(map[string]any{
+		"list":  list,
+		"limit": limit,
+	})
+}
+
+// 修改/创建预测市场上下文：POST /api/football/predict_context/update
+// 说明：当前挂在 /api 下，默认需要登录（AuthMiddleware）。
+func (c *FootballController) PostPredict_contextUpdate() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+
+	form := &models.PredictContext{}
+	if err := params.ReadForm(c.Ctx, form); err != nil {
+		return web.JsonError(err)
+	}
+
+	// 允许用路由参数 marketId 覆盖（方便前端传参）
+	if form.MarketId <= 0 {
+		marketId, _ := params.GetInt64(c.Ctx, "marketId")
+		form.MarketId = marketId
+	}
+
+	ctxModel, err := services.PredictContextService.UpsertByMarketId(form)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(ctxModel)
 }
 
 // 手动触发同步：POST /api/football/sync_worldcup
