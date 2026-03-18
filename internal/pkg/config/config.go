@@ -78,6 +78,15 @@ type Config struct {
 	Search         SearchConfig   `yaml:"search"`         // 搜索配置
 	BaiduSEO       BaiduSEOConfig `yaml:"baiduSEO"`       // 百度SEO配置
 	SmSEO          SmSEOConfig    `yaml:"smSEO"`          // 神马搜索SEO配置
+	FootballData   FootballData   `yaml:"footballData"`   // football-data.org
+}
+
+type FootballData struct {
+	APIKey          string `yaml:"apiKey"`
+	BaseURL         string `yaml:"baseURL"`
+	CompetitionCode string `yaml:"competitionCode"` // e.g. WC
+	Season          int    `yaml:"season"`          // e.g. 2026
+	CronSpec        string `yaml:"cronSpec"`        // e.g. "0 */30 * * * *" (every 30 min)
 }
 
 type IPLocator struct {

@@ -43,3 +43,9 @@ SmSEO:
   UserName:
   Token:
 
+# Football-Data.org 
+footballData:
+  apiKey: "cedb6963c9df49e697759a9f73d9d989"
+  competitionCode: "WC"
+  season: 2026
+  cronSpec: "*/30 * * * *"

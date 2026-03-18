@@ -7,7 +7,11 @@ build:
 
 buildlinux:
 	@echo "Building..."
-	@GOOS=linux GOARCH=amd64 go build
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o bbs-go-linux main.go
+
+# 可选：使用 upx 进一步压缩二进制（需要本机已安装 upx）
+compresslinux: buildlinux
+	@command -v upx >/dev/null 2>&1 && upx -9 bbs-go-linux || (echo "upx not found, skip" && true)
 
 # Run the application
 run:

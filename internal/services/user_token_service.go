@@ -124,9 +124,24 @@ func (s *userTokenService) Generate(userId int64) (string, error) {
 	token := strs.UUID()
 	tokenExpireDays := SysConfigService.GetTokenExpireDays()
 	expiredAt := time.Now().Add(time.Hour * 24 * time.Duration(tokenExpireDays))
+
+	// 记录用户名（便于排查 token 归属；历史数据允许为空）
+	username := ""
+	if u := UserService.Get(userId); u != nil {
+		if u.Username.Valid {
+			username = u.Username.String
+		} else if u.Email.Valid {
+			username = u.Email.String
+		} else if u.Phone.Valid {
+			username = u.Phone.String
+		} else {
+			username = u.Nickname
+		}
+	}
 	userToken := &models.UserToken{
 		Token:      token,
 		UserId:     userId,
+		Username:   username,
 		ExpiredAt:  dates.Timestamp(expiredAt),
 		Status:     constants.StatusOk,
 		CreateTime: dates.NowTimestamp(),

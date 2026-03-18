@@ -19,6 +19,11 @@ var Models = []interface{}{
 	&UserScoreLog{}, &UserExpLog{},
 	&OperateLog{}, &EmailLog{}, &EmailCode{}, &SmsCode{}, &CheckIn{}, &UserFollow{}, &UserFeed{}, &UserReport{},
 	&ForbiddenWord{},
+
+	// TurtlePoll: football schedule & prediction market
+	&MatchSchedule{},
+	&PredictMarket{},
+	&UserCoin{},
 }
 
 type Model struct {
@@ -146,10 +151,65 @@ type User struct {
 	UpdateTime       int64            `json:"updateTime" form:"updateTime"`                                        // 更新时间
 }
 
+// MatchSchedule 世界杯/赛事赛程（数据源：football-data.org）
+// 这里先做最小可用字段，后续可按需要扩展（比分、比赛状态、阶段、裁判等）。
+type MatchSchedule struct {
+	Model
+
+	// 数据源标识
+	Source       string `gorm:"size:32;not null;index:idx_match_schedule_source_match" json:"source" form:"source"`
+	Competition  string `gorm:"size:64;not null" json:"competition" form:"competition"` // e.g. WC
+	Season       int    `gorm:"not null;default:0" json:"season" form:"season"`
+	ExternalId   int64  `gorm:"not null;uniqueIndex:idx_match_schedule_source_external" json:"externalId" form:"externalId"`
+	Matchday     int    `gorm:"not null;default:0" json:"matchday" form:"matchday"`
+	Stage        string `gorm:"size:64" json:"stage" form:"stage"`
+	GroupName    string `gorm:"size:64" json:"groupName" form:"groupName"`
+	Status       string `gorm:"size:32" json:"status" form:"status"` // SCHEDULED/LIVE/FINISHED...
+	UtcDate      int64  `gorm:"not null;index:idx_match_schedule_utc_date" json:"utcDate" form:"utcDate"`
+	HomeTeam     string `gorm:"size:128" json:"homeTeam" form:"homeTeam"`
+	AwayTeam     string `gorm:"size:128" json:"awayTeam" form:"awayTeam"`
+	HomeTeamId   int64  `gorm:"not null;default:0" json:"homeTeamId" form:"homeTeamId"`
+	AwayTeamId   int64  `gorm:"not null;default:0" json:"awayTeamId" form:"awayTeamId"`
+	LastSyncedAt int64  `gorm:"not null;default:0" json:"lastSyncedAt" form:"lastSyncedAt"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictMarket 预测市场（每个赛程一条市场记录）
+type PredictMarket struct {
+	Model
+	ScheduleId int64 `gorm:"not null;uniqueIndex" json:"scheduleId" form:"scheduleId"`
+
+	// 市场基础信息
+	Title       string `gorm:"size:256;not null" json:"title" form:"title"`
+	MarketType  string `gorm:"size:32;not null" json:"marketType" form:"marketType"` // e.g. 1x2
+	Status      string `gorm:"size:32;not null" json:"status" form:"status"`         // OPEN/CLOSED/SETTLED
+	CloseTime   int64  `gorm:"not null;default:0" json:"closeTime" form:"closeTime"` // 截止下注时间（先预留）
+	Result      string `gorm:"size:32" json:"result" form:"result"`                  // HOME/DRAW/AWAY（先预留）
+	ExternalKey string `gorm:"size:128" json:"externalKey" form:"externalKey"`       // 预留：外部业务 key
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// UserCoin 用户金币账户（未来下注使用；此阶段只建表不接业务）
+type UserCoin struct {
+	Model
+	UserId  int64 `gorm:"not null;uniqueIndex" json:"userId" form:"userId"`
+	Balance int64 `gorm:"not null;default:0" json:"balance" form:"balance"`
+	// 预留：冻结金额等
+	Frozen int64 `gorm:"not null;default:0" json:"frozen" form:"frozen"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
 type UserToken struct {
 	Model
 	Token      string `gorm:"size:32;unique;not null" json:"token" form:"token"`
 	UserId     int64  `gorm:"not null;index:idx_user_token_user_id;" json:"userId" form:"userId"`
+	Username   string `gorm:"size:64;index:idx_user_token_username" json:"username" form:"username"`
 	ExpiredAt  int64  `gorm:"not null" json:"expiredAt" form:"expiredAt"`
 	Status     int    `gorm:"type:int;not null;index:idx_user_token_status" json:"status" form:"status"`
 	CreateTime int64  `gorm:"not null" json:"createTime" form:"createTime"`
