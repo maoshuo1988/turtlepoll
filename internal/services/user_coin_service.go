@@ -51,13 +51,13 @@ func (s *userCoinService) Mint(adminUserId, userId, amount int64, remark string)
 		}
 
 		log := &models.UserCoinLog{
-			UserId:        userId,
-			BizType:       "MINT",
-			BizId:         adminUserId, // 记录操作者
-			Amount:        amount,
-			BalanceAfter:  newBalance,
-			Remark:        remark,
-			CreateTime:    now,
+			UserId:       userId,
+			BizType:      "MINT",
+			BizId:        adminUserId, // 记录操作者
+			Amount:       amount,
+			BalanceAfter: newBalance,
+			Remark:       remark,
+			CreateTime:   now,
 		}
 		if err := repositories.UserCoinLogRepository.Create(tx, log); err != nil {
 			return nil, err

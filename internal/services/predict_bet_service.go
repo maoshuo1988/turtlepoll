@@ -8,8 +8,8 @@ import (
 
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/sqls"
-	"gorm.io/gorm/clause"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var PredictBetService = newPredictBetService()
@@ -21,10 +21,10 @@ func newPredictBetService() *predictBetService {
 type predictBetService struct{}
 
 type PlaceBetResult struct {
-	Bet        *models.PredictBet   `json:"bet"`
+	Bet        *models.PredictBet    `json:"bet"`
 	Market     *models.PredictMarket `json:"market"`
-	UserCoin   *models.UserCoin     `json:"userCoin"`
-	LockedOdds float64              `json:"lockedOdds"`
+	UserCoin   *models.UserCoin      `json:"userCoin"`
+	LockedOdds float64               `json:"lockedOdds"`
 }
 
 // PlaceBet 用户对预测市场下注。

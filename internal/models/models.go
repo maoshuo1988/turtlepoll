@@ -267,7 +267,7 @@ type UserCoinLog struct {
 	// 变更金额：正数入账、负数出账
 	Amount int64 `gorm:"not null" json:"amount" form:"amount"`
 	// 变更后余额（便于审计）
-	BalanceAfter int64 `gorm:"not null" json:"balanceAfter" form:"balanceAfter"`
+	BalanceAfter int64  `gorm:"not null" json:"balanceAfter" form:"balanceAfter"`
 	Remark       string `gorm:"size:256" json:"remark" form:"remark"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
