@@ -1,6 +1,8 @@
 # 金币与预测下注（Coin / PredictBet）
 
-本模块提供“金币账户/流水 + 预测下注”相关接口：
+## 功能
+
+本模块提供“金币账户（余额）+ 金币流水 + 预测市场下注（锁赔率）”相关能力：
 
 - 用户接口：`/api/coin/**`（需要登录，`AuthMiddleware`）
 - 管理员接口：`/api/admin/coin/**`（需要管理员权限，`AdminMiddleware`）
@@ -71,6 +73,21 @@
 - 展示保留两位小数（代码中做了四舍五入）
 
 ## 接口列表
+
+## 错误码与错误信息
+
+本服务接口统一返回 `web.JsonResult`；错误通常以 `msg` 文本形式返回（以实际实现为准）。本模块涉及的常见错误信息包括：
+
+- 认证错误：`NotLogin`
+- 参数校验：
+  - `marketId is required`
+  - `option must be A or B`
+  - `amount must be positive`
+  - `userId is required`
+- 业务错误：
+  - `market is not open`
+  - `market is closed`
+  - `insufficient balance`
 
 ### 1) 查询我的金币账户
 
