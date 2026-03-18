@@ -112,6 +112,31 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 				return ue
 			}
 		}
+
+		// 市场上下文（展示用，一对一）
+		ctxModel := &models.PredictContext{}
+		if e := db.Where("market_id = ?", market.Id).First(ctxModel).Error; e != nil {
+			ctxModel.MarketId = market.Id
+			ctxModel.EventName = market.Title
+			ctxModel.ImageUrl = ""
+			ctxModel.ParticipantCount = 0
+			ctxModel.ProText = schedule.HomeTeam + " 胜"
+			ctxModel.ConText = schedule.AwayTeam + " 胜"
+			ctxModel.Detail = ""
+			ctxModel.Tags = "football," + schedule.Competition
+			ctxModel.CreateTime = now
+			ctxModel.UpdateTime = now
+			if ce := db.Create(ctxModel).Error; ce != nil {
+				return ce
+			}
+		} else {
+			// 仅更新动态字段，避免覆盖人工编辑的详情/图片等
+			ctxModel.EventName = market.Title
+			ctxModel.UpdateTime = now
+			if ue := db.Save(ctxModel).Error; ue != nil {
+				return ue
+			}
+		}
 	}
 
 	slog.Info("football schedules synced", slog.Int("matches", len(resp.Matches)))

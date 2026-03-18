@@ -85,8 +85,33 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 	var list []models.PredictMarket
 	p.Cnd.Find(sqls.DB(), &list)
 	count := p.Cnd.Count(sqls.DB(), &models.PredictMarket{})
+
+	// 查询上下文并拼装
+	marketIds := make([]int64, 0, len(list))
+	for _, m := range list {
+		if m.Id > 0 {
+			marketIds = append(marketIds, m.Id)
+		}
+	}
+	ctxMap := make(map[int64]models.PredictContext, len(marketIds))
+	if len(marketIds) > 0 {
+		var ctxList []models.PredictContext
+		sqls.DB().Where("market_id in (?)", marketIds).Find(&ctxList)
+		for _, mc := range ctxList {
+			ctxMap[mc.MarketId] = mc
+		}
+	}
+
+	respList := make([]map[string]any, 0, len(list))
+	for _, m := range list {
+		item := map[string]any{
+			"market":  m,
+			"context": ctxMap[m.Id],
+		}
+		respList = append(respList, item)
+	}
 	return web.JsonData(map[string]any{
-		"list":  list,
+		"list":  respList,
 		"total": count,
 	})
 }

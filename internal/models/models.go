@@ -23,6 +23,7 @@ var Models = []interface{}{
 	// TurtlePoll: football schedule & prediction market
 	&MatchSchedule{},
 	&PredictMarket{},
+	&PredictContext{},
 	&UserCoin{},
 }
 
@@ -192,6 +193,32 @@ type PredictMarket struct {
 	CloseTime   int64  `gorm:"not null;default:0" json:"closeTime" form:"closeTime"` // 截止下注时间（先预留）
 	Result      string `gorm:"size:32" json:"result" form:"result"`                  // HOME/DRAW/AWAY（先预留）
 	ExternalKey string `gorm:"size:128" json:"externalKey" form:"externalKey"`       // 预留：外部业务 key
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictContext 预测事件上下文（与 PredictMarket 一对一）
+// 说明：这里放 UI 展示相关的文案、图片、标签等，可随时扩展。
+type PredictContext struct {
+	Model
+
+	MarketId int64 `gorm:"not null;uniqueIndex" json:"marketId" form:"marketId"`
+
+	// 预测事件名称（展示用）
+	EventName string `gorm:"size:256;not null" json:"eventName" form:"eventName"`
+	// 图片地址
+	ImageUrl string `gorm:"type:text" json:"imageUrl" form:"imageUrl"`
+	// 参与人数
+	ParticipantCount int64 `gorm:"not null;default:0" json:"participantCount" form:"participantCount"`
+	// 正方文案
+	ProText string `gorm:"size:256" json:"proText" form:"proText"`
+	// 反方文案
+	ConText string `gorm:"size:256" json:"conText" form:"conText"`
+	// 预测事件详情
+	Detail string `gorm:"type:text" json:"detail" form:"detail"`
+	// 标签（先用逗号分隔，后续如需结构化可拆表）
+	Tags string `gorm:"size:1024" json:"tags" form:"tags"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`

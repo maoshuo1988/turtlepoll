@@ -11,7 +11,7 @@ import (
 // 当前阶段：创建/更新表结构（赛程、预测市场、用户金币），不初始化任何业务数据。
 func migrate_add_football_models() error {
 	// 确保表已存在（AutoMigrate 已做），这里用一个轻量写入作为“迁移占位”。
-	_ = sqls.DB().AutoMigrate(&models.MatchSchedule{}, &models.PredictMarket{}, &models.UserCoin{})
+	_ = sqls.DB().AutoMigrate(&models.MatchSchedule{}, &models.PredictMarket{}, &models.PredictContext{}, &models.UserCoin{})
 	// no-op
 	_ = dates.NowTimestamp()
 	return nil
