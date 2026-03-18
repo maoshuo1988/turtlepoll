@@ -48,7 +48,4 @@ footballData:
   apiKey: "YOUR_FOOTBALL_DATA_API_KEY"
   competitionCode: "WC"
   season: 2026
-  cronSpec: "*/30 * * * *"
-
-NewsApis:
-  apiKey: "YOUR_NEWS_API_KEY"
+  cronSpec: "0 */6 * * *"
