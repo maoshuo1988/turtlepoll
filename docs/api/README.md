@@ -7,7 +7,7 @@
 - [用户系统](./user.md)
 - [评论系统](./comment.md)
 - [帖子系统（Topic）](./topic.md)
-- [预测事件系统（PredictMarket / PredictContext）](./predict.md)
+- [预测事件系统（PredictMarket / PredictContext / 标签统计）](./predict.md)
 - [下注/结算系统（金币与预测下注）](./coin.md)
 
 ## 约定

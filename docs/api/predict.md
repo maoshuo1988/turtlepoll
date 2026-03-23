@@ -192,3 +192,67 @@
   "limit": 10
 }
 ```
+
+---
+
+### 4) 热门标签 TOP10（按热度累计）
+
+- **接口**：`GET /api/football/predict_tags/hot`
+- **功能**：统计 `PredictContext.tags` 中的标签，并按“标签热度”倒序返回。
+  - 当前热度口径：对每条 `PredictContext`，将其 `heat` 累计到它包含的每个 tag 上。
+  - tags 存储为逗号分隔字符串（例如 `"wc,final"`），服务端会做 trim 与转小写归一。
+- **认证**：需要登录（`AuthMiddleware`）
+
+#### 请求参数（query）
+- `limit`：int，默认 10，最大 100
+
+#### 返回值（data）
+- `list`：数组，每个元素：
+  - `tag`：string
+  - `heat`：int64
+- `limit`：实际使用的 limit
+
+返回示例：
+
+```json
+{
+  "list": [
+    { "tag": "wc", "heat": 9999 },
+    { "tag": "final", "heat": 8888 }
+  ],
+  "limit": 10
+}
+```
+
+---
+
+### 5) 按标签查询预测市场列表（聚合返回 market + context）
+
+- **接口**：`GET /api/football/markets/by_tag`
+- **功能**：按标签查询拥有该 tag 的 PredictContext，再聚合返回对应 PredictMarket + PredictContext。
+- **认证**：需要登录（`AuthMiddleware`）
+
+#### 请求参数（query）
+- `tag`：string，必填
+- `page`：int，默认 1
+- `limit`：int，默认 20，最大 100
+
+返回示例（结构同 markets）：
+
+```json
+{
+  "list": [
+    {
+      "market": { "id": 1, "title": "阿根廷 vs 法国", "status": "OPEN" },
+      "context": { "marketId": 1, "eventName": "世界杯决赛", "heat": 999, "tags": "wc,final" }
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 20,
+  "tag": "final"
+}
+```
+
+#### 可能错误
+- `tag is required`
