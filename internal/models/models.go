@@ -288,7 +288,16 @@ type PredictBet struct {
 	EffA int64 `gorm:"not null" json:"effA" form:"effA"`
 	EffB int64 `gorm:"not null" json:"effB" form:"effB"`
 
+	// 结算状态：
+	// - OPEN：未结算
+	// - SETTLED：已结算（无论输赢，都已完成本单的最终入账）
+	// - CANCELED：已取消（预留）
 	Status string `gorm:"size:16;not null;default:'OPEN'" json:"status" form:"status"` // OPEN/SETTLED/CANCELED
+	// 结算结果：WIN/LOSE/DRAW（DRAW 预留）
+	SettleResult string `gorm:"size:16;not null;default:''" json:"settleResult" form:"settleResult"`
+	// 派奖金额（金币）。输单为 0；赢单一般为 floor(amount * odds)
+	Payout     int64 `gorm:"not null;default:0" json:"payout" form:"payout"`
+	SettleTime int64 `gorm:"not null;default:0" json:"settleTime" form:"settleTime"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 }

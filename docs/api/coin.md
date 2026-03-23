@@ -74,6 +74,109 @@
 
 ## 接口列表
 
+### 3) 结算（用户对自己下注过的预测市场进行结算，领取金币）
+
+- **接口**：`POST /api/coin/settle`
+- **认证**：需要登录
+- **请求格式**：表单（`application/x-www-form-urlencoded` 或 `multipart/form-data`）
+
+#### 请求参数（form）
+- `marketId`: int64，必填
+
+（文档用 JSON 展示字段结构；实际是表单）
+
+```json
+{
+  "marketId": 1
+}
+```
+
+#### 结算规则（当前实现）
+- 仅允许结算 `PredictMarket.status = SETTLED` 的市场
+- `PredictMarket.result` 必须为 `A` 或 `B`（忽略大小写）
+- 只结算该用户在该市场中 `PredictBet.status = OPEN` 的订单（幂等：重复调用不会重复派奖）
+- 中奖派发：`payout = floor(amount * odds)`（odds 为下注时锁定赔率）
+
+#### 返回值（data）
+
+返回结构：
+
+- `list`: `SettleMyBetResult[]`
+  - `bet`: PredictBet（更新为 `status=SETTLED`，并补充 `settleResult/payout/settleTime`）
+  - `payout`: int64（本单派奖金币，输单为 0）
+  - `userCoin`: UserCoin（派奖后的余额快照）
+- `count`: int（list 数量）
+
+示例：
+
+```json
+{
+  "list": [
+    {
+      "bet": {
+        "id": 10,
+        "userId": 100,
+        "marketId": 1,
+        "option": "A",
+        "amount": 100,
+        "odds": 1.83,
+        "effA": 500,
+        "effB": 500,
+        "status": "SETTLED",
+        "settleResult": "WIN",
+        "payout": 183,
+        "settleTime": 1734019999,
+        "createTime": 1734012345
+      },
+      "payout": 183,
+      "userCoin": {
+        "id": 1,
+        "userId": 100,
+        "balance": 12428,
+        "createTime": 1734010000,
+        "updateTime": 1734019999
+      }
+    },
+    {
+      "bet": {
+        "id": 11,
+        "userId": 100,
+        "marketId": 1,
+        "option": "B",
+        "amount": 200,
+        "odds": 2.2,
+        "effA": 500,
+        "effB": 500,
+        "status": "SETTLED",
+        "settleResult": "LOSE",
+        "payout": 0,
+        "settleTime": 1734019999,
+        "createTime": 1734012500
+      },
+      "payout": 0,
+      "userCoin": {
+        "id": 1,
+        "userId": 100,
+        "balance": 12428,
+        "createTime": 1734010000,
+        "updateTime": 1734019999
+      }
+    }
+  ],
+  "count": 2
+}
+```
+
+#### 可能错误
+- 未登录：`errs.NotLogin()`
+- 参数校验：
+  - `marketId is required`
+- 业务错误：
+  - `market is not settled`
+  - `market result must be A or B`
+
+---
+
 ## 错误码与错误信息
 
 本服务接口统一返回 `web.JsonResult`；错误通常以 `msg` 文本形式返回（以实际实现为准）。本模块涉及的常见错误信息包括：
@@ -185,7 +288,7 @@
 
 ---
 
-### 3) 管理员铸币（给用户加金币）
+### 4) 管理员铸币（给用户加金币）
 
 - **接口**：`POST /api/admin/coin/mint`
 - **认证**：需要管理员权限

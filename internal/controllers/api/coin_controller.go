@@ -46,3 +46,22 @@ func (c *CoinController) PostBet() *web.JsonResult {
 	}
 	return web.JsonData(res)
 }
+
+// 结算：POST /api/coin/settle
+// 表单参数：marketId
+// 说明：用户对自己下注过的预测市场进行结算，获得金币。
+func (c *CoinController) PostSettle() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	marketId, _ := params.GetInt64(c.Ctx, "marketId")
+	res, err := services.PredictSettleService.SettleMyBet(user.Id, marketId)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(map[string]any{
+		"list":  res,
+		"count": len(res),
+	})
+}
