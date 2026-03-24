@@ -262,9 +262,87 @@ func (c *FootballController) GetSchedules() *web.JsonResult {
 	})
 }
 
+// 查询用户在某个预测市场的下注结算结果：GET /api/football/bet_settle_result?userId=1&marketId=2
+// 返回 betSettleResult（聚合 PredictBet.SettleResult）：
+// - 无下注：""
+// - 多笔：WIN 优先，其次 LOSE，其次最新非空值
+func (c *FootballController) GetBet_settle_result() *web.JsonResult {
+	// 基础鉴权：接口挂在 /api 下通常已走 AuthMiddleware，但这里显式校验权限
+	currentUser := common.GetCurrentUser(c.Ctx)
+	if currentUser == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+
+	userId, _ := params.GetInt64(c.Ctx, "userId")
+	marketId, _ := params.GetInt64(c.Ctx, "marketId")
+	if userId <= 0 {
+		return web.JsonErrorMsg("userId is required")
+	}
+	if marketId <= 0 {
+		return web.JsonErrorMsg("marketId is required")
+	}
+
+	// 仅允许查询自己，避免越权
+	if userId != currentUser.Id {
+		return web.JsonError(errs.NoPermission())
+	}
+
+	type betRow struct {
+		SettleResult string
+		SettleTime   int64
+		CreateTime   int64
+	}
+	var betRows []betRow
+	sqls.DB().Model(&models.PredictBet{}).
+		Select("settle_result, settle_time, create_time").
+		Where("user_id = ? AND market_id = ?", userId, marketId).
+		Find(&betRows)
+
+	result := ""
+	hasWin := false
+	hasLose := false
+	latestScore := int64(0)
+	latestVal := ""
+	for _, br := range betRows {
+		v := strings.ToUpper(strings.TrimSpace(br.SettleResult))
+		if v == "WIN" {
+			hasWin = true
+			break
+		}
+		if v == "LOSE" {
+			hasLose = true
+		}
+		if v == "" {
+			continue
+		}
+		score := br.SettleTime
+		if score <= 0 {
+			score = br.CreateTime
+		}
+		if score > latestScore {
+			latestScore = score
+			latestVal = v
+		}
+	}
+	if hasWin {
+		result = "WIN"
+	} else if hasLose {
+		result = "LOSE"
+	} else {
+		result = latestVal
+	}
+
+	return web.JsonData(map[string]any{
+		"userId":          userId,
+		"marketId":        marketId,
+		"betSettleResult": result,
+	})
+}
+
 // 查询预测市场：GET /api/football/markets?page=1&limit=20
 func (c *FootballController) GetMarkets() *web.JsonResult {
 	p := params.NewQueryParams(c.Ctx)
+	currentUser := common.GetCurrentUser(c.Ctx)
 	sourceModel := c.Ctx.URLParamDefault("sourceModel", "")
 	sourceModelId, _ := params.GetInt64(c.Ctx, "sourceModelId")
 	if sourceModel != "" {
@@ -294,11 +372,75 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 		}
 	}
 
+	// 当前用户在各市场的下注结算结果（SettleResult）。
+	// - 若该用户在该 market 没有任何下注单，则返回空字符串
+	// - 若有多笔下注单：优先返回 WIN，其次 LOSE，其次其他值（尽量给出“总体是否赢”）
+	betSettleResultMap := make(map[int64]string, len(marketIds))
+	if currentUser != nil && len(marketIds) > 0 {
+		type betRow struct {
+			MarketId      int64
+			SettleResult  string
+			SettleTime    int64
+			CreateTime    int64
+			Status        string
+			EffectiveSort int64
+		}
+		var betRows []betRow
+		// 只取必要字段，避免全表扫描/大字段
+		sqls.DB().Model(&models.PredictBet{}).
+			Select("market_id, settle_result, settle_time, create_time, status").
+			Where("user_id = ? AND market_id in (?)", currentUser.Id, marketIds).
+			Find(&betRows)
+
+		// 聚合策略：
+		// - 只要有任意 WIN => WIN
+		// - 否则只要有任意 LOSE => LOSE
+		// - 否则返回最新一条（按 settle_time/create_time）非空 settle_result
+		hasWin := make(map[int64]bool, len(marketIds))
+		hasLose := make(map[int64]bool, len(marketIds))
+		latestScore := make(map[int64]int64, len(marketIds))
+		latestVal := make(map[int64]string, len(marketIds))
+		for _, br := range betRows {
+			v := strings.ToUpper(strings.TrimSpace(br.SettleResult))
+			if v == "WIN" {
+				hasWin[br.MarketId] = true
+				continue
+			}
+			if v == "LOSE" {
+				hasLose[br.MarketId] = true
+			}
+			if v == "" {
+				continue
+			}
+			score := br.SettleTime
+			if score <= 0 {
+				score = br.CreateTime
+			}
+			if score > latestScore[br.MarketId] {
+				latestScore[br.MarketId] = score
+				latestVal[br.MarketId] = v
+			}
+		}
+		for _, m := range list {
+			mid := m.Id
+			if hasWin[mid] {
+				betSettleResultMap[mid] = "WIN"
+				continue
+			}
+			if hasLose[mid] {
+				betSettleResultMap[mid] = "LOSE"
+				continue
+			}
+			betSettleResultMap[mid] = latestVal[mid]
+		}
+	}
+
 	respList := make([]map[string]any, 0, len(list))
 	for _, m := range list {
 		item := map[string]any{
-			"market":  m,
-			"context": ctxMap[m.Id],
+			"market":          m,
+			"context":         ctxMap[m.Id],
+			"betSettleResult": betSettleResultMap[m.Id],
 		}
 		respList = append(respList, item)
 	}

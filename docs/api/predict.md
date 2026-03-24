@@ -60,6 +60,9 @@
 - `list`：数组，每个元素：
   - `market`：PredictMarket
   - `context`：PredictContext（若不存在则为空对象/默认值）
+  - `betSettleResult`：string，当前登录用户在该 market 的下注结算结果（来自 PredictBet.SettleResult 聚合）
+    - 用户未在该 market 下过注：返回空字符串 `""`
+    - 若有多笔下注单：优先返回 `WIN`，其次 `LOSE`，否则返回最新一条非空值
 - `total`：总数
 
 返回示例（字段会随实际模型演进，这里仅展示结构）：
@@ -95,7 +98,8 @@
         "tags": "wc,final",
         "createTime": 1734010000,
         "updateTime": 1734010000
-      }
+      },
+      "betSettleResult": "WIN"
     }
   ],
   "total": 1
@@ -107,7 +111,41 @@
 
 ---
 
-### 2) 修改/创建 PredictContext（按 marketId upsert）
+### 2) 查询用户在某个市场的下注结算结果（betSettleResult）
+
+- **接口**：`GET /api/football/bet_settle_result`
+- **功能**：根据 `userId + marketId` 查询并聚合该用户在该市场的下注结算结果（基于 PredictBet.SettleResult）。
+- **认证**：需要登录（`AuthMiddleware`）
+- **权限**：仅允许查询本人（`userId` 必须等于当前登录用户 ID）
+
+#### 请求参数（query）
+- `userId`：int64，必填（必须为当前登录用户）
+- `marketId`：int64，必填
+
+#### 返回值（data）
+- `userId`：int64
+- `marketId`：int64
+- `betSettleResult`：string
+  - 无下注：返回空字符串 `""`
+  - 多笔下注：优先返回 `WIN`，其次 `LOSE`，否则返回最新一条非空值
+
+返回示例：
+
+```json
+{
+  "userId": 100,
+  "marketId": 1,
+  "betSettleResult": "WIN"
+}
+```
+
+#### 可能错误
+- 未登录：`errs.NotLogin()`
+- 无权限（查询非本人）：`errs.NoPermission()`
+
+---
+
+### 3) 修改/创建 PredictContext（按 marketId upsert）
 
 - **接口**：`POST /api/football/predict_context/update`
 - **功能**：按 `marketId` upsert PredictContext。
@@ -159,7 +197,7 @@
 
 ---
 
-### 3) 热度榜（heat 前 N）
+### 4) 热度榜（heat 前 N）
 
 - **接口**：`GET /api/football/predict_context/hot`
 - **功能**：按 `heat desc, id desc` 排序返回 PredictContext 列表。
@@ -195,7 +233,7 @@
 
 ---
 
-### 4) 热门标签 TOP10（按热度累计）
+### 5) 热门标签 TOP10（按热度累计）
 
 - **接口**：`GET /api/football/predict_tags/hot`
 - **功能**：统计 `PredictContext.tags` 中的标签，并按“标签热度”倒序返回。
@@ -226,7 +264,7 @@
 
 ---
 
-### 5) 按标签查询预测市场列表（聚合返回 market + context）
+### 6) 按标签查询预测市场列表（聚合返回 market + context）
 
 - **接口**：`GET /api/football/markets/by_tag`
 - **功能**：按标签查询拥有该 tag 的 PredictContext，再聚合返回对应 PredictMarket + PredictContext。
