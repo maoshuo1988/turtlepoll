@@ -376,6 +376,8 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 	// - 若该用户在该 market 没有任何下注单，则返回空字符串
 	// - 若有多笔下注单：优先返回 WIN，其次 LOSE，其次其他值（尽量给出“总体是否赢”）
 	betSettleResultMap := make(map[int64]string, len(marketIds))
+	// 当前用户是否在该市场下过注（用于前端快速判断“是否下注过”）
+	hasBetMap := make(map[int64]bool, len(marketIds))
 	if currentUser != nil && len(marketIds) > 0 {
 		type betRow struct {
 			MarketId      int64
@@ -401,6 +403,7 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 		latestScore := make(map[int64]int64, len(marketIds))
 		latestVal := make(map[int64]string, len(marketIds))
 		for _, br := range betRows {
+			hasBetMap[br.MarketId] = true
 			v := strings.ToUpper(strings.TrimSpace(br.SettleResult))
 			if v == "WIN" {
 				hasWin[br.MarketId] = true
@@ -441,6 +444,7 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 			"market":          m,
 			"context":         ctxMap[m.Id],
 			"betSettleResult": betSettleResultMap[m.Id],
+			"hasBet":          hasBetMap[m.Id],
 		}
 		respList = append(respList, item)
 	}

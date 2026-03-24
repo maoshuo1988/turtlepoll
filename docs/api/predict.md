@@ -63,6 +63,7 @@
   - `betSettleResult`：string，当前登录用户在该 market 的下注结算结果（来自 PredictBet.SettleResult 聚合）
     - 用户未在该 market 下过注：返回空字符串 `""`
     - 若有多笔下注单：优先返回 `WIN`，其次 `LOSE`，否则返回最新一条非空值
+  - `hasBet`：bool，当前登录用户是否在该 market 下过注（存在任意 PredictBet 记录即为 true）
 - `total`：总数
 
 返回示例（字段会随实际模型演进，这里仅展示结构）：
@@ -99,7 +100,8 @@
         "createTime": 1734010000,
         "updateTime": 1734010000
       },
-      "betSettleResult": "WIN"
+  "betSettleResult": "WIN",
+  "hasBet": true
     }
   ],
   "total": 1
