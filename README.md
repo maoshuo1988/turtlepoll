@@ -31,3 +31,27 @@ curl -X POST "http://localhost:8082/api/football/sync_worldcup" --cookie "token=
 psql "postgres://appuser:root@127.0.0.1:5432/turtlepoll?sslmode=disable" -c "SELECT * FROM t_user_token;"
 psql "postgres://appuser:root@127.0.0.1:5432/turtlepoll?sslmode=disable" -c "SELECT * FROM t_predict_market"
 ```
+# 铸币
+```bash
+curl -X POST "http://localhost:8082/api/admin/coin/mint" \
+  -H "Authorization: Bearer cc1396f0a58c412eaef71306259adc7c" \
+  -d "userId=1" \
+  -d "amount=80000" \
+  -d "remark=self mint"
+```
+
+# 查询余额
+```bash
+curl -X GET "http://localhost:8082/api/coin/me" \
+  -H "Authorization: Bearer cc1396f0a58c412eaef71306259adc7c"
+```
+
+# 上传图片
+
+接口：`POST /api/upload`（multipart 表单字段名固定为 `image`，认证通常使用 cookie `bbsgo_token`）
+
+```bash
+curl -X POST "http://localhost:8082/api/upload" \
+  -b "bbsgo_token=<YOUR_TOKEN>" \
+  -F "image=@/absolute/path/to/image.png;type=image/png"
+```
