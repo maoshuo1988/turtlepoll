@@ -4,6 +4,7 @@ import (
 	"bbs-go/internal/models"
 	"bbs-go/internal/repositories"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
@@ -47,7 +48,12 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 		return nil, errors.New("amount must be positive")
 	}
 
-	now := dates.NowTimestamp()
+	nowMs := dates.NowTimestamp()
+	// 统一时间戳单位为“秒”，避免 ms/sec 混用导致 closeTime 判断错误。
+	nowSec := nowMs
+	if nowSec > 1_000_000_000_000 {
+		nowSec = nowSec / 1000
+	}
 	ret := &PlaceBetResult{}
 
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
@@ -57,9 +63,24 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 			return err
 		}
 		if market.Status != "OPEN" {
+			slog.Warn("predict bet rejected: market not open",
+				"marketId", market.Id,
+				"status", market.Status,
+				"closeTime", market.CloseTime,
+				"nowMs", nowMs,
+				"nowSec", nowSec,
+			)
 			return errors.New("market is not open")
 		}
-		if market.CloseTime > 0 && now >= market.CloseTime {
+		if market.CloseTime > 0 && nowSec >= market.CloseTime {
+			slog.Warn("predict bet rejected: market closed by closeTime",
+				"marketId", market.Id,
+				"status", market.Status,
+				"closeTime", market.CloseTime,
+				"nowMs", nowMs,
+				"nowSec", nowSec,
+				"nowGteCloseTime", nowSec >= market.CloseTime,
+			)
 			return errors.New("market is closed")
 		}
 
@@ -78,7 +99,7 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 			EffA:       effA,
 			EffB:       effB,
 			Status:     "OPEN",
-			CreateTime: now,
+			CreateTime: nowSec,
 		}
 		if err := repositories.PredictBetRepository.Create(tx, bet); err != nil {
 			return err
@@ -96,7 +117,7 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 		} else {
 			market.PoolB += amount
 		}
-		market.UpdateTime = now
+		market.UpdateTime = nowSec
 		if err := tx.Save(market).Error; err != nil {
 			return err
 		}
