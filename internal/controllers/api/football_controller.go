@@ -381,9 +381,13 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 	if sourceModelId > 0 {
 		p.Cnd.Where("source_model_id = ?", sourceModelId)
 	}
-	p.Cnd.Desc("id")
+	
 	var list []models.PredictMarket
-	p.Cnd.Find(sqls.DB(), &list)
+	// 优先级排序：OPEN -> CLOSE -> (已结算/其他)
+	// 同状态下：closeTime asc（更接近封盘/比分揭晓的优先），再按 id desc 保证稳定顺序
+	query := p.Cnd.Build(sqls.DB().Model(&models.PredictMarket{}))
+	query.Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").Find(&list)
+	
 	count := p.Cnd.Count(sqls.DB(), &models.PredictMarket{})
 
 	// 查询上下文并拼装
