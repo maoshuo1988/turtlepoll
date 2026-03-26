@@ -154,7 +154,12 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 			}
 		} else {
 			// 仅更新动态字段，避免覆盖人工编辑的详情/图片等
+			// 注意：event_name 如果不刷新，会导致前端仍看到 "TBD vs TBD"
 			ctxModel.EventName = market.Title
+			ctxModel.ProText = schedule.HomeTeam + " 胜"
+			ctxModel.ConText = schedule.AwayTeam + " 胜"
+			// tags 作为轻量元数据也跟随刷新，避免 competition 变化导致查询不到
+			ctxModel.Tags = "football," + schedule.Competition
 			ctxModel.UpdateTime = now
 			if ue := db.Save(ctxModel).Error; ue != nil {
 				return ue
