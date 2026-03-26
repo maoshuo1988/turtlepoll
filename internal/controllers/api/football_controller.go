@@ -39,13 +39,13 @@ func (c *FootballController) GetPredict_contextHot() *web.JsonResult {
 	}
 
 	var list []models.PredictContext
-	// 只返回 OPEN 状态市场对应的 PredictContext
+	// 热度榜按“状态优先级”排序：OPEN -> CLOSE -> (已结算/其他)
+	// 同状态下：heat desc, id desc
 	// 关联关系：PredictContext.market_id = PredictMarket.id
 	if err := sqls.DB().
 		Model(&models.PredictContext{}).
 		Joins("JOIN t_predict_market pm ON pm.id = t_predict_context.market_id").
-		Where("pm.status = ?", "OPEN").
-		Order("t_predict_context.heat desc, t_predict_context.id desc").
+		Order("CASE pm.status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, t_predict_context.heat desc, t_predict_context.id desc").
 		Limit(limit).
 		Find(&list).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
@@ -148,6 +148,7 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 	if err := q.Count(&total).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
+	// 这里先用 heat 排序拿到 context 分页窗口；最终响应会再按 market 状态优先级重排
 	if err := q.Order("heat desc, id desc").Offset(offset).Limit(limit).Find(&ctxList).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
@@ -168,18 +169,19 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 		ctxMap[mc.MarketId] = mc
 	}
 
+	// markets 按状态优先级排序：OPEN -> CLOSE -> (已结算/其他)
+	// 同状态下：closeTime asc（更接近封盘/比分揭晓的优先），再按 id desc 保证稳定
 	var markets []models.PredictMarket
-	if err := sqls.DB().Where("id in (?)", marketIds).Find(&markets).Error; err != nil {
+	if err := sqls.DB().
+		Where("id in (?)", marketIds).
+		Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").
+		Find(&markets).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
-	marketMap := make(map[int64]models.PredictMarket, len(markets))
-	for _, m := range markets {
-		marketMap[m.Id] = m
-	}
 
-	respList := make([]map[string]any, 0, len(ctxList))
-	for _, mc := range ctxList {
-		m, ok := marketMap[mc.MarketId]
+	respList := make([]map[string]any, 0, len(markets))
+	for _, m := range markets {
+		mc, ok := ctxMap[m.Id]
 		if !ok {
 			continue
 		}
