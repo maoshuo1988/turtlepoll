@@ -44,6 +44,23 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 	slog.Info("football-data api response received", slog.Int("matches", len(resp.Matches)))
 	now := dates.NowTimestamp()
 	db := sqls.DB()
+	// title 统一生成：避免空队名导致的 " vs " 或误导性标题
+	buildMarketTitle := func(home, away string) string {
+		if home != "" && away != "" {
+			return home + " vs " + away
+		}
+		if home != "" {
+			return home + " vs TBD"
+		}
+		if away != "" {
+			return "TBD vs " + away
+		}
+		return "TBD vs TBD"
+	}
+	// 只有主客队都有值才允许 OPEN，其余都关闭
+	isTeamsReady := func(home, away string) bool {
+		return home != "" && away != ""
+	}
 	for _, m := range resp.Matches {
 		schedule := &models.MatchSchedule{}
 		err := db.Where("source = ? AND external_id = ?", "football-data", m.ID).First(schedule).Error
@@ -86,24 +103,30 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 
 		// 每个赛程一个预测市场
 		market := &models.PredictMarket{}
+		title := buildMarketTitle(schedule.HomeTeam, schedule.AwayTeam)
+		desiredStatus := "CLOSE"
+		if isTeamsReady(schedule.HomeTeam, schedule.AwayTeam) {
+			desiredStatus = "OPEN"
+		}
 		if e := db.Where("source_model = ? AND source_model_id = ?", "MatchSchedule", schedule.Id).First(market).Error; e != nil {
 			market.SourceModel = "MatchSchedule"
 			market.SourceModelId = schedule.Id
 			market.MarketType = "1x2"
-			market.Status = "OPEN"
+			market.Status = desiredStatus
 			// 默认在开赛前 10 分钟关闭（先占位规则）
 			if schedule.UtcDate > 0 {
 				market.CloseTime = schedule.UtcDate - int64((10 * time.Minute).Seconds())
 			}
-			market.Title = schedule.HomeTeam + " vs " + schedule.AwayTeam
+			market.Title = title
 			market.CreateTime = now
 			market.UpdateTime = now
 			if ce := db.Create(market).Error; ce != nil {
 				return ce
 			}
 		} else {
-			// update title/closeTime if changed
-			market.Title = schedule.HomeTeam + " vs " + schedule.AwayTeam
+			// 每次同步都更新 title 和 status；closeTime 按赛程时间刷新
+			market.Title = title
+			market.Status = desiredStatus
 			if schedule.UtcDate > 0 {
 				market.CloseTime = schedule.UtcDate - int64((10 * time.Minute).Seconds())
 			}
