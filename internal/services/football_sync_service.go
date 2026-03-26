@@ -6,6 +6,7 @@ import (
 	"bbs-go/internal/pkg/footballdata"
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/mlogclub/simple/common/dates"
@@ -138,6 +139,7 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 
 		// 市场上下文（展示用，一对一）
 		ctxModel := &models.PredictContext{}
+		competitionTag := strings.ToLower(schedule.Competition)
 		if e := db.Where("market_id = ?", market.Id).First(ctxModel).Error; e != nil {
 			ctxModel.MarketId = market.Id
 			ctxModel.EventName = market.Title
@@ -146,7 +148,7 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 			ctxModel.ProText = schedule.HomeTeam + " 胜"
 			ctxModel.ConText = schedule.AwayTeam + " 胜"
 			ctxModel.Detail = ""
-			ctxModel.Tags = "football," + schedule.Competition
+			ctxModel.Tags = "football," + competitionTag
 			ctxModel.CreateTime = now
 			ctxModel.UpdateTime = now
 			if ce := db.Create(ctxModel).Error; ce != nil {
@@ -159,7 +161,7 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 			ctxModel.ProText = schedule.HomeTeam + " 胜"
 			ctxModel.ConText = schedule.AwayTeam + " 胜"
 			// tags 作为轻量元数据也跟随刷新，避免 competition 变化导致查询不到
-			ctxModel.Tags = "football," + schedule.Competition
+			ctxModel.Tags = "football," + competitionTag
 			ctxModel.UpdateTime = now
 			if ue := db.Save(ctxModel).Error; ue != nil {
 				return ue
