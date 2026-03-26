@@ -115,16 +115,12 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 	// 统一成小写匹配（存储侧不强制，小写匹配能覆盖更多情况）
 	tag = strings.ToLower(tag)
 
-	// 先查 context（模糊匹配，确保命中逗号分隔的 tag 边界）
-	// 包含四种情况：
-	// - 单标签：tags = 'xxx'
-	// - 开头：tags like 'xxx,%'
-	// - 结尾：tags like '%,xxx'
-	// - 中间：tags like '%,xxx,%'
-	var ctxList []models.PredictContext
+	// 基于 market + context JOIN 一起排序和分页。
+	// 关键点：不要先分页 context，否则会把 OPEN/非TBD 的市场提前排除掉。
 	q := sqls.DB().Model(&models.PredictContext{})
+	q = q.Joins("JOIN t_predict_market pm ON pm.id = t_predict_context.market_id")
 	q = q.Where(
-		"lower(tags) = ? OR lower(tags) LIKE ? OR lower(tags) LIKE ? OR lower(tags) LIKE ?",
+		"lower(t_predict_context.tags) = ? OR lower(t_predict_context.tags) LIKE ? OR lower(t_predict_context.tags) LIKE ? OR lower(t_predict_context.tags) LIKE ?",
 		tag,
 		tag+",%",
 		"%,"+tag,
@@ -148,18 +144,26 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 	if err := q.Count(&total).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
-	// 优先级：
-	// 1) tags 精确等于 tag（单标签）
-	// 2) tags 以 tag 开头
-	// 3) tags 以 tag 结尾
-	// 4) tags 中间包含 ,tag,
-	// 然后再按 heat desc, id desc
+
+	// 排序优先级：
+	// 0) 标签命中强度（避免 tag=wc 时把 football,wc 排到后面）
+	// 1) 非 TBD（主客队已确定）优先
+	// 2) 状态优先级：OPEN -> CLOSE -> (已结算/其他)
+	// 3) 同状态下：closeTime asc，再按 marketId desc（稳定）
+	// 4) 再按 heat desc, contextId desc（稳定）
 	orderBy := "CASE " +
-		"WHEN lower(tags) = '" + tag + "' THEN 0 " +
-		"WHEN lower(tags) LIKE '" + tag + ",%' THEN 1 " +
-		"WHEN lower(tags) LIKE '%," + tag + "' THEN 2 " +
-		"ELSE 3 END, heat desc, id desc"
+		"WHEN lower(t_predict_context.tags) = '" + tag + "' THEN 0 " +
+		"WHEN lower(t_predict_context.tags) LIKE '" + tag + ",%' THEN 1 " +
+		"WHEN lower(t_predict_context.tags) LIKE '%," + tag + "' THEN 2 " +
+		"ELSE 3 END, " +
+		"CASE WHEN pm.title = 'TBD vs TBD' THEN 1 ELSE 0 END, " +
+		"CASE pm.status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, " +
+		"pm.close_time asc, pm.id desc, t_predict_context.heat desc, t_predict_context.id desc"
+
+	// 只 select context 字段；market 单独再查一次避免字段冲突
+	var ctxList []models.PredictContext
 	if err := q.
+		Select("t_predict_context.*").
 		Order(orderBy).
 		Offset(offset).
 		Limit(limit).
@@ -183,21 +187,19 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 		ctxMap[mc.MarketId] = mc
 	}
 
-	// markets 排序优先级：
-	// 1) 非 TBD（主客队已确定）优先
-	// 2) 状态优先级：OPEN -> CLOSE -> (已结算/其他)
-	// 3) 同状态下：closeTime asc（更接近封盘/比分揭晓的优先），再按 id desc 保证稳定
 	var markets []models.PredictMarket
-	if err := sqls.DB().
-		Where("id in (?)", marketIds).
-		Order("CASE WHEN title = 'TBD vs TBD' THEN 1 ELSE 0 END, CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").
-		Find(&markets).Error; err != nil {
+	if err := sqls.DB().Where("id in (?)", marketIds).Find(&markets).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
-
-	respList := make([]map[string]any, 0, len(markets))
+	marketMap := make(map[int64]models.PredictMarket, len(markets))
 	for _, m := range markets {
-		mc, ok := ctxMap[m.Id]
+		marketMap[m.Id] = m
+	}
+
+	// respList 使用 ctxList 的顺序（已按 market 排序 + 分页）
+	respList := make([]map[string]any, 0, len(ctxList))
+	for _, mc := range ctxList {
+		m, ok := marketMap[mc.MarketId]
 		if !ok {
 			continue
 		}
