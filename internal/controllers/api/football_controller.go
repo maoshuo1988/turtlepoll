@@ -148,8 +148,22 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 	if err := q.Count(&total).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
-	// 这里先用 heat 排序拿到 context 分页窗口；最终响应会再按 market 状态优先级重排
-	if err := q.Order("heat desc, id desc").Offset(offset).Limit(limit).Find(&ctxList).Error; err != nil {
+	// 优先级：
+	// 1) tags 精确等于 tag（单标签）
+	// 2) tags 以 tag 开头
+	// 3) tags 以 tag 结尾
+	// 4) tags 中间包含 ,tag,
+	// 然后再按 heat desc, id desc
+	orderBy := "CASE " +
+		"WHEN lower(tags) = '" + tag + "' THEN 0 " +
+		"WHEN lower(tags) LIKE '" + tag + ",%' THEN 1 " +
+		"WHEN lower(tags) LIKE '%," + tag + "' THEN 2 " +
+		"ELSE 3 END, heat desc, id desc"
+	if err := q.
+		Order(orderBy).
+		Offset(offset).
+		Limit(limit).
+		Find(&ctxList).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
 	if len(ctxList) == 0 {
