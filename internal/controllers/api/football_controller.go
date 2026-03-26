@@ -183,12 +183,14 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 		ctxMap[mc.MarketId] = mc
 	}
 
-	// markets 按状态优先级排序：OPEN -> CLOSE -> (已结算/其他)
-	// 同状态下：closeTime asc（更接近封盘/比分揭晓的优先），再按 id desc 保证稳定
+	// markets 排序优先级：
+	// 1) 非 TBD（主客队已确定）优先
+	// 2) 状态优先级：OPEN -> CLOSE -> (已结算/其他)
+	// 3) 同状态下：closeTime asc（更接近封盘/比分揭晓的优先），再按 id desc 保证稳定
 	var markets []models.PredictMarket
 	if err := sqls.DB().
 		Where("id in (?)", marketIds).
-		Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").
+		Order("CASE WHEN title = 'TBD vs TBD' THEN 1 ELSE 0 END, CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").
 		Find(&markets).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
