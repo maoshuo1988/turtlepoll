@@ -39,7 +39,17 @@ func (c *FootballController) GetPredict_contextHot() *web.JsonResult {
 	}
 
 	var list []models.PredictContext
-	sqls.DB().Order("heat desc, id desc").Limit(limit).Find(&list)
+	// 只返回 OPEN 状态市场对应的 PredictContext
+	// 关联关系：PredictContext.market_id = PredictMarket.id
+	if err := sqls.DB().
+		Model(&models.PredictContext{}).
+		Joins("JOIN t_predict_market pm ON pm.id = t_predict_context.market_id").
+		Where("pm.status = ?", "OPEN").
+		Order("t_predict_context.heat desc, t_predict_context.id desc").
+		Limit(limit).
+		Find(&list).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
 	return web.JsonData(map[string]any{
 		"list":  list,
 		"limit": limit,
