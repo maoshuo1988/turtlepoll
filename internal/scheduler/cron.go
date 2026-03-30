@@ -39,6 +39,13 @@ func Start() {
 		})
 	}
 
+	// battle square 后台轮巡（默认每 5 分钟一次）
+	addCronFunc(c, "*/5 * * * *", func() {
+		if err := services.BattleService.CronTick(); err != nil {
+			slog.Error("battle cron tick failed", slog.Any("err", err))
+		}
+	})
+
 	c.Start()
 }
 

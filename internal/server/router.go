@@ -83,6 +83,7 @@ func NewServer() {
 		m.Party("/search").Handle(new(api.SearchController))
 		m.Party("/football").Handle(new(api.FootballController))
 		m.Party("/coin").Handle(new(api.CoinController))
+		m.Party("/battle").Handle(new(api.BattleController))
 		m.Party("/fans").Handle(new(api.FansController))
 		m.Party("/user-report").Handle(new(api.UserReportController))
 		m.Party("/task").Handle(new(api.TaskController))

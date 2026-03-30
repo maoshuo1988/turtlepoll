@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+// Battle 资金相关的系统账户约定（userId 为负数，保证与正常用户 userId 不冲突）。
+const (
+	// BattlePoolUserId 资金池（托管账户）：下注本金扣款后转入该账户；结算提取时从该账户出池。
+	BattlePoolUserId int64 = -1
+	// BattleBurnUserId 销毁账户：罚没/处罚等销毁资金转入该账户用于审计；不参与任何出池。
+	BattleBurnUserId int64 = -2
+)
+
 var Models = []interface{}{
 	&Migration{},
 	&UserRole{}, &Role{}, &Menu{}, &RoleMenu{}, &Api{}, &MenuApi{}, &DictType{}, &Dict{},
@@ -27,6 +35,13 @@ var Models = []interface{}{
 	&UserCoin{},
 	&UserCoinLog{},
 	&PredictBet{},
+
+	// Battle Square
+	&Battle{},
+	&BattleBet{},
+	&BattleLedger{},
+	&BattleSettlement{},
+	&BattleSettlementItem{},
 }
 
 type Model struct {
@@ -281,6 +296,104 @@ type UserCoinLog struct {
 	Remark       string `gorm:"size:256" json:"remark" form:"remark"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+}
+
+// Battle 赌局（开战广场）
+// 说明：
+// - 资金托管：下注本金进资金池（userId=-1）；入场费实时转给庄家；罚没转销毁账户（userId=-2）。
+// - 结算：settled 时生成结算单；提取时按结算单出池并幂等。
+type Battle struct {
+	Model
+
+	Title        string `gorm:"size:256;not null" json:"title"`
+	BankerUserId int64  `gorm:"not null;index" json:"bankerUserId"`
+	BankerSide   string `gorm:"size:1024;not null" json:"bankerSide"`
+	ChallengerSide string `gorm:"size:1024;not null" json:"challengerSide"`
+
+	// 是否公开（公开：收取入场费；私人：邀请码加入且不收取入场费）
+	IsPublic bool   `gorm:"not null;default:true;index" json:"isPublic"`
+	InviteCode string `gorm:"size:64;index" json:"inviteCode"`
+
+	// 状态：open/sealed/pending/disputed/settled
+	Status string `gorm:"size:16;not null;index" json:"status"`
+
+	// 结算时间（到达后自动 sealed -> pending）
+	SettleTime int64 `gorm:"not null;index" json:"settleTime"`
+	// pending 状态下庄家宣布截止时间（now+24h）
+	PendingDeadline int64 `gorm:"not null;default:0;index" json:"pendingDeadline"`
+	// disputed 状态下管理员裁决截止时间（now+24h）
+	DisputeDeadline int64 `gorm:"not null;default:0;index" json:"disputeDeadline"`
+
+	// 结果：banker_wins/banker_loses/void（空表示未产生最终裁定）
+	Result string `gorm:"size:16;not null;default:'';index" json:"result"`
+	// 结果来源：banker/timeout/challenger/admin/system
+	ResultBy string `gorm:"size:16;not null;default:''" json:"resultBy"`
+	ResultTime int64 `gorm:"not null;default:0" json:"resultTime"`
+
+	// 冗余汇总字段（便于查询）
+	BankerStakeTotal     int64 `gorm:"not null;default:0" json:"bankerStakeTotal"`
+	ChallengerStakeTotal int64 `gorm:"not null;default:0" json:"challengerStakeTotal"`
+	PoolPrincipalTotal   int64 `gorm:"not null;default:0" json:"poolPrincipalTotal"`
+	EntryFeeTotal        int64 `gorm:"not null;default:0" json:"entryFeeTotal"`
+	BurnTotal            int64 `gorm:"not null;default:0" json:"burnTotal"`
+
+	Heat int64 `gorm:"not null;default:0;index" json:"heat"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime"`
+}
+
+// BattleBet 下注明细（庄家加注/挑战者加入/挑战者追加下注都会产生一条记录）
+// 注意：结算按用户维度聚合（同一 userId 多条 bet 需要 sum）。
+type BattleBet struct {
+	Model
+	BattleId int64 `gorm:"not null;index;uniqueIndex:idx_battle_bet_user_req" json:"battleId"`
+	UserId   int64 `gorm:"not null;index;uniqueIndex:idx_battle_bet_user_req" json:"userId"`
+	Role     string `gorm:"size:16;not null;index" json:"role"`   // banker/challenger
+	Amount   int64  `gorm:"not null" json:"amount"`               // 下注本金（进资金池）
+	EntryFee int64  `gorm:"not null;default:0" json:"entryFee"`   // 入场费（不进资金池）
+	RequestId string `gorm:"size:64;not null;uniqueIndex:idx_battle_bet_user_req" json:"requestId"`   // 幂等键（由客户端传入）
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime"`
+}
+
+// BattleLedger 业务流水（与 UserCoinLog 配合用于对账与审计）
+// 说明：action + requestId + (battleId,userId) 应保证幂等。
+type BattleLedger struct {
+	Model
+	BattleId int64 `gorm:"not null;index;uniqueIndex:idx_battle_ledger_idem" json:"battleId"`
+	UserId   int64 `gorm:"not null;index;uniqueIndex:idx_battle_ledger_idem" json:"userId"`
+	Action   string `gorm:"size:32;not null;index;uniqueIndex:idx_battle_ledger_idem" json:"action"` // stake_in/entry_fee/burn/payout...
+	RequestId string `gorm:"size:64;not null;index;uniqueIndex:idx_battle_ledger_idem" json:"requestId"`
+	Amount   int64 `gorm:"not null" json:"amount"` // 正数表示用户入账，负数表示用户出账
+	Remark   string `gorm:"size:256" json:"remark"`
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime"`
+}
+
+// BattleSettlement 结算单（battle 进入 settled 时生成；提取时使用）
+type BattleSettlement struct {
+	Model
+	BattleId int64 `gorm:"not null;uniqueIndex" json:"battleId"`
+	Result   string `gorm:"size:16;not null" json:"result"` // banker_wins/banker_loses/void
+	CreatedAt int64 `gorm:"not null;default:0" json:"createdAt"`
+}
+
+// BattleSettlementItem 结算单明细（每个用户一条）
+type BattleSettlementItem struct {
+	Model
+	SettlementId int64 `gorm:"not null;index" json:"settlementId"`
+	BattleId     int64 `gorm:"not null;index;uniqueIndex:idx_battle_settle_user" json:"battleId"`
+	UserId       int64 `gorm:"not null;index;uniqueIndex:idx_battle_settle_user" json:"userId"`
+	// 应得金额（从资金池出池）；注意：入场费不在此体现（入场费已实时给庄家）。
+	PayoutAmount int64 `gorm:"not null;default:0" json:"payoutAmount"`
+	// 是否已提取（一次性全提）
+	Withdrawn bool  `gorm:"not null;default:false;index" json:"withdrawn"`
+	WithdrawRequestId string `gorm:"size:64;not null;default:''" json:"withdrawRequestId"`
+	WithdrawTime int64 `gorm:"not null;default:0" json:"withdrawTime"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime"`
 }
 
 // PredictBet 预测下注单
