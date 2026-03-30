@@ -356,12 +356,12 @@ type Battle struct {
 // - requestId 做幂等：重复提交不会重复变更。
 type BattleChallengeAction struct {
 	Model
-	BattleId  int64  `gorm:"not null;index;uniqueIndex:idx_battle_challenge_user" json:"battleId"`
-	UserId    int64  `gorm:"not null;index;uniqueIndex:idx_battle_challenge_user" json:"userId"`
-	Action    string `gorm:"size:16;not null;index" json:"action"` // confirm/dispute
-	RequestId string `gorm:"size:64;not null;uniqueIndex:idx_battle_challenge_user" json:"requestId"`
-	Remark    string `gorm:"size:256" json:"remark"`
-	CreateTime int64 `gorm:"not null;default:0" json:"createTime"`
+	BattleId   int64  `gorm:"not null;index;uniqueIndex:idx_battle_challenge_user" json:"battleId"`
+	UserId     int64  `gorm:"not null;index;uniqueIndex:idx_battle_challenge_user" json:"userId"`
+	Action     string `gorm:"size:16;not null;index" json:"action"` // confirm/dispute
+	RequestId  string `gorm:"size:64;not null;uniqueIndex:idx_battle_challenge_user" json:"requestId"`
+	Remark     string `gorm:"size:256" json:"remark"`
+	CreateTime int64  `gorm:"not null;default:0" json:"createTime"`
 }
 
 // BattleBet 下注明细（庄家加注/挑战者加入/挑战者追加下注都会产生一条记录）

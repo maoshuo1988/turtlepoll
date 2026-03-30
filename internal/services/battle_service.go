@@ -498,12 +498,12 @@ func (s *battleService) ChallengeConfirm(userId int64, form ChallengeActionForm)
 			return nil
 		}
 		if err := repositories.BattleChallengeActionRepository.Create(tx, &models.BattleChallengeAction{
-			BattleId:    b.Id,
-			UserId:      userId,
-			Action:      "confirm",
-			RequestId:   form.RequestId,
-			Remark:      strings.TrimSpace(form.Remark),
-			CreateTime:  now,
+			BattleId:   b.Id,
+			UserId:     userId,
+			Action:     "confirm",
+			RequestId:  form.RequestId,
+			Remark:     strings.TrimSpace(form.Remark),
+			CreateTime: now,
 		}); err != nil {
 			return err
 		}
@@ -659,6 +659,45 @@ func (s *battleService) AdminResolve(adminUserId int64, form AdminResolveForm) (
 			Remark:     strings.TrimSpace(form.Remark),
 			CreateTime: now,
 		})
+
+		// 处罚：按 10% 从资金池 burn。
+		// 口径：处罚 burn 与 void 规则 burn 是两条独立流水；均以 BattleLedger 幂等。
+		penalty := int64(0)
+		if b.PoolPrincipalTotal > 0 {
+			penalty = int64(math.Floor(float64(b.PoolPrincipalTotal) * 0.10))
+		}
+		if penalty > 0 {
+			// 用同一个 requestId 作为幂等点，避免重复裁决请求重复处罚
+			exists := repositories.BattleLedgerRepository.TakeIdempotent(
+				tx,
+				b.Id,
+				models.BattlePoolUserId,
+				"penalty_burn",
+				form.RequestId,
+			)
+			if exists == nil {
+				if err := UserCoinService.BurnFromPool(
+					tx,
+					"BATTLE_PENALTY_BURN",
+					b.Id,
+					penalty,
+					fmt.Sprintf("battle penalty burn: battleId=%d", b.Id),
+				); err != nil {
+					return err
+				}
+				_ = repositories.BattleLedgerRepository.Create(tx, &models.BattleLedger{
+					BattleId:   b.Id,
+					UserId:     models.BattlePoolUserId,
+					Action:     "penalty_burn",
+					RequestId:  form.RequestId,
+					Amount:     -penalty,
+					Remark:     "penalty burn from pool",
+					CreateTime: now,
+				})
+				b.BurnTotal += penalty
+			}
+		}
+
 		b.Result = res
 		b.ResultBy = "admin"
 		b.ResultTime = now
