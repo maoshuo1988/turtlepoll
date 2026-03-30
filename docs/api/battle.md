@@ -53,6 +53,12 @@
 
 > 余额不足：由 `UserCoinService.SpendToPool` 返回的 message 决定（通常是余额不足/扣款失败），文案需以实际实现为准。
 
+补充（来自 `internal/services/user_coin_service.go`）：
+
+- 余额不足：`insufficient balance`
+- 金额非法（<=0）：`amount must be positive`
+- userId 非法：`userId is required`
+
 ### 加入/追加下注：`POST /api/battle/join`
 
 - `amount <= 0`：`amount must be positive`
@@ -65,6 +71,11 @@
 
 > 幂等说明：同一个用户对同一 battle 传相同 `requestId` 会直接返回已有下注明细，不会重复扣款。
 
+补充（coin/转账层可能返回）：
+
+- 余额不足：`insufficient balance`
+- 金额非法（<=0）：`amount must be positive`
+
 ### 庄家加注：`POST /api/battle/banker_add_stake`
 
 - `amount <= 0`：`amount must be positive`
@@ -72,6 +83,11 @@
 - 非庄家操作：`permission denied`
 - battle 已进入 `pending/disputed/settled`：`battle is not allowed to add stake`
 - 已到结算时间：`battle already reached settle time`
+
+补充（coin/转账层可能返回）：
+
+- 余额不足：`insufficient balance`
+- 金额非法（<=0）：`amount must be positive`
 
 ### 庄家宣布结果：`POST /api/battle/declare`
 
@@ -99,6 +115,10 @@
 
 - battle 未结算：`battle is not settled`
 - 当前用户无 payout：`no payout for this user`
+
+补充（coin/转账层可能返回）：
+
+- 资金池余额不足（理论上不应发生；若发生通常是账不平）：`insufficient balance`
 
 > 幂等说明：若 `withdrawn=true`，重复调用会直接返回 item，不会重复出池。
 
