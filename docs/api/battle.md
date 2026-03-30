@@ -13,6 +13,25 @@
 
 ## 数据模型速览
 
+## 统一响应与错误约定
+
+项目统一使用 JSON 包装返回（见 `github.com/mlogclub/simple/web`）：
+
+- 成功：`{"success":true,"data":...}`
+- 失败：`{"success":false,"message":"..."}`
+
+> 备注：错误场景目前主要依赖 `message` 文案区分（例如 `battle not found`、`battleId is required`、`未登录` 等）。
+> 如需前端更稳定的错误码（`code`），建议后续在 `web.JsonError*` 输出中加上统一 `code`。
+
+### 示例：错误响应
+
+```json
+{
+  "success": false,
+  "message": "battle not found"
+}
+```
+
 ### Battle（赌局）
 
 字段以 `internal/models/models.go` 为准，常用字段：
@@ -74,6 +93,43 @@
 - `page`: int
 - `pageSize`: int
 
+#### 示例
+
+请求：
+
+```http
+GET /api/battle/list?page=1&pageSize=20&status=open&mine=1
+```
+
+响应（示意，仅展示关键字段）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "list": [
+      {
+        "battle": {
+          "id": 1,
+          "title": "xxx",
+          "status": "open",
+          "bankerUserId": 10001,
+          "bankerStakeTotal": 1000,
+          "challengerStakeTotal": 300,
+          "poolPrincipalTotal": 1300,
+          "entryFeeTotal": 0,
+          "burnTotal": 0
+        },
+        "myAction": ""
+      }
+    ],
+    "count": 1,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
 ---
 
 ### 2) 赌局详情
@@ -90,6 +146,70 @@
 - `settlement`:
   - `settlement`: BattleSettlement（若未生成则为 null）
   - `myItem`: BattleSettlementItem（若我无 payout 或未生成则为 null）
+
+#### 示例
+
+请求：
+
+```http
+GET /api/battle/by?battleId=1
+```
+
+响应（未结算时 `settlement.settlement=null`）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "battle": {
+      "id": 1,
+      "status": "pending",
+      "result": "",
+      "pendingDeadline": 1760000000,
+      "confirmDeadline": 1760003600
+    },
+    "myAction": "",
+    "settlement": {
+      "settlement": null,
+      "myItem": null
+    }
+  }
+}
+```
+
+响应（已结算，含我的提取明细）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "battle": {
+      "id": 1,
+      "status": "settled",
+      "result": "banker_wins",
+      "resultBy": "admin",
+      "resultTime": 1760000500
+    },
+    "myAction": "confirm",
+    "settlement": {
+      "settlement": {
+        "id": 10,
+        "battleId": 1,
+        "result": "banker_wins",
+        "createdAt": 1760000500
+      },
+      "myItem": {
+        "id": 100,
+        "battleId": 1,
+        "userId": 20001,
+        "payoutAmount": 1234,
+        "withdrawn": false,
+        "withdrawTime": 0
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -113,6 +233,42 @@
 
 #### 返回值（data）
 - Battle
+
+#### 示例
+
+请求：
+
+```http
+POST /api/battle/create
+Content-Type: application/json
+
+{
+  "title": "巴萨 vs 皇马，谁赢？",
+  "bankerSide": "巴萨",
+  "challengerSide": "皇马",
+  "stakeAmount": 1000,
+  "isPublic": true,
+  "inviteCode": "",
+  "settleTime": 1760000000,
+  "requestId": "create-001"
+}
+```
+
+响应（示意）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "title": "巴萨 vs 皇马，谁赢？",
+    "status": "open",
+    "bankerUserId": 10001,
+    "bankerStakeTotal": 1000,
+    "challengerStakeTotal": 0
+  }
+}
+```
 
 ---
 
@@ -139,6 +295,46 @@
 - `battle`: Battle
 - `bet`: BattleBet
 
+#### 示例
+
+请求：
+
+```http
+POST /api/battle/join
+Content-Type: application/json
+
+{
+  "battleId": 1,
+  "amount": 300,
+  "requestId": "join-20001-0001",
+  "inviteCode": ""
+}
+```
+
+响应（示意）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "battle": {
+      "id": 1,
+      "status": "open",
+      "bankerStakeTotal": 1000,
+      "challengerStakeTotal": 300,
+      "poolPrincipalTotal": 1295,
+      "entryFeeTotal": 5
+    },
+    "bet": {
+      "id": 11,
+      "battleId": 1,
+      "userId": 20001,
+      "amount": 300
+    }
+  }
+}
+```
+
 ---
 
 ### 5) 庄家加注
@@ -156,6 +352,19 @@
 
 #### 返回值（data）
 - Battle
+
+#### 示例
+
+```http
+POST /api/battle/banker_add_stake
+Content-Type: application/json
+
+{
+  "battleId": 1,
+  "amount": 500,
+  "requestId": "banker-add-0001"
+}
+```
 
 ---
 
@@ -176,6 +385,15 @@
 #### 返回值（data）
 - Battle
 
+#### 示例
+
+```http
+POST /api/battle/declare
+Content-Type: application/x-www-form-urlencoded
+
+battleId=1&result=banker_wins
+```
+
 ---
 
 ### 7) 挑战者确认
@@ -193,6 +411,19 @@
 
 #### 返回值（data）
 - Battle（若全部挑战者确认达成，会变更为 `settled` 并生成结算单）
+
+#### 示例
+
+```http
+POST /api/battle/challenger_confirm
+Content-Type: application/json
+
+{
+  "battleId": 1,
+  "requestId": "confirm-20001-0001",
+  "remark": "同意结果"
+}
+```
 
 ---
 
@@ -212,6 +443,19 @@
 #### 返回值（data）
 - Battle（进入 `disputed`，并设置 `disputeDeadline = now + 24h`）
 
+#### 示例
+
+```http
+POST /api/battle/challenger_dispute
+Content-Type: application/json
+
+{
+  "battleId": 1,
+  "requestId": "dispute-20001-0001",
+  "remark": "我认为庄家宣判不正确"
+}
+```
+
 ---
 
 ### 9) 提取（一次性全提）
@@ -228,6 +472,33 @@
 
 #### 返回值（data）
 - BattleSettlementItem（我的结算明细，带 `withdrawn/withdrawTime`）
+
+#### 示例
+
+```http
+POST /api/battle/withdraw
+Content-Type: application/json
+
+{
+  "battleId": 1,
+  "requestId": "withdraw-20001-0001"
+}
+```
+
+响应（示意）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "battleId": 1,
+    "userId": 20001,
+    "payoutAmount": 1234,
+    "withdrawn": true,
+    "withdrawTime": 1760000600
+  }
+}
+```
 
 ---
 
@@ -253,4 +524,32 @@
 
 #### 返回值（data）
 - Battle
+
+#### 示例
+
+```http
+POST /api/admin/battle/resolve
+Content-Type: application/json
+
+{
+  "battleId": 1,
+  "requestId": "admin-resolve-0001",
+  "result": "void",
+  "remark": "证据不足，作废"
+}
+```
+
+## 前端对接建议：按钮态（可选，建议前端自行计算）
+
+后端目前返回 `battle.status/result/*deadline` 与 `myAction`（详情、列表都带）。
+前端通常会用这些字段计算按钮可用性，建议统一成以下布尔值（不需要后端改代码即可实现）：
+
+- `canJoin`：`battle.status in [open]` 且（私密场邀请码已校验）
+- `canBankerAddStake`：我是庄家 且 `battle.status == open`
+- `canDeclare`：我是庄家 且 `battle.status == pending` 且 `now <= pendingDeadline`
+- `canConfirm`：我是挑战者 且 `battle.status == pending` 且 `myAction == ""` 且 `now <= confirmDeadline`
+- `canDispute`：我是挑战者 且 `battle.status == pending` 且 `myAction == ""` 且 `now <= confirmDeadline`
+- `canWithdraw`：`battle.status == settled` 且 `settlement.myItem != null` 且 `settlement.myItem.withdrawn == false`
+
+> 注意：列表接口未返回 `settlement`，如需在列表直接显示 `canWithdraw`，需要额外请求详情或扩展列表返回。
 
