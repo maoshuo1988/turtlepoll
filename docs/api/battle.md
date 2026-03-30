@@ -23,6 +23,36 @@
 > 备注：错误场景目前主要依赖 `message` 文案区分（例如 `battle not found`、`battleId is required`、`未登录` 等）。
 > 如需前端更稳定的错误码（`code`），建议后续在 `web.JsonError*` 输出中加上统一 `code`。
 
+### message 来源层级（便于定位与提示策略）
+
+当前 battle 相关 `message` 主要来自以下几层（通常会直接透传到前端）：
+
+1) Controller 参数校验（例如 `battleId is required`、`battle not found`）
+2) BattleService 业务校验（例如 `battle is not open`、`permission denied`、`invalid result`）
+3) Coin/转账层（`UserCoinService`），主要是扣款/转账失败（例如 `insufficient balance`）
+4) DB/ORM 层错误（`gorm` 返回的错误字符串，一般不稳定，不建议直接面向用户）
+
+建议前端策略：
+
+- 对“高频可预期”的 message 做**白名单映射成中文提示**（详见下方建议表）。
+- 对 DB/未知错误：统一提示「系统繁忙，请稍后重试」，同时上报 message 便于排查。
+
+### 前端 message 映射建议（高频）
+
+| message（后端原文） | 建议中文提示 |
+| --- | --- |
+| `battle not found` | 赌局不存在或已删除 |
+| `battle is not open` | 赌局当前不可加入 |
+| `battle is full` | 赌局已满 |
+| `invalid inviteCode` | 邀请码错误 |
+| `permission denied` | 无权限操作 |
+| `insufficient balance` | 余额不足 |
+| `battle is not settled` | 尚未结算，无法提取 |
+| `no payout for this user` | 你在本局没有可提取金额 |
+| `banker has not declared result` | 庄家尚未宣判 |
+| `battle is not pending` | 当前阶段不允许该操作 |
+| `battle is not disputed` | 当前不在争议仲裁状态 |
+
 ### 示例：错误响应
 
 ```json
