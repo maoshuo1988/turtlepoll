@@ -107,4 +107,5 @@ func init() {
 	register(4, "add email log menu", migrate_add_email_log_menu)
 	register(5, "migrate smtp config to sys config", migrate_smtp_config_to_sys_config)
 	register(6, "add football schedule & prediction models", migrate_add_football_models)
+	register(7, "add predict_market resolve fields", migrate_add_predict_market_resolve_fields)
 }

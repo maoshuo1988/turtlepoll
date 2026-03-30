@@ -79,6 +79,7 @@ type Config struct {
 	BaiduSEO       BaiduSEOConfig `yaml:"baiduSEO"`       // 百度SEO配置
 	SmSEO          SmSEOConfig    `yaml:"smSEO"`          // 神马搜索SEO配置
 	FootballData   FootballData   `yaml:"footballData"`   // football-data.org
+	Polymarket     Polymarket     `yaml:"polymarket"`     // polymarket（只读同步）
 }
 
 type FootballData struct {
@@ -87,6 +88,18 @@ type FootballData struct {
 	CompetitionCode string `yaml:"competitionCode"` // e.g. WC
 	Season          int    `yaml:"season"`          // e.g. 2026
 	CronSpec        string `yaml:"cronSpec"`        // e.g. "0 */30 * * * *" (every 30 min)
+}
+
+// Polymarket 同步配置（只读）
+// - 只同步指定 tags / market slugs
+// - 不同步价格盘口（不接 CLOB），只同步市场目录与最终结算结果（resolved outcome）
+type Polymarket struct {
+	Enabled     bool     `yaml:"enabled"`
+	BaseURL     string   `yaml:"baseURL"`     // Gamma API base url，留空用默认：https://gamma-api.polymarket.com
+	CronSpec    string   `yaml:"cronSpec"`    // 定时同步 cron（5字段），默认：*/30 * * * *
+	Tags        []string `yaml:"tags"`        // 只同步这些 tag slug（小写）
+	MarketSlugs []string `yaml:"marketSlugs"` // 额外同步指定 market slug 白名单
+	PageSize    int      `yaml:"pageSize"`    // 分页 size，默认 50
 }
 
 type IPLocator struct {

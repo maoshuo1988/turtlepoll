@@ -49,3 +49,13 @@ footballData:
   competitionCode: "WC"
   season: 2026
   cronSpec: "0 */6 * * *"
+# polymarket api
+polymarket:
+  enabled: true
+  baseURL: "https://gamma-api.polymarket.com"   # 可省略
+  cronSpec: "*/30 * * * *"                      # 可省略
+  pageSize: 50
+  tags:
+    - politics
+    - sports
+  marketSlugs: []   

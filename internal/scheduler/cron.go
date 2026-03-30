@@ -25,6 +25,20 @@ func Start() {
 		}
 	})
 
+	// polymarket 只读同步（默认每 30 分钟一次；需 enabled=true 且配置了 tags 或 marketSlugs）
+	pm := config.Instance.Polymarket
+	if pm.Enabled {
+		pmSpec := pm.CronSpec
+		if pmSpec == "" {
+			pmSpec = "*/30 * * * *"
+		}
+		addCronFunc(c, pmSpec, func() {
+			if err := services.PolymarketSyncService.SyncMarkets(context.Background()); err != nil {
+				slog.Error("polymarket sync failed", slog.Any("err", err))
+			}
+		})
+	}
+
 	c.Start()
 }
 

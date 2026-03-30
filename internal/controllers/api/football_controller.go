@@ -268,6 +268,17 @@ func (c *FootballController) PostSync_worldcup() *web.JsonResult {
 	return web.JsonSuccess()
 }
 
+// 手动触发 Polymarket 同步：POST /api/football/sync_polymarket
+// 说明：只读同步市场目录与结算结果；同步范围由 bbs-go.yaml 的 polymarket 配置控制。
+func (c *FootballController) PostSync_polymarket() *web.JsonResult {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := services.PolymarketSyncService.SyncMarkets(ctx); err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonSuccess()
+}
+
 // 查询赛程列表：GET /api/football/schedules?page=1&limit=20
 func (c *FootballController) GetSchedules() *web.JsonResult {
 	p := params.NewQueryParams(c.Ctx)
@@ -381,13 +392,13 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 	if sourceModelId > 0 {
 		p.Cnd.Where("source_model_id = ?", sourceModelId)
 	}
-	
+
 	var list []models.PredictMarket
 	// 优先级排序：OPEN -> CLOSE -> (已结算/其他)
 	// 同状态下：closeTime asc（更接近封盘/比分揭晓的优先），再按 id desc 保证稳定顺序
 	query := p.Cnd.Build(sqls.DB().Model(&models.PredictMarket{}))
 	query.Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").Find(&list)
-	
+
 	count := p.Cnd.Count(sqls.DB(), &models.PredictMarket{})
 
 	// 查询上下文并拼装

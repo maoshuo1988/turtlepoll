@@ -196,6 +196,16 @@ type PredictMarket struct {
 	Result      string `gorm:"size:32" json:"result" form:"result"`                  // HOME/DRAW/AWAY（先预留）
 	ExternalKey string `gorm:"size:128" json:"externalKey" form:"externalKey"`       // 预留：外部业务 key
 
+	// ============ TurtlePoll：外部市场结算（例如 Polymarket Gamma） ============
+	// resolved=false 表示未结算或尚未从外部同步到最终结果。
+	Resolved bool `gorm:"not null;default:false;index:idx_predict_market_resolved" json:"resolved" form:"resolved"`
+	// 外部 winner outcome 的唯一 ID（按原样保存）。
+	ResolvedOutcomeId string `gorm:"size:128" json:"resolvedOutcomeId" form:"resolvedOutcomeId"`
+	// 外部 winner outcome 的展示名（YES/NO、队名、候选人等）。
+	ResolvedOutcomeName string `gorm:"size:255" json:"resolvedOutcomeName" form:"resolvedOutcomeName"`
+	// 外部结算时间（若外部不提供，则写首次检测到 resolved 的时间戳）。
+	ResolvedAt int64 `gorm:"not null;default:0" json:"resolvedAt" form:"resolvedAt"`
+
 	// ============ TurtlePoll：二元预测市场（A/B）下注池与赔率 ============
 	// baseA/baseB：系统默认投放的虚拟底池（用于早期赔率稳定）
 	// poolA/poolB：所有用户对 A/B 的下注累计（真实用户下注池）

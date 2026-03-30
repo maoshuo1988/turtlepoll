@@ -27,6 +27,17 @@ sudo mv /tmp/bbs-go-linux /srv/project/turtlepoll/
 curl -X POST "http://localhost:8082/api/football/sync_worldcup" --cookie "token=<YOUR_TOKEN>"
 ```
 
+# 同步 Polymarket（只读）
+
+说明：
+- 只同步配置指定范围（tags / marketSlugs）
+- 不同步价格盘口
+- 同步市场状态与最终结算结果（resolved outcome）
+
+```bash
+curl -X POST "http://localhost:8082/api/football/sync_polymarket" --cookie "token=<YOUR_TOKEN>"
+```
+
 说明：
 - 同步会为每条赛程创建/更新对应的预测市场（`PredictMarket`）。
 - 只有当赛程 `home_team` 和 `away_team` 都有值时，市场状态才会设置为 `OPEN`；否则为 `CLOSE`。
@@ -83,5 +94,14 @@ curl 'https://turtle.cloud-ip.cc/api/config/configs' \
   -H 'Origin: https://main.d2vufo32ngwxrk.amplifyapp.com' \
   --insecure
 ```
+
+curl -X POST "https://turtle.cloud-ip.cc/api/admin/coin/mint" \
+  -H "Authorization: Bearer c633f58ae2ac46bf8e47cf0983b90aae" \
+  -d "userId=1" \
+  -d "amount=80000" \
+  -d "remark=self mint"
+
+
+  psql "postgres://appuser:root@127.0.0.1:5432/turtlepoll?sslmode=disable" -c "SELECT id FROM t_user ;"
 
 
