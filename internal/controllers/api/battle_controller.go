@@ -99,3 +99,60 @@ func (c *BattleController) PostWithdraw() *web.JsonResult {
 	}
 	return web.JsonData(item)
 }
+
+// 挑战者确认：POST /api/battle/challenger_confirm
+func (c *BattleController) PostChallenger_confirm() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	var form services.ChallengeActionForm
+	if err := c.Ctx.ReadJSON(&form); err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	b, err := services.BattleService.ChallengeConfirm(user.Id, form)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(b)
+}
+
+// 挑战者异议：POST /api/battle/challenger_dispute
+func (c *BattleController) PostChallenger_dispute() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	var form services.ChallengeActionForm
+	if err := c.Ctx.ReadJSON(&form); err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	b, err := services.BattleService.ChallengeDispute(user.Id, form)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(b)
+}
+
+// AdminBattleController 管理员仲裁接口
+// 路由：/api/admin/battle
+type AdminBattleController struct {
+	Ctx iris.Context
+}
+
+// 管理员裁决：POST /api/admin/battle/resolve
+func (c *AdminBattleController) PostResolve() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	var form services.AdminResolveForm
+	if err := c.Ctx.ReadJSON(&form); err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	b, err := services.BattleService.AdminResolve(user.Id, form)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(b)
+}

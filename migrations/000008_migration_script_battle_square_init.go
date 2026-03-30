@@ -11,6 +11,7 @@ func migrate_battle_square_init_tables() error {
 	return db.AutoMigrate(
 		&models.Battle{},
 		&models.BattleBet{},
+		&models.BattleChallengeAction{},
 		&models.BattleLedger{},
 		&models.BattleSettlement{},
 		&models.BattleSettlementItem{},

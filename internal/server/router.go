@@ -119,6 +119,7 @@ func NewServer() {
 		m.Party("/badge").Handle(new(admin.BadgeController))
 		m.Party("/level-config").Handle(new(admin.LevelConfigController))
 		m.Party("/user-task-log").Handle(new(admin.UserTaskLogController))
+		m.Party("/battle").Handle(new(api.AdminBattleController))
 		m.Party("/user-exp-log").Handle(new(admin.UserExpLogController))
 		m.Party("/coin").Handle(new(admin.CoinController))
 		m.Party("/user-badge").Handle(new(admin.UserBadgeController))

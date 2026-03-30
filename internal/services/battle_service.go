@@ -62,8 +62,21 @@ type BankerAddStakeForm struct {
 }
 
 type WithdrawForm struct {
-	BattleId   int64  `json:"battleId"`
-	RequestId  string `json:"requestId"`
+	BattleId  int64  `json:"battleId"`
+	RequestId string `json:"requestId"`
+}
+
+type ChallengeActionForm struct {
+	BattleId  int64  `json:"battleId"`
+	RequestId string `json:"requestId"`
+	Remark    string `json:"remark"`
+}
+
+type AdminResolveForm struct {
+	BattleId  int64  `json:"battleId"`
+	RequestId string `json:"requestId"`
+	Result    string `json:"result"` // banker_wins/banker_loses/void
+	Remark    string `json:"remark"`
 }
 
 func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) (*models.Battle, error) {
@@ -94,18 +107,18 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 
 	now := dates.NowTimestamp()
 	b := &models.Battle{
-		Title:            form.Title,
-		BankerUserId:     bankerUserId,
-		BankerSide:       form.BankerSide,
-		ChallengerSide:   form.ChallengerSide,
-		IsPublic:         form.IsPublic,
-		InviteCode:       form.InviteCode,
-		Status:           BattleStatusOpen,
-		SettleTime:       form.SettleTime,
-		BankerStakeTotal: form.StakeAmount,
+		Title:              form.Title,
+		BankerUserId:       bankerUserId,
+		BankerSide:         form.BankerSide,
+		ChallengerSide:     form.ChallengerSide,
+		IsPublic:           form.IsPublic,
+		InviteCode:         form.InviteCode,
+		Status:             BattleStatusOpen,
+		SettleTime:         form.SettleTime,
+		BankerStakeTotal:   form.StakeAmount,
 		PoolPrincipalTotal: form.StakeAmount,
-		CreateTime:       now,
-		UpdateTime:       now,
+		CreateTime:         now,
+		UpdateTime:         now,
 	}
 
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
@@ -116,14 +129,14 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 		// 庄家押注：本金入池
 		betId := b.Id
 		if err := repositories.BattleBetRepository.Create(tx, &models.BattleBet{
-			BattleId:    b.Id,
-			UserId:      bankerUserId,
-			Role:        BattleRoleBanker,
-			Amount:      form.StakeAmount,
-			EntryFee:    0,
-			RequestId:   fmt.Sprintf("create-%d", b.Id),
-			CreateTime:  now,
-			UpdateTime:  now,
+			BattleId:   b.Id,
+			UserId:     bankerUserId,
+			Role:       BattleRoleBanker,
+			Amount:     form.StakeAmount,
+			EntryFee:   0,
+			RequestId:  fmt.Sprintf("create-%d", b.Id),
+			CreateTime: now,
+			UpdateTime: now,
 		}); err != nil {
 			return err
 		}
@@ -133,13 +146,13 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 		}
 
 		_ = repositories.BattleLedgerRepository.Create(tx, &models.BattleLedger{
-			BattleId:    b.Id,
-			UserId:      bankerUserId,
-			Action:      "stake_in",
-			RequestId:   fmt.Sprintf("create-%d", b.Id),
-			Amount:      -form.StakeAmount,
-			Remark:      "banker stake in",
-			CreateTime:  now,
+			BattleId:   b.Id,
+			UserId:     bankerUserId,
+			Action:     "stake_in",
+			RequestId:  fmt.Sprintf("create-%d", b.Id),
+			Amount:     -form.StakeAmount,
+			Remark:     "banker stake in",
+			CreateTime: now,
 		})
 
 		// 确保系统账户存在（资金池/销毁）
@@ -408,8 +421,9 @@ func (s *battleService) DeclareResultByBanker(bankerUserId, battleId int64, resu
 	if result != BattleResultBankerWins && result != BattleResultBankerLoses {
 		return nil, errors.New("invalid result")
 	}
-	// 这里先只落库结果与时间，并立即生成结算单（简化一期：不做挑战者确认/异议流程）。
-	// 后续再扩展 disputed 流程与挑战者确认窗口。
+	// 仲裁链路：庄家宣布后进入挑战者确认窗口（24h）。
+	// - 所有挑战者 confirm 或 confirm 超时默认确认 => settled
+	// - 任一挑战者 dispute => disputed（管理员 24h）
 	now := dates.NowTimestamp()
 	var battle *models.Battle
 	if err := sqls.DB().Transaction(func(tx *gorm.DB) error {
@@ -426,15 +440,240 @@ func (s *battleService) DeclareResultByBanker(bankerUserId, battleId int64, resu
 		b.Result = result
 		b.ResultBy = "banker"
 		b.ResultTime = now
-		b.Status = BattleStatusSettled
+		b.ConfirmDeadline = now + 24*3600
+		b.ConfirmedCount = 0
 		b.UpdateTime = now
 		if err := repositories.BattleRepository.Update(tx, b); err != nil {
 			return err
 		}
 		battle = b
-		_, err = s.GenerateSettlement(tx, b)
-		return err
+		return nil
 	}); err != nil {
+		return nil, err
+	}
+	return battle, nil
+}
+
+// ChallengeConfirm 挑战者确认（幂等）：记录动作；若确认人数达到挑战者人数则 settled 并生成结算单。
+func (s *battleService) ChallengeConfirm(userId int64, form ChallengeActionForm) (*models.Battle, error) {
+	if userId <= 0 {
+		return nil, errors.New("userId is required")
+	}
+	if form.BattleId <= 0 {
+		return nil, errors.New("battleId is required")
+	}
+	form.RequestId = strings.TrimSpace(form.RequestId)
+	if form.RequestId == "" {
+		return nil, errors.New("requestId is required")
+	}
+	now := dates.NowTimestamp()
+	var battle *models.Battle
+	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		b, err := repositories.BattleRepository.TakeForUpdate(tx, form.BattleId)
+		if err != nil {
+			return err
+		}
+		if b.Status != BattleStatusPending {
+			return errors.New("battle is not pending")
+		}
+		if b.Result == "" {
+			return errors.New("banker has not declared result")
+		}
+		// 必须是挑战者
+		stake, err := repositories.BattleBetRepository.SumUserStake(tx, b.Id, userId)
+		if err != nil {
+			return err
+		}
+		if stake <= 0 {
+			return errors.New("only challenger can confirm")
+		}
+		// 幂等：按 requestId
+		if repositories.BattleChallengeActionRepository.TakeByRequest(tx, b.Id, userId, form.RequestId) != nil {
+			battle = b
+			return nil
+		}
+		// 已做过动作（confirm/dispute）则拒绝重复操作
+		if repositories.BattleChallengeActionRepository.TakeByUser(tx, b.Id, userId) != nil {
+			battle = b
+			return nil
+		}
+		if err := repositories.BattleChallengeActionRepository.Create(tx, &models.BattleChallengeAction{
+			BattleId:    b.Id,
+			UserId:      userId,
+			Action:      "confirm",
+			RequestId:   form.RequestId,
+			Remark:      strings.TrimSpace(form.Remark),
+			CreateTime:  now,
+		}); err != nil {
+			return err
+		}
+
+		// 统计确认人数
+		var confirmed int64
+		if err := tx.Model(&models.BattleChallengeAction{}).
+			Where("battle_id = ? AND action = ?", b.Id, "confirm").
+			Count(&confirmed).Error; err != nil {
+			return err
+		}
+		b.ConfirmedCount = confirmed
+		b.UpdateTime = now
+
+		// 统计挑战者人数
+		// 以下注用户维度去重
+		type row struct{ UserId int64 }
+		var rows []row
+		if err := tx.Model(&models.BattleBet{}).
+			Select("DISTINCT user_id as user_id").
+			Where("battle_id = ? AND role = ?", b.Id, BattleRoleChallenger).
+			Scan(&rows).Error; err != nil {
+			return err
+		}
+		if confirmed >= int64(len(rows)) {
+			b.Status = BattleStatusSettled
+			b.UpdateTime = now
+			if err := repositories.BattleRepository.Update(tx, b); err != nil {
+				return err
+			}
+			if _, err := s.GenerateSettlement(tx, b); err != nil {
+				return err
+			}
+			battle = b
+			return nil
+		}
+
+		if err := repositories.BattleRepository.Update(tx, b); err != nil {
+			return err
+		}
+		battle = b
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return battle, nil
+}
+
+// ChallengeDispute 挑战者异议（幂等）：进入 disputed，等待管理员裁决。
+func (s *battleService) ChallengeDispute(userId int64, form ChallengeActionForm) (*models.Battle, error) {
+	if userId <= 0 {
+		return nil, errors.New("userId is required")
+	}
+	if form.BattleId <= 0 {
+		return nil, errors.New("battleId is required")
+	}
+	form.RequestId = strings.TrimSpace(form.RequestId)
+	if form.RequestId == "" {
+		return nil, errors.New("requestId is required")
+	}
+	now := dates.NowTimestamp()
+	var battle *models.Battle
+	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		b, err := repositories.BattleRepository.TakeForUpdate(tx, form.BattleId)
+		if err != nil {
+			return err
+		}
+		if b.Status != BattleStatusPending {
+			return errors.New("battle is not pending")
+		}
+		if b.Result == "" {
+			return errors.New("banker has not declared result")
+		}
+		stake, err := repositories.BattleBetRepository.SumUserStake(tx, b.Id, userId)
+		if err != nil {
+			return err
+		}
+		if stake <= 0 {
+			return errors.New("only challenger can dispute")
+		}
+		if repositories.BattleChallengeActionRepository.TakeByRequest(tx, b.Id, userId, form.RequestId) != nil {
+			battle = b
+			return nil
+		}
+		if repositories.BattleChallengeActionRepository.TakeByUser(tx, b.Id, userId) != nil {
+			battle = b
+			return nil
+		}
+		if err := repositories.BattleChallengeActionRepository.Create(tx, &models.BattleChallengeAction{
+			BattleId:   b.Id,
+			UserId:     userId,
+			Action:     "dispute",
+			RequestId:  form.RequestId,
+			Remark:     strings.TrimSpace(form.Remark),
+			CreateTime: now,
+		}); err != nil {
+			return err
+		}
+		b.Status = BattleStatusDisputed
+		b.DisputeDeadline = now + 24*3600
+		b.DisputedByUserId = userId
+		b.UpdateTime = now
+		if err := repositories.BattleRepository.Update(tx, b); err != nil {
+			return err
+		}
+		battle = b
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return battle, nil
+}
+
+// AdminResolve 管理员裁决（disputed）：裁决结果并进入 settled + 生成结算单。
+func (s *battleService) AdminResolve(adminUserId int64, form AdminResolveForm) (*models.Battle, error) {
+	if adminUserId <= 0 {
+		return nil, errors.New("adminUserId is required")
+	}
+	if form.BattleId <= 0 {
+		return nil, errors.New("battleId is required")
+	}
+	form.RequestId = strings.TrimSpace(form.RequestId)
+	if form.RequestId == "" {
+		return nil, errors.New("requestId is required")
+	}
+	res := strings.TrimSpace(strings.ToLower(form.Result))
+	if res != BattleResultBankerWins && res != BattleResultBankerLoses && res != BattleResultVoid {
+		return nil, errors.New("invalid result")
+	}
+	now := dates.NowTimestamp()
+	var battle *models.Battle
+	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		b, err := repositories.BattleRepository.TakeForUpdate(tx, form.BattleId)
+		if err != nil {
+			return err
+		}
+		if b.Status != BattleStatusDisputed {
+			return errors.New("battle is not disputed")
+		}
+		// 幂等：用 ledger 记录 admin_resolve
+		if repositories.BattleLedgerRepository.TakeIdempotent(tx, b.Id, adminUserId, "admin_resolve", form.RequestId) != nil {
+			battle = b
+			return nil
+		}
+		_ = repositories.BattleLedgerRepository.Create(tx, &models.BattleLedger{
+			BattleId:   b.Id,
+			UserId:     adminUserId,
+			Action:     "admin_resolve",
+			RequestId:  form.RequestId,
+			Amount:     0,
+			Remark:     strings.TrimSpace(form.Remark),
+			CreateTime: now,
+		})
+		b.Result = res
+		b.ResultBy = "admin"
+		b.ResultTime = now
+		b.Status = BattleStatusSettled
+		b.UpdateTime = now
+		if err := repositories.BattleRepository.Update(tx, b); err != nil {
+			return err
+		}
+		if _, err := s.GenerateSettlement(tx, b); err != nil {
+			return err
+		}
+		battle = b
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return battle, nil
@@ -670,7 +909,7 @@ func (s *battleService) CronTick() error {
 		var battles []*models.Battle
 		// 扫描可能需要状态迁移的 battle
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("status IN ?", []string{BattleStatusOpen, BattleStatusSealed, BattleStatusPending}).
+			Where("status IN ?", []string{BattleStatusOpen, BattleStatusSealed, BattleStatusPending, BattleStatusDisputed}).
 			Find(&battles).Error; err != nil {
 			return err
 		}
@@ -691,6 +930,56 @@ func (s *battleService) CronTick() error {
 				// 超时未宣布：自动判庄家输，直接 settled 并生成结算单
 				b.Result = BattleResultBankerLoses
 				b.ResultBy = "timeout"
+				b.ResultTime = now
+				b.Status = BattleStatusSettled
+				b.UpdateTime = now
+				if err := repositories.BattleRepository.Update(tx, b); err != nil {
+					return err
+				}
+				if _, err := s.GenerateSettlement(tx, b); err != nil {
+					return err
+				}
+			}
+
+			// 挑战者确认超时：默认确认；全部确认后 settled
+			if b.Status == BattleStatusPending && b.Result != "" && b.ConfirmDeadline > 0 && now > b.ConfirmDeadline {
+				// 找到所有挑战者 userId
+				type row struct{ UserId int64 }
+				var rows []row
+				if err := tx.Model(&models.BattleBet{}).
+					Select("DISTINCT user_id as user_id").
+					Where("battle_id = ? AND role = ?", b.Id, BattleRoleChallenger).
+					Scan(&rows).Error; err != nil {
+					return err
+				}
+				for _, r := range rows {
+					// 未动作的挑战者补一条 confirm（系统 requestId）
+					if repositories.BattleChallengeActionRepository.TakeByUser(tx, b.Id, r.UserId) == nil {
+						_ = repositories.BattleChallengeActionRepository.Create(tx, &models.BattleChallengeAction{
+							BattleId:   b.Id,
+							UserId:     r.UserId,
+							Action:     "confirm",
+							RequestId:  fmt.Sprintf("timeout-confirm-%d", b.Id),
+							Remark:     "timeout default confirm",
+							CreateTime: now,
+						})
+					}
+				}
+				b.Status = BattleStatusSettled
+				b.ResultBy = "confirm_timeout"
+				b.UpdateTime = now
+				if err := repositories.BattleRepository.Update(tx, b); err != nil {
+					return err
+				}
+				if _, err := s.GenerateSettlement(tx, b); err != nil {
+					return err
+				}
+			}
+
+			// disputed 管理员超时：默认 void
+			if b.Status == BattleStatusDisputed && b.DisputeDeadline > 0 && now > b.DisputeDeadline {
+				b.Result = BattleResultVoid
+				b.ResultBy = "admin_timeout"
 				b.ResultTime = now
 				b.Status = BattleStatusSettled
 				b.UpdateTime = now
