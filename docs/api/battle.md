@@ -32,6 +32,83 @@
 }
 ```
 
+## 常见错误场景清单（message 对照）
+
+以下内容来自 `internal/services/battle_service.go` 与控制器参数校验（message 以当前实现为准）。
+
+### 通用
+
+- 未登录：`web.JsonError(errs.NotLogin())`（message 通常为「未登录」或类似文案，取决于 `errs.NotLogin()` 实现）
+- 参数缺失/非法（控制器侧）：
+  - `battleId` 缺失：`battleId is required`
+  - 资源不存在：`battle not found`
+
+### 创建赌局：`POST /api/battle/create`
+
+- `title` 为空：`title is required`
+- `bankerSide/challengerSide` 为空：`sides are required`
+- `stakeAmount < 100`：`stakeAmount must be >= 100`
+- `settleTime <= 0`：`settleTime is required`
+- 私密场未传 `inviteCode`：`inviteCode is required for private battle`
+
+> 余额不足：由 `UserCoinService.SpendToPool` 返回的 message 决定（通常是余额不足/扣款失败），文案需以实际实现为准。
+
+### 加入/追加下注：`POST /api/battle/join`
+
+- `amount <= 0`：`amount must be positive`
+- `requestId` 为空：`requestId is required`
+- 庄家尝试作为挑战者加入：`banker cannot join as challenger`
+- battle 不在 open：`battle is not open`
+- 私密场邀请码错误：`invalid inviteCode`
+- 容量已满：`battle is full`
+- 下注超过剩余容量：`amount exceeds remaining capacity: {remaining}`
+
+> 幂等说明：同一个用户对同一 battle 传相同 `requestId` 会直接返回已有下注明细，不会重复扣款。
+
+### 庄家加注：`POST /api/battle/banker_add_stake`
+
+- `amount <= 0`：`amount must be positive`
+- `requestId` 为空：`requestId is required`
+- 非庄家操作：`permission denied`
+- battle 已进入 `pending/disputed/settled`：`battle is not allowed to add stake`
+- 已到结算时间：`battle already reached settle time`
+
+### 庄家宣布结果：`POST /api/battle/declare`
+
+- `result` 非法：`invalid result`
+- 非庄家操作：`permission denied`
+- battle 不在 pending：`battle is not pending`
+
+### 挑战者确认：`POST /api/battle/challenger_confirm`
+
+- battle 不在 pending：`battle is not pending`
+- 庄家未宣判：`banker has not declared result`
+- 非挑战者尝试确认：`only challenger can confirm`
+
+> 幂等/去重：
+> - 同一 `requestId` 重试：直接返回当前 battle（不重复写动作）。
+> - 同一个用户已做过 confirm/dispute：当前实现也会直接返回 battle（不会报错）。
+
+### 挑战者异议：`POST /api/battle/challenger_dispute`
+
+- battle 不在 pending：`battle is not pending`
+- 庄家未宣判：`banker has not declared result`
+- 非挑战者尝试异议：`only challenger can dispute`
+
+### 提取：`POST /api/battle/withdraw`
+
+- battle 未结算：`battle is not settled`
+- 当前用户无 payout：`no payout for this user`
+
+> 幂等说明：若 `withdrawn=true`，重复调用会直接返回 item，不会重复出池。
+
+### 管理员裁决：`POST /api/admin/battle/resolve`
+
+- `result` 非法：`invalid result`
+- battle 不在 disputed：`battle is not disputed`
+
+> 幂等说明：同一管理员 + 同一 `requestId` 重试会直接返回当前 battle，不会重复执行处罚 burn / 重复生成结算单。
+
 ### Battle（赌局）
 
 字段以 `internal/models/models.go` 为准，常用字段：
