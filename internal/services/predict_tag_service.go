@@ -69,10 +69,10 @@ func (s *predictTagService) refreshTagsFromContexts(db *gorm.DB) error {
 
 	// 只取必要字段
 	type row struct {
-		MarketId    int64
-		Tags        string
-		UpdateTime  int64
-		CreateTime  int64
+		MarketId   int64
+		Tags       string
+		UpdateTime int64
+		CreateTime int64
 	}
 	var rows []row
 	if err := db.Model(&models.PredictContext{}).
