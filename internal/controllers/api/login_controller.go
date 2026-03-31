@@ -6,8 +6,8 @@ import (
 	"bbs-go/internal/models"
 	"database/sql"
 
-	"bbs-go/internal/pkg/config"
 	"bbs-go/internal/pkg/captchaimage"
+	"bbs-go/internal/pkg/config"
 
 	"github.com/dchest/captcha"
 	"github.com/kataras/iris/v12"

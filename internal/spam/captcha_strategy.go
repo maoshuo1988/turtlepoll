@@ -3,9 +3,9 @@ package spam
 import (
 	"bbs-go/internal/models"
 	"bbs-go/internal/models/req"
+	"bbs-go/internal/pkg/captchaimage"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/services"
-	"bbs-go/internal/pkg/captchaimage"
 
 	captcha2 "bbs-go/internal/pkg/captcha"
 
