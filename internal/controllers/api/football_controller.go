@@ -499,6 +499,121 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 	})
 }
 
+// 通过名称模糊查询预测市场：GET /api/football/markets/by_name?q=xxx&page=1&limit=20
+// 匹配规则：
+// - PredictMarket.title ILIKE %q%
+// - 或 PredictContext.event_name ILIKE %q%
+// 说明：
+// - 使用 EXISTS 子查询避免 JOIN 导致 count/分页重复行的问题。
+// - 返回结构尽量与 /api/football/markets 一致（market + context + betSettleResult + hasBet）。
+func (c *FootballController) GetMarketsBy_name() *web.JsonResult {
+	q := strings.TrimSpace(c.Ctx.URLParamDefault("q", ""))
+	if q == "" {
+		return web.JsonErrorMsg("q is required")
+	}
+
+	p := params.NewQueryParams(c.Ctx)
+	currentUser := common.GetCurrentUser(c.Ctx)
+	like := "%" + q + "%"
+	// market.title 或 context.event_name 命中
+	p.Cnd.Where(
+		"(title ILIKE ? OR EXISTS (SELECT 1 FROM t_predict_context pc WHERE pc.market_id = t_predict_market.id AND pc.event_name ILIKE ?))",
+		like,
+		like,
+	)
+
+	var list []models.PredictMarket
+	query := p.Cnd.Build(sqls.DB().Model(&models.PredictMarket{}))
+	query.Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").Find(&list)
+	count := p.Cnd.Count(sqls.DB(), &models.PredictMarket{})
+
+	marketIds := make([]int64, 0, len(list))
+	for _, m := range list {
+		if m.Id > 0 {
+			marketIds = append(marketIds, m.Id)
+		}
+	}
+
+	ctxMap := make(map[int64]models.PredictContext, len(marketIds))
+	if len(marketIds) > 0 {
+		var ctxList []models.PredictContext
+		sqls.DB().Where("market_id in (?)", marketIds).Find(&ctxList)
+		for _, mc := range ctxList {
+			ctxMap[mc.MarketId] = mc
+		}
+	}
+
+	betSettleResultMap := make(map[int64]string, len(marketIds))
+	hasBetMap := make(map[int64]bool, len(marketIds))
+	if currentUser != nil && len(marketIds) > 0 {
+		type betRow struct {
+			MarketId     int64
+			SettleResult string
+			SettleTime   int64
+			CreateTime   int64
+		}
+		var betRows []betRow
+		sqls.DB().Model(&models.PredictBet{}).
+			Select("market_id, settle_result, settle_time, create_time").
+			Where("user_id = ? AND market_id in (?)", currentUser.Id, marketIds).
+			Find(&betRows)
+
+		hasWin := make(map[int64]bool, len(marketIds))
+		hasLose := make(map[int64]bool, len(marketIds))
+		latestScore := make(map[int64]int64, len(marketIds))
+		latestVal := make(map[int64]string, len(marketIds))
+		for _, br := range betRows {
+			hasBetMap[br.MarketId] = true
+			v := strings.ToUpper(strings.TrimSpace(br.SettleResult))
+			if v == "WIN" {
+				hasWin[br.MarketId] = true
+				continue
+			}
+			if v == "LOSE" {
+				hasLose[br.MarketId] = true
+			}
+			if v == "" {
+				continue
+			}
+			score := br.SettleTime
+			if score <= 0 {
+				score = br.CreateTime
+			}
+			if score > latestScore[br.MarketId] {
+				latestScore[br.MarketId] = score
+				latestVal[br.MarketId] = v
+			}
+		}
+		for _, m := range list {
+			mid := m.Id
+			if hasWin[mid] {
+				betSettleResultMap[mid] = "WIN"
+				continue
+			}
+			if hasLose[mid] {
+				betSettleResultMap[mid] = "LOSE"
+				continue
+			}
+			betSettleResultMap[mid] = latestVal[mid]
+		}
+	}
+
+	respList := make([]map[string]any, 0, len(list))
+	for _, m := range list {
+		respList = append(respList, map[string]any{
+			"market":          m,
+			"context":         ctxMap[m.Id],
+			"betSettleResult": betSettleResultMap[m.Id],
+			"hasBet":          hasBetMap[m.Id],
+		})
+	}
+	return web.JsonData(map[string]any{
+		"list":  respList,
+		"total": count,
+		"q":     q,
+	})
+}
+
 func init() {
 	slog.Info("football api controller loaded")
 }

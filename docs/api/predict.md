@@ -113,6 +113,27 @@
 
 ---
 
+### 1.1) 通过名称模糊查询预测市场（聚合返回 market + context）
+
+- **接口**：`GET /api/football/markets/by_name`
+- **功能**：通过名称关键词 `q` 模糊匹配预测市场列表。
+  - 命中 `PredictMarket.title` 或 `PredictContext.eventName`
+- **认证**：需要登录（`AuthMiddleware`）
+
+#### 请求参数（query）
+- `q`：string，必填。关键词（模糊匹配）
+- `page`：int，默认 1
+- `limit`：int，默认 20
+
+#### 返回值（data）
+- 返回结构与 `GET /api/football/markets` 保持一致：
+  - `list`: market + context + betSettleResult + hasBet
+  - `total`: 总数
+  - `q`: 原样返回关键词
+
+#### 可能错误
+- `q is required`
+
 ### 2) 查询用户在某个市场的下注结算结果（betSettleResult）
 
 - **接口**：`GET /api/football/bet_settle_result`
