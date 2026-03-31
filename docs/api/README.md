@@ -9,6 +9,7 @@
 - [帖子系统（Topic）](./topic.md)
 - [图片上传（Upload）](./upload.md)
 - [预测事件系统（PredictMarket / PredictContext / 标签统计）](./predict.md)
+- [预测标签（PredictTag / PredictTagStat）](./predict_tag.md)
 - [下注/结算系统（金币与预测下注）](./coin.md)
 - [开战广场（Battle Square）](./battle.md)
 
