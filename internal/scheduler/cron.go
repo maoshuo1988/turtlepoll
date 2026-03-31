@@ -46,6 +46,13 @@ func Start() {
 		}
 	})
 
+	// 预测市场标签物化刷新（默认每 30 分钟一次）
+	addCronFunc(c, "*/30 * * * *", func() {
+		if err := services.PredictTagService.RefreshTagsFromContexts(); err != nil {
+			slog.Error("predict tag refresh failed", slog.Any("err", err))
+		}
+	})
+
 	c.Start()
 }
 

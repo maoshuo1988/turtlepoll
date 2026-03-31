@@ -82,6 +82,7 @@ func NewServer() {
 		m.Party("/captcha").Handle(new(api.CaptchaController))
 		m.Party("/search").Handle(new(api.SearchController))
 		m.Party("/football").Handle(new(api.FootballController))
+		m.Party("/predict-tag").Handle(new(api.PredictTagController))
 		m.Party("/coin").Handle(new(api.CoinController))
 		m.Party("/battle").Handle(new(api.BattleController))
 		m.Party("/fans").Handle(new(api.FansController))

@@ -267,6 +267,35 @@ type PredictContext struct {
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
 }
 
+// PredictTag 预测市场标签（由 PredictContext.Tags 物化聚合得到）。
+// 说明：项目仅使用 PostgreSQL，不依赖 Redis；标签表用于避免线上请求对 t_predict_context 做全表拆分聚合。
+type PredictTag struct {
+	Model
+
+	Slug string `gorm:"size:128;not null;uniqueIndex" json:"slug" form:"slug"`
+	// Name 可选：若没有独立中文名体系，可先等于 Slug。
+	Name string `gorm:"size:256;not null" json:"name" form:"name"`
+	// LastSeenAt 最近一次在任意 PredictContext.Tags 中出现的时间（秒级时间戳）。
+	LastSeenAt int64 `gorm:"not null;default:0;index" json:"lastSeenAt" form:"lastSeenAt"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0;index" json:"updateTime" form:"updateTime"`
+}
+
+// PredictTagStat 标签统计（可选，但用于排序 marketCount 时避免在线聚合）。
+type PredictTagStat struct {
+	Model
+
+	TagId int64 `gorm:"not null;uniqueIndex" json:"tagId" form:"tagId"`
+	// MarketCount 出现该 tag 的 marketId 去重计数。
+	MarketCount int64 `gorm:"not null;default:0;index" json:"marketCount" form:"marketCount"`
+	// RefreshedAt 最近一次刷新时间（秒级时间戳）。
+	RefreshedAt int64 `gorm:"not null;default:0;index" json:"refreshedAt" form:"refreshedAt"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
 // UserCoin 用户金币账户（未来下注使用；此阶段只建表不接业务）
 type UserCoin struct {
 	Model

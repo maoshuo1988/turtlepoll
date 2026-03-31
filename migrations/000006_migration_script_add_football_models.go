@@ -15,6 +15,8 @@ func migrate_add_football_models() error {
 		&models.MatchSchedule{},
 		&models.PredictMarket{},
 		&models.PredictContext{},
+		&models.PredictTag{},
+		&models.PredictTagStat{},
 		&models.UserCoin{},
 		&models.UserCoinLog{},
 		&models.PredictBet{},
