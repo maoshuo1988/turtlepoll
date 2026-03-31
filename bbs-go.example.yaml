@@ -59,3 +59,11 @@ polymarket:
     - politics
     - sports
   marketSlugs: []   
+
+# login captcha
+loginCaptcha:
+  rotateEnabled: true
+  # 当 rotateEnabled=false 时：是否同时跳过登录/注册/找回/短信发码等验证码校验（用户名密码通过即登录）
+  # 注意：关闭该项则仍可能要求字符验证码（captchaProtocol!=2）
+  disableAllWhenRotateOff: false
+  disableAllWhenRotateOff: false

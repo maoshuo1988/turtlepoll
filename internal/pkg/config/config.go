@@ -80,6 +80,19 @@ type Config struct {
 	SmSEO          SmSEOConfig    `yaml:"smSEO"`          // 神马搜索SEO配置
 	FootballData   FootballData   `yaml:"footballData"`   // football-data.org
 	Polymarket     Polymarket     `yaml:"polymarket"`     // polymarket（只读同步）
+	LoginCaptcha   LoginCaptcha   `yaml:"loginCaptcha"`   // 登录/注册相关验证码开关（仅配置文件层面）
+}
+
+// LoginCaptcha 登录/认证相关验证码配置
+// 说明：这是“配置文件”层面的开关（bbs-go.yaml），不走 sys_config 表。
+// - RotateEnabled=false 时：不再使用旋转验证码（captchaProtocol=2）的校验。
+// - 若你希望“完全免验证码”，可以保持 RotateEnabled=false，且前端不再传 captchaId/captchaCode。
+//
+// 注意：当前登录接口对 captchaProtocol!=2 的情况会走字符验证码校验；因此这里额外提供
+// DisableAllWhenRotateOff 来支持“关闭 rotate 后直接登录”的诉求（用户名密码通过即可）。
+type LoginCaptcha struct {
+	RotateEnabled           bool `yaml:"rotateEnabled"`           // 是否启用旋转验证码（captchaProtocol=2）
+	DisableAllWhenRotateOff bool `yaml:"disableAllWhenRotateOff"` // 关闭 rotate 时，是否同时跳过所有登录/注册相关验证码校验
 }
 
 type FootballData struct {

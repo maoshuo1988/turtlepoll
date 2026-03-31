@@ -6,6 +6,8 @@ import (
 	"bbs-go/internal/models"
 	"database/sql"
 
+	"bbs-go/internal/pkg/config"
+
 	"github.com/dchest/captcha"
 	"github.com/kataras/iris/v12"
 	"github.com/mlogclub/simple/common/dates"
@@ -21,6 +23,25 @@ import (
 	"bbs-go/internal/pkg/locales"
 	"bbs-go/internal/services"
 )
+
+func shouldSkipLoginCaptcha() bool {
+	cfg := config.Instance
+	if cfg == nil {
+		return false
+	}
+	if cfg.LoginCaptcha.RotateEnabled {
+		return false
+	}
+	return cfg.LoginCaptcha.DisableAllWhenRotateOff
+}
+
+func isRotateCaptchaAllowed() bool {
+	cfg := config.Instance
+	if cfg == nil {
+		return true
+	}
+	return cfg.LoginCaptcha.RotateEnabled
+}
 
 type LoginController struct {
 	Ctx iris.Context
@@ -42,14 +63,20 @@ func (c *LoginController) PostSignup() *web.JsonResult {
 	if !services.SysConfigService.GetLoginConfig().PasswordLogin.Enabled {
 		return web.JsonErrorMsg(locales.Get("auth.password_login_disabled"))
 	}
-	// 根据验证码协议版本校验验证码
-	if captchaProtocol == 2 {
-		if !captcha2.Verify(captchaId, captchaCode) {
-			return web.JsonError(errs.CaptchaError())
-		}
-	} else {
-		if !captcha.VerifyString(captchaId, captchaCode) {
-			return web.JsonError(errs.CaptchaError())
+	// 根据验证码协议版本校验验证码（可通过 bbs-go.yaml 的 loginCaptcha 开关跳过）
+	if !shouldSkipLoginCaptcha() {
+		if captchaProtocol == 2 {
+			// rotate 被配置关闭时：不再接受/校验旋转验证码
+			if !isRotateCaptchaAllowed() {
+				return web.JsonError(errs.CaptchaError())
+			}
+			if !captcha2.Verify(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
+		} else {
+			if !captcha.VerifyString(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
 		}
 	}
 	user, err := services.UserService.SignUp(username, email, nickname, password, rePassword)
@@ -70,14 +97,20 @@ func (c *LoginController) PostSignin() *web.JsonResult {
 		redirect           = c.Ctx.FormValue("redirect")
 	)
 
-	// 根据验证码协议版本校验验证码
-	if captchaProtocol == 2 {
-		if !captcha2.Verify(captchaId, captchaCode) {
-			return web.JsonError(errs.CaptchaError())
-		}
-	} else {
-		if !captcha.VerifyString(captchaId, captchaCode) {
-			return web.JsonError(errs.CaptchaError())
+	// 根据验证码协议版本校验验证码（可通过 bbs-go.yaml 的 loginCaptcha 开关跳过）
+	if !shouldSkipLoginCaptcha() {
+		if captchaProtocol == 2 {
+			// rotate 被配置关闭时：不再接受/校验旋转验证码
+			if !isRotateCaptchaAllowed() {
+				return web.JsonError(errs.CaptchaError())
+			}
+			if !captcha2.Verify(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
+		} else {
+			if !captcha.VerifyString(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
 		}
 	}
 
@@ -107,14 +140,19 @@ func (c *LoginController) PostSend_reset_password_email() *web.JsonResult {
 		email              = c.Ctx.PostValueTrim("email")
 	)
 
-	// 根据验证码协议版本校验验证码
-	if captchaProtocol == 2 {
-		if !captcha2.Verify(captchaId, captchaCode) {
-			return web.JsonError(errs.CaptchaError())
-		}
-	} else {
-		if !captcha.VerifyString(captchaId, captchaCode) {
-			return web.JsonError(errs.CaptchaError())
+	// 根据验证码协议版本校验验证码（可通过 bbs-go.yaml 的 loginCaptcha 开关跳过）
+	if !shouldSkipLoginCaptcha() {
+		if captchaProtocol == 2 {
+			if !isRotateCaptchaAllowed() {
+				return web.JsonError(errs.CaptchaError())
+			}
+			if !captcha2.Verify(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
+		} else {
+			if !captcha.VerifyString(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
 		}
 	}
 
@@ -161,8 +199,17 @@ func (c *LoginController) PostLogin_sms_code() *web.JsonResult {
 		return web.JsonErrorMsg(locales.Get("auth.phone_required"))
 	}
 
-	if !captcha2.Verify(captchaId, captchaCode) {
-		return web.JsonError(errs.CaptchaError())
+	// 历史实现这里强制使用 rotate；为了与“关闭 rotate 后直接登录/发码”的诉求一致：
+	// - rotate 开启：保持原逻辑
+	// - rotate 关闭 + disableAllWhenRotateOff=true：跳过验证码
+	// - rotate 关闭但未禁用全部验证码：返回验证码错误（提示前端不要再走 rotate 协议）
+	if !shouldSkipLoginCaptcha() {
+		if !isRotateCaptchaAllowed() {
+			return web.JsonError(errs.CaptchaError())
+		}
+		if !captcha2.Verify(captchaId, captchaCode) {
+			return web.JsonError(errs.CaptchaError())
+		}
 	}
 
 	if !services.SysConfigService.GetLoginConfig().SmsLogin.Enabled {
