@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontTest - 注册</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <div class="topbar">
+          <h1>注册测试页</h1>
+          <div class="nav">
+            <a href="/login.html">登录</a>
+            <a class="active" href="/register.html">注册</a>
+          </div>
+        </div>
+        <p class="subtitle">调用后端注册接口，验证跨节点前后端分离联调能力。</p>
+
+        <div class="field">
+          <label for="backendBaseUrl">后端 API 基地址</label>
+          <input id="backendBaseUrl" type="text" placeholder="http://172.27.51.133:8082" />
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="email">邮箱</label>
+            <input id="email" type="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label for="username">用户名</label>
+            <input id="username" type="text" placeholder="用户名" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="nickname">昵称</label>
+            <input id="nickname" type="text" placeholder="昵称" />
+          </div>
+          <div class="field">
+            <label for="password">密码</label>
+            <input id="password" type="password" placeholder="密码" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="rePassword">确认密码</label>
+            <input id="rePassword" type="password" placeholder="再次输入密码" />
+          </div>
+          <div class="field"></div>
+        </div>
+
+        <div class="field">
+          <label>验证码方式</label>
+          <div class="subtitle">默认先直接调用注册接口；如失败且“启用旋转验证码”开启，则会弹出旋转验证码兜底重试。若旋转关闭，则使用图片验证码（protocol=3）。</div>
+          <label class="toggle">
+            <input id="imageCaptchaEnabled" type="checkbox" />
+            <span>启用图片验证码（base64Captcha，captchaProtocol=3）</span>
+          </label>
+          <label class="toggle">
+            <input id="rotateCaptchaEnabled" type="checkbox" />
+            <span>启用旋转验证码（captchaProtocol=2）</span>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="saveBackendBtn" type="button" class="secondary">保存后端地址</button>
+          <button id="registerBtn" type="button">注册</button>
+        </div>
+
+        <div id="message" class="message"></div>
+        <pre id="result">等待操作...</pre>
+      </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+      (function () {
+        const {
+          getBackendBaseUrl,
+          setBackendBaseUrl,
+          saveToken,
+          postFormWithOptionalRotateCaptcha,
+          renderJson,
+          setMessage
+        } = window.FrontTest;
+
+        const backendInput = document.getElementById('backendBaseUrl');
+        const emailInput = document.getElementById('email');
+        const usernameInput = document.getElementById('username');
+        const nicknameInput = document.getElementById('nickname');
+        const passwordInput = document.getElementById('password');
+        const rePasswordInput = document.getElementById('rePassword');
+        const messageNode = document.getElementById('message');
+        const resultNode = document.getElementById('result');
+        const saveBackendBtn = document.getElementById('saveBackendBtn');
+        const registerBtn = document.getElementById('registerBtn');
+  const rotateCaptchaEnabled = document.getElementById('rotateCaptchaEnabled');
+  const imageCaptchaEnabled = document.getElementById('imageCaptchaEnabled');
+
+        async function doRegister() {
+          setMessage(messageNode, '', false);
+
+          const email = emailInput.value.trim();
+          const nickname = nicknameInput.value.trim();
+          const username = usernameInput.value.trim();
+          const usernameForSubmit = nickname;
+          const password = passwordInput.value;
+          const rePassword = rePasswordInput.value;
+
+          if (!email || !nickname || !password || !rePassword) {
+            setMessage(messageNode, '请完整填写注册信息', false);
+            return;
+          }
+
+          const signupPayload = {
+            email: email,
+            username: usernameForSubmit,
+            nickname: nickname,
+            password: password,
+            rePassword: rePassword,
+            redirect: ''
+          };
+
+          renderJson(resultNode, {
+            debug: 'signup payload before request',
+            payload: {
+              ...signupPayload,
+              inputUsername: username,
+              password: '***',
+              rePassword: '***'
+            }
+          });
+
+          try {
+            const data = await postFormWithOptionalRotateCaptcha('/api/login/signup', signupPayload);
+
+            if (data && data.token) {
+              saveToken(data.token);
+            }
+            setMessage(messageNode, '注册调用成功（若返回 token，已自动保存）', true);
+            renderJson(resultNode, data);
+          } catch (err) {
+            setMessage(messageNode, `注册失败: ${err.message}`, false);
+          }
+        }
+
+        backendInput.value = getBackendBaseUrl();
+
+        imageCaptchaEnabled.checked = window.FrontTest.getImageCaptchaEnabled();
+        imageCaptchaEnabled.addEventListener('change', () => {
+          window.FrontTest.setImageCaptchaEnabled(imageCaptchaEnabled.checked);
+          setMessage(messageNode, `图片验证码已${imageCaptchaEnabled.checked ? '开启' : '关闭'}`, true);
+        });
+
+        rotateCaptchaEnabled.checked = window.FrontTest.getRotateCaptchaEnabled();
+        rotateCaptchaEnabled.addEventListener('change', () => {
+          window.FrontTest.setRotateCaptchaEnabled(rotateCaptchaEnabled.checked);
+          setMessage(messageNode, `旋转验证码已${rotateCaptchaEnabled.checked ? '开启' : '关闭'}`, true);
+        });
+        saveBackendBtn.addEventListener('click', async () => {
+          const raw = backendInput.value;
+          const normalized = window.FrontTest.normalizeBaseUrl(raw);
+          const saved = setBackendBaseUrl(raw);
+          const finalValue = getBackendBaseUrl();
+          backendInput.value = finalValue;
+          setMessage(
+            messageNode,
+            `后端地址已保存。raw=${raw || '(空)'}；normalized=${normalized || '(无效/已清空)'}；final=${finalValue}`,
+            true
+          );
+        });
+
+        registerBtn.addEventListener('click', doRegister);
+      })();
+    </script>
+  </body>
+</html>

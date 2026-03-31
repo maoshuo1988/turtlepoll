@@ -52,4 +52,9 @@ bbs-go.db*
 
 __debug_bin*
 bbs-go-server
-frontTest/
+node_modules/
+frontTest/node_modules/
+frontTest/.vite/
+frontTest/dist/
+frontTest/.cache/
+
