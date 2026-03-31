@@ -5,6 +5,7 @@ import (
 	"bbs-go/internal/models/req"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/services"
+	"bbs-go/internal/pkg/captchaimage"
 
 	captcha2 "bbs-go/internal/pkg/captcha"
 
@@ -21,6 +22,10 @@ func (CaptchaStrategy) CheckTopic(user *models.User, form req.CreateTopicForm) e
 	if services.SysConfigService.IsTopicCaptcha() {
 		if form.CaptchaProtocol == 2 {
 			if !captcha2.Verify(form.CaptchaId, form.CaptchaCode) {
+				return errs.CaptchaError()
+			}
+		} else if form.CaptchaProtocol == captchaimage.ProtocolBase64Image {
+			if !captchaimage.Verify(form.CaptchaId, form.CaptchaCode) {
 				return errs.CaptchaError()
 			}
 		} else {

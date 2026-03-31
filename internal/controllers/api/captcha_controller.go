@@ -2,6 +2,7 @@ package api
 
 import (
 	newCaptcha "bbs-go/internal/pkg/captcha"
+	"bbs-go/internal/pkg/captchaimage"
 	"bytes"
 	"encoding/base64"
 
@@ -39,4 +40,16 @@ func (c *CaptchaController) GetRequest_angle() *web.JsonResult {
 		return web.JsonError(err)
 	}
 	return web.JsonData(data)
+}
+
+// GetRequest_image base64Captcha 图片验证码（captchaProtocol=3）
+func (c *CaptchaController) GetRequest_image() *web.JsonResult {
+	id, b64, err := captchaimage.Generate()
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.NewEmptyRspBuilder().
+		Put("captchaId", id).
+		Put("captchaBase64", b64).
+		JsonResult()
 }

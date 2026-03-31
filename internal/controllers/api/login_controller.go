@@ -7,6 +7,7 @@ import (
 	"database/sql"
 
 	"bbs-go/internal/pkg/config"
+	"bbs-go/internal/pkg/captchaimage"
 
 	"github.com/dchest/captcha"
 	"github.com/kataras/iris/v12"
@@ -73,6 +74,10 @@ func (c *LoginController) PostSignup() *web.JsonResult {
 			if !captcha2.Verify(captchaId, captchaCode) {
 				return web.JsonError(errs.CaptchaError())
 			}
+		} else if captchaProtocol == captchaimage.ProtocolBase64Image {
+			if !captchaimage.Verify(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
 		} else {
 			if !captcha.VerifyString(captchaId, captchaCode) {
 				return web.JsonError(errs.CaptchaError())
@@ -105,6 +110,10 @@ func (c *LoginController) PostSignin() *web.JsonResult {
 				return web.JsonError(errs.CaptchaError())
 			}
 			if !captcha2.Verify(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
+		} else if captchaProtocol == captchaimage.ProtocolBase64Image {
+			if !captchaimage.Verify(captchaId, captchaCode) {
 				return web.JsonError(errs.CaptchaError())
 			}
 		} else {
@@ -147,6 +156,10 @@ func (c *LoginController) PostSend_reset_password_email() *web.JsonResult {
 				return web.JsonError(errs.CaptchaError())
 			}
 			if !captcha2.Verify(captchaId, captchaCode) {
+				return web.JsonError(errs.CaptchaError())
+			}
+		} else if captchaProtocol == captchaimage.ProtocolBase64Image {
+			if !captchaimage.Verify(captchaId, captchaCode) {
 				return web.JsonError(errs.CaptchaError())
 			}
 		} else {
