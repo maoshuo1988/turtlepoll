@@ -59,6 +59,7 @@ const (
 	EntityArticle  = "article"
 	EntityTopic    = "topic"
 	EntityComment  = "comment"
+	EntityBattle   = "battle"
 	EntityUser     = "user"
 	EntityCheckIn  = "checkIn"
 	EntityTask     = "task"

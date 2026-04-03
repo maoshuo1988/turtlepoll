@@ -14,6 +14,20 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// battleTimeToSeconds 标准化 battle 相关时间字段到「秒」：
+// - 兼容历史数据里写成毫秒的值（>= 1e12 视为毫秒，自动 /1000）
+// - 兼容秒值（10 位）
+func battleTimeToSeconds(v int64) int64 {
+	if v <= 0 {
+		return v
+	}
+	// 2001-09-09 秒级约 1e9；毫秒级约 1e12。这里用一个保守阈值区分。
+	if v >= 1_000_000_000_000 {
+		return v / 1000
+	}
+	return v
+}
+
 var BattleService = newBattleService()
 
 func newBattleService() *battleService {
@@ -325,7 +339,7 @@ func (s *battleService) BankerAddStake(bankerUserId int64, form BankerAddStakeFo
 		return nil, errors.New("requestId is required")
 	}
 
-	now := dates.NowTimestamp()
+	now := battleTimeToSeconds(dates.NowTimestamp())
 	var battle *models.Battle
 
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
@@ -340,7 +354,8 @@ func (s *battleService) BankerAddStake(bankerUserId int64, form BankerAddStakeFo
 		if b.Status == BattleStatusPending || b.Status == BattleStatusDisputed || b.Status == BattleStatusSettled {
 			return errors.New("battle is not allowed to add stake")
 		}
-		if b.SettleTime <= now {
+		settleAt := battleTimeToSeconds(b.SettleTime)
+		if settleAt <= now {
 			return errors.New("battle already reached settle time")
 		}
 
@@ -387,7 +402,7 @@ func (s *battleService) SealIfNeeded(tx *gorm.DB, b *models.Battle, now int64) (
 	if b.Status != BattleStatusOpen {
 		return false, nil
 	}
-	if b.SettleTime <= now || b.ChallengerStakeTotal >= b.BankerStakeTotal {
+	if battleTimeToSeconds(b.SettleTime) <= now || b.ChallengerStakeTotal >= b.BankerStakeTotal {
 		b.Status = BattleStatusSealed
 		b.UpdateTime = now
 		return true, repositories.BattleRepository.Update(tx, b)
@@ -400,7 +415,7 @@ func (s *battleService) MoveToPending(tx *gorm.DB, b *models.Battle, now int64) 
 	if b.Status != BattleStatusSealed {
 		return false, nil
 	}
-	if b.SettleTime <= now {
+	if battleTimeToSeconds(b.SettleTime) <= now {
 		b.Status = BattleStatusPending
 		b.PendingDeadline = now + 24*3600
 		b.UpdateTime = now
@@ -943,7 +958,7 @@ func (s *battleService) Withdraw(userId int64, form WithdrawForm) (*models.Battl
 // CronTick 后台轮巡：封盘、到期 pending、庄家超时判负。
 // 说明：一期先实现 open->sealed 与 sealed->pending 与 pending 超时；挑战者确认/争议仲裁后续再加。
 func (s *battleService) CronTick() error {
-	now := dates.NowTimestamp()
+	now := battleTimeToSeconds(dates.NowTimestamp())
 	return sqls.DB().Transaction(func(tx *gorm.DB) error {
 		var battles []*models.Battle
 		// 扫描可能需要状态迁移的 battle
@@ -965,7 +980,8 @@ func (s *battleService) CronTick() error {
 				return err
 			}
 
-			if b.Status == BattleStatusPending && b.PendingDeadline > 0 && now > b.PendingDeadline && b.Result == "" {
+			pendingDeadline := battleTimeToSeconds(b.PendingDeadline)
+			if b.Status == BattleStatusPending && pendingDeadline > 0 && now > pendingDeadline && b.Result == "" {
 				// 超时未宣布：自动判庄家输，直接 settled 并生成结算单
 				b.Result = BattleResultBankerLoses
 				b.ResultBy = "timeout"

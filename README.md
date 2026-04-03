@@ -63,31 +63,42 @@ curl -X GET "http://localhost:8082/api/coin/me" \
   -H "Authorization: Bearer cc1396f0a58c412eaef71306259adc7c"
 ```
 
-```bash
-curl -X POST "http://localhost:8082/api/upload" \
-  -b "bbsgo_token=<YOUR_TOKEN>" \
-  -F "image=@/absolute/path/to/image.png;type=image/png"
+
+# 赌局更新
+``` bash
+curl -X POST -m 15 -sS -w "\nHTTP:%{http_code} time:%{time_total}\n" \
+  "http://turtle.cloud-ip.cc:8082/api/admin/battle/cron_tick" \
+  -b "bbsgo_token=5352ed06b884490b8dda777e2837c1fa" \
+  -H "Accept: application/json"
 ```
 
 ``` bash
-curl 'http://turtle.cloud-ip.cc:8082/api/config/configs' \
-  -H 'Accept: */*' \
-  -H 'Accept-Language: zh-CN,zh;q=0.9' \
-  -b 'bbsgo_token=2b08b8f830034454b8d9b62226e2d103' \
-  -H 'Proxy-Connection: keep-alive' \
-  -H 'Referer: http://turtle.cloud-ip.cc:8082/' \
-  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
-  --insecure
+curl -X POST -m 15 -sS -w "\nHTTP:%{http_code} time:%{time_total}\n" \
+  "http://localhost:8082/api/admin/battle/cron_tick" \
+  -b "bbsgo_token=34b04557201242e8bdf7a7615f2cc6e0" \
+  -H "Accept: application/json"
 ```
 
 ``` bash
-curl 'https://turtle.cloud-ip.cc/api/config/configs' \
-  -H 'Accept: */*' \
-  -H 'Accept-Language: zh-CN,zh;q=0.9' \
-  -b 'bbsgo_token=2b08b8f830034454b8d9b62226e2d103' \
-  -H 'Proxy-Connection: keep-alive' \
-  -H 'Referer: https://turtle.cloud-ip.cc/' \
-  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
-  -H 'Origin: https://main.d2vufo32ngwxrk.amplifyapp.com' \
-  --insecure
+ps aux | grep go | grep -v grep
+```
+
+``` bash
+BASE="http://localhost:8082"
+TOKEN="34b04557201242e8bdf7a7615f2cc6e0"
+SETTLE_TIME=$(date -d "today 12:21:00" +%s)
+
+curl -X POST -m 15 -sS -w "\nHTTP:%{http_code} time:%{time_total}\n" \
+  "$BASE/api/battle/create" \
+  -b "bbsgo_token=$TOKEN" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"title\": \"测试赌局-12:21结算\",
+    \"bankerSide\": \"庄家立场：YES\",
+    \"challengerSide\": \"挑战者立场：NO\",
+    \"stakeAmount\": 100,
+    \"isPublic\": true,
+    \"settleTime\": $SETTLE_TIME
+  }" | head -c 4000
 ```

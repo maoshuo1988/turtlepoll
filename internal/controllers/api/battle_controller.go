@@ -2,10 +2,12 @@ package api
 
 import (
 	"bbs-go/internal/models"
+	"bbs-go/internal/models/constants"
 	"bbs-go/internal/pkg/common"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/repositories"
 	"bbs-go/internal/services"
+	"log/slog"
 	"strings"
 
 	"github.com/kataras/iris/v12"
@@ -17,6 +19,58 @@ import (
 // 路由：/api/battle（需要登录）
 type BattleController struct {
 	Ctx iris.Context
+}
+
+// 赌局统计：GET /api/battle/stats
+// 说明：返回未结算赌局数量、待结算（pending）赌局数量、这些未结算赌局的资金池本金总额、以及庄家去重数量。
+func (c *BattleController) GetStats() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+
+	db := repositories.BattleRepository.DB()
+
+	// 未结算：status != settled
+	var unsettledCount int64
+	if err := db.Model(&models.Battle{}).Where("status <> ?", services.BattleStatusSettled).Count(&unsettledCount).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	// 等待结算：pending
+	var pendingCount int64
+	if err := db.Model(&models.Battle{}).Where("status = ?", services.BattleStatusPending).Count(&pendingCount).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	// 未结算赌局的资金池本金总额（poolPrincipalTotal）
+	type sumRow struct {
+		Sum int64 `gorm:"column:sum"`
+	}
+	var sr sumRow
+	if err := db.Model(&models.Battle{}).
+		Select("COALESCE(SUM(pool_principal_total), 0) as sum").
+		Where("status <> ?", services.BattleStatusSettled).
+		Scan(&sr).Error; err != nil {
+		slog.Error("load battle pool sum failed", slog.Any("err", err))
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	// 未结算赌局的庄家去重数
+	var bankerCount int64
+	if err := db.Model(&models.Battle{}).
+		Where("status <> ?", services.BattleStatusSettled).
+		Distinct("banker_user_id").
+		Count(&bankerCount).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	return web.JsonData(map[string]any{
+		"unsettledCount": unsettledCount,
+		"pendingCount":   pendingCount,
+		"poolTotal":      sr.Sum,
+		"bankerCount":    bankerCount,
+	})
 }
 
 // 赌局详情：GET /api/battle/by?battleId=1
@@ -118,6 +172,74 @@ func (c *BattleController) GetList() *web.JsonResult {
 		return web.JsonErrorMsg(err.Error())
 	}
 
+	// 批量附带：庄家昵称、评论数、点赞数（避免 N+1）
+	bankerIds := make([]int64, 0, len(bs))
+	battleIds := make([]int64, 0, len(bs))
+	bankerIdSet := make(map[int64]struct{}, len(bs))
+	for _, b := range bs {
+		battleIds = append(battleIds, b.Id)
+		if _, ok := bankerIdSet[b.BankerUserId]; !ok {
+			bankerIdSet[b.BankerUserId] = struct{}{}
+			bankerIds = append(bankerIds, b.BankerUserId)
+		}
+	}
+
+	bankerNicknames := map[int64]string{}
+	if len(bankerIds) > 0 {
+		type row struct {
+			Id       int64  `gorm:"column:id"`
+			Nickname string `gorm:"column:nickname"`
+		}
+		var rows []row
+		if err := db.Model(&models.User{}).Select("id, nickname").Where("id IN ?", bankerIds).Find(&rows).Error; err != nil {
+			slog.Error("load banker nicknames failed", slog.Any("err", err))
+		} else {
+			for _, r := range rows {
+				bankerNicknames[r.Id] = r.Nickname
+			}
+		}
+	}
+
+	commentCounts := map[int64]int64{}
+	likeCounts := map[int64]int64{}
+	if len(battleIds) > 0 {
+		// 评论数
+		type ccRow struct {
+			EntityId int64 `gorm:"column:entity_id"`
+			Cnt      int64 `gorm:"column:cnt"`
+		}
+		var ccRows []ccRow
+		if err := db.Model(&models.Comment{}).
+			Select("entity_id, count(1) as cnt").
+			Where("entity_type = ? AND entity_id IN ?", constants.EntityBattle, battleIds).
+			Group("entity_id").
+			Find(&ccRows).Error; err != nil {
+			slog.Error("load battle comment counts failed", slog.Any("err", err))
+		} else {
+			for _, r := range ccRows {
+				commentCounts[r.EntityId] = r.Cnt
+			}
+		}
+
+		// 点赞数
+		type lcRow struct {
+			EntityId int64 `gorm:"column:entity_id"`
+			Cnt      int64 `gorm:"column:cnt"`
+		}
+		var lcRows []lcRow
+		if err := db.Model(&models.UserLike{}).
+			Select("entity_id, count(1) as cnt").
+			Where("entity_type = ? AND entity_id IN ?", constants.EntityBattle, battleIds).
+			Group("entity_id").
+			Find(&lcRows).Error; err != nil {
+			slog.Error("load battle like counts failed", slog.Any("err", err))
+		} else {
+			for _, r := range lcRows {
+				likeCounts[r.EntityId] = r.Cnt
+			}
+		}
+	}
+
 	// 附带我对每个 battle 的动作（仅 challengers）
 	for _, b := range bs {
 		act := repositories.BattleChallengeActionRepository.TakeByUser(db, b.Id, user.Id)
@@ -125,7 +247,13 @@ func (c *BattleController) GetList() *web.JsonResult {
 		if act != nil {
 			myAction = act.Action
 		}
-		list = append(list, map[string]any{"battle": b, "myAction": myAction})
+		list = append(list, map[string]any{
+			"battle":         b,
+			"myAction":       myAction,
+			"bankerNickname": bankerNicknames[b.BankerUserId],
+			"commentCount":   commentCounts[b.Id],
+			"likeCount":      likeCounts[b.Id],
+		})
 	}
 
 	return web.JsonData(map[string]any{
@@ -275,4 +403,17 @@ func (c *AdminBattleController) PostResolve() *web.JsonResult {
 		return web.JsonErrorMsg(err.Error())
 	}
 	return web.JsonData(b)
+}
+
+// 手动触发赌局轮巡：POST /api/admin/battle/cron_tick
+// 说明：仅管理员可调用（由 AdminMiddleware 控制），用于人工触发 open->sealed、sealed->pending 等状态迁移。
+func (c *AdminBattleController) PostCron_tick() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	if err := services.BattleService.CronTick(); err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonSuccess()
 }

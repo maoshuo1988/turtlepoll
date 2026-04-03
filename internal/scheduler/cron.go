@@ -1,7 +1,9 @@
 package scheduler
 
 import (
+	"fmt"
 	"log/slog"
+	"time"
 
 	"bbs-go/internal/pkg/config"
 	"bbs-go/internal/services"
@@ -12,6 +14,7 @@ import (
 
 func Start() {
 	c := cron.New()
+	slog.Info("scheduler cron start")
 
 	// football-data 世界杯赛程同步（默认每 30 分钟一次）
 	spec := config.Instance.FootballData.CronSpec
@@ -39,11 +42,15 @@ func Start() {
 		})
 	}
 
-	// battle square 后台轮巡（默认每 5 分钟一次）
-	addCronFunc(c, "*/5 * * * *", func() {
+	// battle square 后台轮巡（每 1 分钟一次）
+	addCronFunc(c, "*/1 * * * *", func() {
+		start := time.Now()
+		slog.Info("battle cron tick start", slog.Time("now", start))
 		if err := services.BattleService.CronTick(); err != nil {
 			slog.Error("battle cron tick failed", slog.Any("err", err))
+			return
 		}
+		slog.Info("battle cron tick done", slog.Duration("cost", time.Since(start)))
 	})
 
 	// 预测市场标签物化刷新（默认每 30 分钟一次）
@@ -54,10 +61,13 @@ func Start() {
 	})
 
 	c.Start()
+	slog.Info("scheduler cron started")
 }
 
 func addCronFunc(c *cron.Cron, sepc string, cmd func()) {
 	if _, err := c.AddFunc(sepc, cmd); err != nil {
-		slog.Error("add cron func error", slog.Any("err", err))
+		slog.Error("add cron func error", slog.String("spec", sepc), slog.Any("err", err))
+		return
 	}
+	slog.Info("add cron func ok", slog.String("spec", sepc), slog.String("cmd", fmt.Sprintf("%p", cmd)))
 }

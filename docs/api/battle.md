@@ -219,6 +219,9 @@
 - `list`: 数组，每项结构：
   - `battle`: Battle
   - `myAction`: string（当前用户对该 battle 的挑战者动作：`confirm/dispute/""`）
+  - `bankerNickname`: string（庄家昵称；可能为空字符串）
+  - `commentCount`: int64（该 battle 的评论数；基于 `Comment.entity_type="battle"` 聚合）
+  - `likeCount`: int64（该 battle 的点赞数；基于 `UserLike.entity_type="battle"` 聚合）
 - `count`: int64（总数）
 - `page`: int
 - `pageSize`: int
@@ -263,13 +266,80 @@ GET /api/battle/list?page=1&pageSize=20&role=challenger
           "burnTotal": 0
         },
         "myAction": ""
-      }
+  },
+  "myAction": "",
+  "bankerNickname": "Alice",
+  "commentCount": 12,
+  "likeCount": 8
     ],
     "count": 1,
     "page": 1,
     "pageSize": 20
   }
 }
+```
+
+---
+
+### 1.1) 赌局统计（全局）
+
+- **接口**：`GET /api/battle/stats`
+- **认证**：需要登录
+- **说明**：返回未结算的赌局数量、等待结算（pending）的赌局数量、未结算赌局的资金池本金总额，以及庄家去重数量。
+
+#### 返回值（data）
+
+- `unsettledCount`: int64（未结算赌局数：`status != settled`）
+- `pendingCount`: int64（等待结算赌局数：`status = pending`）
+- `poolTotal`: int64（未结算赌局 `poolPrincipalTotal` 总和）
+- `bankerCount`: int64（未结算赌局庄家去重数：distinct `bankerUserId`）
+
+#### 示例
+
+请求：
+
+```http
+GET /api/battle/stats
+```
+
+响应：
+
+```json
+{
+  "success": true,
+  "data": {
+    "unsettledCount": 12,
+    "pendingCount": 3,
+    "poolTotal": 456789,
+    "bankerCount": 5
+  }
+}
+```
+
+## 管理员接口（/api/admin/battle）
+
+### 手动触发轮巡
+
+- **接口**：`POST /api/admin/battle/cron_tick`
+- **认证**：需要管理员（`AdminMiddleware`）
+- **说明**：人工触发一次 `BattleService.CronTick()`，用于立即执行 open->sealed、sealed->pending、pending 超时等状态迁移。
+
+#### 请求参数
+
+无。
+
+#### 返回
+
+成功：
+
+```json
+{ "success": true }
+```
+
+失败示例：
+
+```json
+{ "success": false, "message": "..." }
 ```
 
 ---
