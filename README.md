@@ -11,7 +11,7 @@ make buildlinux
 # 部署
 ## 下载
 ``` bash
-scp -i /opt/pem/bbs.pem ubuntu@<SERVER_IP>:/srv/project/turtlepoll/bbs-go.yaml ./
+scp -i /opt/pem/bbs.pem ubuntu@52.77.212.173:/srv/project/turtlepoll/bbs-go.yaml ./
 ```
 ## 上传
 ``` bash
