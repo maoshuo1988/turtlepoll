@@ -8,6 +8,7 @@ import (
 
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/sqls"
+	"gorm.io/gorm"
 )
 
 var PredictContextService = newPredictContextService()
@@ -23,6 +24,27 @@ func (s *predictContextService) GetByMarketId(marketId int64) *models.PredictCon
 		return nil
 	}
 	return repositories.PredictContextRepository.Take(sqls.DB(), "market_id = ?", marketId)
+}
+
+// IncrHeatByMarketId 如果 marketId 对应的 PredictContext 存在，则给它的 heat 增加 delta。
+// 说明：
+// - 热榜接口按 PredictContext.heat 排序，因此评论等行为需要同步该字段。
+// - 若 PredictContext 不存在（例如未同步/未创建预测上下文），这里选择“跳过不报错”，避免影响主流程。
+func (s *predictContextService) IncrHeatByMarketId(tx *gorm.DB, marketId int64, delta int64) error {
+	if marketId <= 0 || delta == 0 {
+		return nil
+	}
+	if tx == nil {
+		tx = sqls.DB()
+	}
+
+	res := tx.Model(&models.PredictContext{}).
+		Where("market_id = ?", marketId).
+		UpdateColumn("heat", gorm.Expr("heat + ?", delta))
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
 }
 
 // UpsertByMarketId 按 marketId 创建或更新 PredictContext。

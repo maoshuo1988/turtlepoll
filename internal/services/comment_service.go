@@ -125,6 +125,8 @@ func (s *commentService) Publish(userId int64, form req.CreateCommentForm) (*mod
 			if err := TopicService.onComment(tx, form.EntityId, comment); err != nil {
 				return err
 			}
+			// 业务约定：当 topicId 与 PredictMarket.id 相同，评论 topic 同时提升对应预测市场热度
+			_ = PredictContextService.IncrHeatByMarketId(tx, form.EntityId, 1)
 		case constants.EntityComment: // 二级评论
 			if err := s.onComment(tx, comment); err != nil {
 				return err

@@ -74,6 +74,11 @@
     - `article`（`constants.EntityArticle`）
     - `topic`（`constants.EntityTopic`）
     - `comment`（`constants.EntityComment`，用于二级回复）
+
+补充约定（turtlepoll 定制）：
+
+- 当 `entityType=topic` 时，服务端除了更新 `t_topic.comment_count` 外，还会尝试把 **同 ID 的预测市场**（`PredictMarket.id == topicId`）对应的 `PredictContext.heat` 做 `+1`，用于驱动热榜 `/api/football/predict_context/hot`。
+- 如果该 `PredictMarket` 尚未生成 `PredictContext`（例如尚未同步/创建预测上下文），热度更新会被跳过，不影响评论发布成功。
 - `entityId` (int64，必填)：目标实体 id
   - 例如：评论话题时传 topicId；回复某条评论时传 commentId
 - `content` (string，必填)：评论内容（服务端会 `TrimSpace`）
