@@ -210,7 +210,10 @@
 - `page`: int，默认 1
 - `pageSize`: int，默认 20，最大 100
 - `status`: string，可选（`open/sealed/pending/disputed/settled`）
-- `mine`: string，可选；传 `1` 时仅返回我参与的（我是庄家或我下过注）
+- `mine`: string，可选；传 `1` 时仅返回我参与的（我是庄家或我下过注）【历史兼容】
+- `role`: string，可选；更精确的参与角色筛选（优先级高于 `mine`）
+  - `role=banker`：只看我做庄的赌局（`battle.bankerUserId = me`）
+  - `role=challenger`：只看我挑战的赌局（我作为 challenger 下过注；不包含我做庄的）
 
 #### 返回值（data）
 - `list`: 数组，每项结构：
@@ -226,6 +229,18 @@
 
 ```http
 GET /api/battle/list?page=1&pageSize=20&status=open&mine=1
+```
+
+只看我做庄：
+
+```http
+GET /api/battle/list?page=1&pageSize=20&role=banker
+```
+
+只看我挑战：
+
+```http
+GET /api/battle/list?page=1&pageSize=20&role=challenger
 ```
 
 响应（示意，仅展示关键字段）：

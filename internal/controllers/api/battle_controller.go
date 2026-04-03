@@ -67,7 +67,9 @@ func (c *BattleController) GetBy() *web.JsonResult {
 // 赌局列表：GET /api/battle/list?page=1&pageSize=20&status=open
 // 说明：
 // - status 可选：open/sealed/pending/disputed/settled
-// - mine=1：只看我参与的（庄家或挑战者）
+// - mine=1：只看我参与的（庄家或挑战者）【兼容旧参数】
+// - role=banker：只看我做庄的
+// - role=challenger：只看我挑战的（我作为 challenger 下过注）
 func (c *BattleController) GetList() *web.JsonResult {
 	user := common.GetCurrentUser(c.Ctx)
 	if user == nil {
@@ -83,6 +85,7 @@ func (c *BattleController) GetList() *web.JsonResult {
 	}
 	status := strings.TrimSpace(params.FormValue(c.Ctx, "status"))
 	mine := strings.TrimSpace(params.FormValue(c.Ctx, "mine"))
+	role := strings.TrimSpace(strings.ToLower(params.FormValue(c.Ctx, "role")))
 
 	db := repositories.BattleRepository.DB()
 
@@ -92,8 +95,17 @@ func (c *BattleController) GetList() *web.JsonResult {
 	if status != "" {
 		queryDB = queryDB.Where("status = ?", status)
 	}
-	if mine == "1" {
-		// 我是庄家或我有下注
+	// 参与维度筛选：
+	// - role 优先级高于 mine（mine 为历史兼容参数）
+	// - role=challenger：只看我作为 challenger 下注过的 battle（不包含我做庄的）
+	if role == "banker" {
+		queryDB = queryDB.Where("banker_user_id = ?", user.Id)
+	} else if role == "challenger" {
+		sub := db.Model(&models.BattleBet{}).Select("battle_id").
+			Where("user_id = ? AND role = ?", user.Id, "challenger")
+		queryDB = queryDB.Where("id IN (?)", sub)
+	} else if mine == "1" {
+		// 我是庄家或我有下注（包含 banker/challenger 两种 bet）
 		sub := db.Model(&models.BattleBet{}).Select("battle_id").Where("user_id = ?", user.Id)
 		queryDB = queryDB.Where("banker_user_id = ? OR id IN (?)", user.Id, sub)
 	}
