@@ -13,7 +13,7 @@ import (
 	"github.com/mlogclub/simple/web/params"
 
 	"bbs-go/internal/controllers/render"
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/services"
 )
 

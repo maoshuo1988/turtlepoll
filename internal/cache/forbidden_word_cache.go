@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 	"log/slog"
 	"time"

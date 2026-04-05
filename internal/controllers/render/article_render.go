@@ -2,8 +2,8 @@ package render
 
 import (
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/models/resp"
 	"bbs-go/internal/pkg/html"
 	"bbs-go/internal/pkg/markdown"

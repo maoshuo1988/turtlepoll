@@ -1,7 +1,7 @@
 package render
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/models/resp"
 	"bbs-go/internal/pkg/common"
 	"bbs-go/internal/services"

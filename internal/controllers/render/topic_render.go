@@ -1,8 +1,8 @@
 package render
 
 import (
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/models/resp"
 	"bbs-go/internal/pkg/common"
 	html2 "bbs-go/internal/pkg/html"

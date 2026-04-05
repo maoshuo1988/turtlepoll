@@ -1,7 +1,7 @@
 package spam
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/models/req"
 	"log/slog"
 )

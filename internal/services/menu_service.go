@@ -1,8 +1,8 @@
 package services
 
 import (
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 
 	"github.com/mlogclub/simple/common/arrs"

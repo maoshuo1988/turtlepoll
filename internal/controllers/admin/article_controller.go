@@ -5,7 +5,7 @@ import (
 	"bbs-go/internal/pkg/idcodec"
 	"strconv"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 
 	"github.com/kataras/iris/v12"
 	"github.com/mlogclub/simple/common/dates"

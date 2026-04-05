@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 
 	"github.com/goburrow/cache"

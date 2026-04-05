@@ -5,7 +5,7 @@ import (
 	"github.com/mlogclub/simple/web/params"
 	"gorm.io/gorm"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 )
 
 var MessageRepository = newMessageRepository()

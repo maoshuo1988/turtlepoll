@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/pkg/event"
 	"bbs-go/internal/repositories"

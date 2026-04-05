@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 )
 
 var SysConfigRepository = newSysConfigRepository()

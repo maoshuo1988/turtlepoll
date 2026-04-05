@@ -2,8 +2,8 @@ package services
 
 import (
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 	"regexp"
 	"strings"

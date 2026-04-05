@@ -4,8 +4,8 @@ import (
 	"math"
 
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/models/resp"
 	"bbs-go/internal/pkg/bbsurls"
 	"bbs-go/internal/pkg/idcodec"

@@ -67,13 +67,6 @@ curl -X GET "http://localhost:8082/api/coin/me" \
 # 赌局更新
 ``` bash
 curl -X POST -m 15 -sS -w "\nHTTP:%{http_code} time:%{time_total}\n" \
-  "http://turtle.cloud-ip.cc:8082/api/admin/battle/cron_tick" \
-  -b "bbsgo_token=5352ed06b884490b8dda777e2837c1fa" \
-  -H "Accept: application/json"
-```
-
-``` bash
-curl -X POST -m 15 -sS -w "\nHTTP:%{http_code} time:%{time_total}\n" \
   "http://localhost:8082/api/admin/battle/cron_tick" \
   -b "bbsgo_token=34b04557201242e8bdf7a7615f2cc6e0" \
   -H "Accept: application/json"
@@ -83,22 +76,6 @@ curl -X POST -m 15 -sS -w "\nHTTP:%{http_code} time:%{time_total}\n" \
 ps aux | grep go | grep -v grep
 ```
 
-``` bash
-BASE="http://localhost:8082"
-TOKEN="34b04557201242e8bdf7a7615f2cc6e0"
-SETTLE_TIME=$(date -d "today 12:21:00" +%s)
-
-curl -X POST -m 15 -sS -w "\nHTTP:%{http_code} time:%{time_total}\n" \
-  "$BASE/api/battle/create" \
-  -b "bbsgo_token=$TOKEN" \
-  -H "Accept: application/json" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"title\": \"测试赌局-12:21结算\",
-    \"bankerSide\": \"庄家立场：YES\",
-    \"challengerSide\": \"挑战者立场：NO\",
-    \"stakeAmount\": 100,
-    \"isPublic\": true,
-    \"settleTime\": $SETTLE_TIME
-  }" | head -c 4000
+```
+BBSGO_ENV=prod go run ./main.go -c ./bbs-go.yaml
 ```

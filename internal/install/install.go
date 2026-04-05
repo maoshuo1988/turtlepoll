@@ -2,8 +2,8 @@ package install
 
 import (
 	"bbs-go/internal/controllers/render"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	modelreq "bbs-go/internal/models/req"
 	"bbs-go/internal/pkg/config"
 	"bbs-go/internal/pkg/idcodec"

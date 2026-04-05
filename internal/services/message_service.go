@@ -2,9 +2,9 @@ package services
 
 import (
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
 	"bbs-go/internal/models/dto"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/bbsurls"
 	"bbs-go/internal/pkg/locales"
 	"bbs-go/internal/pkg/msg"

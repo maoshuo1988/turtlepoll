@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 
 	"github.com/mlogclub/simple/common/dates"

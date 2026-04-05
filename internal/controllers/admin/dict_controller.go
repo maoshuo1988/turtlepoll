@@ -2,7 +2,7 @@ package admin
 
 import (
 	"bbs-go/internal/controllers/render"
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/services"
 	"strconv"
 

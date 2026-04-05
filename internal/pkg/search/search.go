@@ -2,7 +2,7 @@ package search
 
 import (
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/config"
 	html2 "bbs-go/internal/pkg/html"
 	"bbs-go/internal/pkg/markdown"

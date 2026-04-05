@@ -1,7 +1,7 @@
 package repositories
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 
 	"gorm.io/gorm"
 )

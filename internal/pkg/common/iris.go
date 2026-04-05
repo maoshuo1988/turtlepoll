@@ -1,7 +1,7 @@
 package common
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/pkg/idcodec"
 

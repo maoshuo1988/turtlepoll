@@ -1,7 +1,7 @@
 package services
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 
 	"github.com/mlogclub/simple/sqls"
@@ -64,4 +64,3 @@ func (s *userExpLogService) UpdateColumn(id int64, name string, value interface{
 func (s *userExpLogService) Delete(id int64) {
 	repositories.UserExpLogRepository.Delete(sqls.DB(), id)
 }
-

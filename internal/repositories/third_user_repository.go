@@ -1,8 +1,8 @@
 package repositories
 
 import (
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web/params"

@@ -1,7 +1,7 @@
 package services
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"errors"
 	"fmt"
 	"math"

@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 
 	"github.com/kataras/iris/v12"
 	"github.com/mlogclub/simple/sqls"

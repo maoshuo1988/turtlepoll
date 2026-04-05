@@ -19,7 +19,7 @@ import (
 	"github.com/mlogclub/simple/common/urls"
 	"github.com/mlogclub/simple/web"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/services"
 )
 

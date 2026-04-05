@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/services"
 	"strconv"
 
@@ -70,4 +70,3 @@ func (c *VoteController) PostDelete() *web.JsonResult {
 	}
 	return web.JsonSuccess()
 }
-

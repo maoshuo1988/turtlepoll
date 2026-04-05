@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -34,7 +35,8 @@ func NewGammaClient(baseURL string) *GammaClient {
 }
 
 type Tag struct {
-	ID   int64  `json:"id"`
+	// Gamma API 的 id 可能是 number 或 string（不同环境/版本可能不一致）
+	ID   any    `json:"id"`
 	Slug string `json:"slug"`
 	Name string `json:"name"`
 }
@@ -54,10 +56,67 @@ type Market struct {
 	ResolvedAt string `json:"resolvedAt"`
 	Resolution string `json:"resolution"` // 有些市场直接给出赢家文本/Key
 
-	Outcomes []Outcome `json:"outcomes"`
-	Tags     []Tag     `json:"tags"`
-	Event    *Event    `json:"event"`
-	EventID  any       `json:"eventId"`
+	// outcomes 在 Gamma 返回里可能是：
+	// 1) 数组：[{id,name,slug}, ...]
+	// 2) 字符串："[\"Yes\", \"No\"]"（历史/部分接口）
+	// 为了不让反序列化失败，这里做兼容解析。
+	Outcomes Outcomes `json:"outcomes"`
+	Tags     []Tag    `json:"tags"`
+	Event    *Event   `json:"event"`
+	EventID  any      `json:"eventId"`
+}
+
+type Outcomes []Outcome
+
+func (o *Outcomes) UnmarshalJSON(b []byte) error {
+	// null
+	if len(b) == 0 || string(b) == "null" {
+		*o = nil
+		return nil
+	}
+
+	// 1) 直接数组
+	var arr []Outcome
+	if err := json.Unmarshal(b, &arr); err == nil {
+		*o = arr
+		return nil
+	}
+
+	// 2) string 包了一层 JSON（例如："[\"Yes\",\"No\"]")
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	s = strings.TrimSpace(s)
+	if s == "" || s == "null" {
+		*o = nil
+		return nil
+	}
+
+	// 2.1) 期望是 ["Yes","No"]
+	var names []string
+	if err := json.Unmarshal([]byte(s), &names); err == nil {
+		out := make([]Outcome, 0, len(names))
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			out = append(out, Outcome{ID: name, Name: name, Slug: strings.ToLower(name)})
+		}
+		*o = out
+		return nil
+	}
+
+	// 2.2) 或者 s 自己就是 outcomes 对象数组
+	if err := json.Unmarshal([]byte(s), &arr); err == nil {
+		*o = arr
+		return nil
+	}
+
+	// 保底：不阻断整体解析
+	*o = nil
+	return nil
 }
 
 type Outcome struct {

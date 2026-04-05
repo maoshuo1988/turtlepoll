@@ -8,7 +8,7 @@ import (
 	"github.com/mlogclub/simple/web"
 	"github.com/mlogclub/simple/web/params"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/services"
 )
 

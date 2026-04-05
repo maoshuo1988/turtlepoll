@@ -9,7 +9,7 @@ import (
 	"bbs-go/internal/repositories"
 	"strconv"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 
 	"github.com/kataras/iris/v12"
 	"github.com/mlogclub/simple/sqls"

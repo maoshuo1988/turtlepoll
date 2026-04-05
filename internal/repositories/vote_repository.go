@@ -1,7 +1,7 @@
 package repositories
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web/params"
@@ -62,12 +62,12 @@ func (r *voteRepository) FindPageByCnd(db *gorm.DB, cnd *sqls.Cnd) (list []model
 	return
 }
 
-func (r *voteRepository) FindBySql(db *gorm.DB, sqlStr string, paramArr... interface{}) (list []models.Vote) {
+func (r *voteRepository) FindBySql(db *gorm.DB, sqlStr string, paramArr ...interface{}) (list []models.Vote) {
 	db.Raw(sqlStr, paramArr...).Scan(&list)
 	return
 }
 
-func (r *voteRepository) CountBySql(db *gorm.DB, sqlStr string, paramArr... interface{}) (count int64) {
+func (r *voteRepository) CountBySql(db *gorm.DB, sqlStr string, paramArr ...interface{}) (count int64) {
 	db.Raw(sqlStr, paramArr...).Count(&count)
 	return
 }
@@ -99,4 +99,3 @@ func (r *voteRepository) UpdateColumn(db *gorm.DB, id int64, name string, value 
 func (r *voteRepository) Delete(db *gorm.DB, id int64) {
 	db.Delete(&models.Vote{}, "id = ?", id)
 }
-

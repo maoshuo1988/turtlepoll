@@ -2,8 +2,8 @@ package api
 
 import (
 	"bbs-go/internal/controllers/render"
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/search"
 	"bbs-go/internal/services"
 

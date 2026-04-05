@@ -7,7 +7,7 @@ import (
 	"github.com/goburrow/cache"
 	"github.com/mlogclub/simple/sqls"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 )
 

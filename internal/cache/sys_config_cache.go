@@ -10,7 +10,7 @@ import (
 	"github.com/mlogclub/simple/sqls"
 	"github.com/spf13/cast"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 )
 

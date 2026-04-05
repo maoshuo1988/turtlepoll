@@ -1,7 +1,7 @@
 package event
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"fmt"
 	"reflect"
 	"testing"

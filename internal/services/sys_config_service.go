@@ -18,7 +18,7 @@ import (
 	"gorm.io/gorm"
 
 	"bbs-go/internal/cache"
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 )
 

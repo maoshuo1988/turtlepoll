@@ -3,7 +3,7 @@ package api
 import (
 	"bbs-go/internal/cache"
 	"bbs-go/internal/controllers/render"
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"database/sql"
 
 	"bbs-go/internal/pkg/captchaimage"

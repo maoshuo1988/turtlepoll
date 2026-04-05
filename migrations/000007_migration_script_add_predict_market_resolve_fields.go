@@ -1,7 +1,7 @@
 package migrations
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 
 	"github.com/mlogclub/simple/sqls"
 )

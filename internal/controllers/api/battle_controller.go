@@ -1,8 +1,8 @@
 package api
 
 import (
-	"bbs-go/internal/models"
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/common"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/repositories"

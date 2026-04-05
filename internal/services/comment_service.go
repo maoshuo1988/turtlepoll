@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/cast"
 	"gorm.io/gorm"
 
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 )
 

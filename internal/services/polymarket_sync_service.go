@@ -1,7 +1,7 @@
 package services
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/config"
 	"bbs-go/internal/pkg/polymarket"
 	"context"
@@ -33,24 +33,41 @@ func (s *polymarketSyncService) SyncMarkets(ctx context.Context) error {
 		return nil
 	}
 	if len(pm.Tags) == 0 && len(pm.MarketSlugs) == 0 {
-		return errors.New("polymarket enabled but no tags/marketSlugs configured")
+		err := errors.New("polymarket enabled but no tags/marketSlugs configured")
+		slog.Error("polymarket sync config invalid", slog.Any("err", err))
+		return err
 	}
+
+	slog.Info("polymarket sync start",
+		slog.Int("tags", len(pm.Tags)),
+		slog.Int("marketSlugs", len(pm.MarketSlugs)),
+		slog.Int("pageSize", pm.PageSize),
+		slog.String("baseURL", pm.BaseURL),
+	)
 
 	client := polymarket.NewGammaClient(pm.BaseURL)
 
 	// 建立 tag slug -> tagId 映射（用于按 tag 筛选）
 	tags, err := client.ListTags(ctx)
 	if err != nil {
+		slog.Error("polymarket list tags failed", slog.Any("err", err))
 		return err
 	}
+	slog.Info("polymarket list tags done", slog.Int("count", len(tags)))
 	tagSlugToID := map[string]int64{}
 	for _, t := range tags {
 		slug := strings.ToLower(strings.TrimSpace(t.Slug))
 		if slug == "" {
 			continue
 		}
-		tagSlugToID[slug] = t.ID
+		id := anyToInt64(t.ID)
+		if id <= 0 {
+			// 不阻断整体同步：tag 没有可用 id 就跳过
+			continue
+		}
+		tagSlugToID[slug] = id
 	}
+	slog.Info("polymarket tag mapping built", slog.Int("mapped", len(tagSlugToID)))
 
 	pageSize := pm.PageSize
 	if pageSize <= 0 {
@@ -63,6 +80,12 @@ func (s *polymarketSyncService) SyncMarkets(ctx context.Context) error {
 	now := dates.NowTimestamp()
 	db := sqls.DB()
 
+	var (
+		seenMarkets  int
+		upsertOK     int
+		upsertFailed int
+	)
+
 	// 1) 按 tag 同步
 	for _, tagSlug := range pm.Tags {
 		tagSlug = strings.ToLower(strings.TrimSpace(tagSlug))
@@ -74,13 +97,15 @@ func (s *polymarketSyncService) SyncMarkets(ctx context.Context) error {
 			slog.Warn("polymarket tag not found in gamma tags", slog.String("tag", tagSlug))
 			continue
 		}
+		slog.Info("polymarket sync by tag start", slog.String("tag", tagSlug), slog.Int64("tagID", tagID))
 
 		params := map[string]string{
 			"tag_id": strconv.FormatInt(tagID, 10),
 		}
-		if err := s.syncMarketsPaged(ctx, db, client, params, []string{"polymarket", tagSlug}, now, pageSize); err != nil {
+		if err := s.syncMarketsPaged(ctx, db, client, params, []string{"polymarket", tagSlug}, now, pageSize, &seenMarkets, &upsertOK, &upsertFailed); err != nil {
 			return err
 		}
+		slog.Info("polymarket sync by tag done", slog.String("tag", tagSlug))
 	}
 
 	// 2) 白名单 market slug 同步（逐个拉列表：gamma markets 不保证支持 slug 精确查询，这里用列表 + 本地过滤）
@@ -99,19 +124,25 @@ func (s *polymarketSyncService) SyncMarkets(ctx context.Context) error {
 			offset := page * pageSize
 			list, err := client.ListMarkets(ctx, pageSize, offset, params)
 			if err != nil {
+				slog.Error("polymarket list markets failed", slog.Any("err", err), slog.Int("page", page), slog.Int("offset", offset))
 				return err
 			}
 			if len(list) == 0 {
 				break
 			}
+			slog.Info("polymarket scan markets page", slog.Int("page", page), slog.Int("offset", offset), slog.Int("count", len(list)))
 			for _, m := range list {
 				slug := strings.ToLower(strings.TrimSpace(m.Slug))
 				if slug == "" || !target[slug] {
 					continue
 				}
+				seenMarkets++
 				if err := s.upsertMarketAndContext(db, &m, []string{"polymarket"}, now); err != nil {
+					upsertFailed++
+					slog.Error("polymarket upsert market failed", slog.Any("err", err), slog.String("slug", slug), slog.String("marketID", anyToString(m.ID)))
 					return err
 				}
+				upsertOK++
 			}
 			if len(list) < pageSize {
 				break
@@ -119,25 +150,42 @@ func (s *polymarketSyncService) SyncMarkets(ctx context.Context) error {
 		}
 	}
 
+	slog.Info("polymarket sync done",
+		slog.Int("seenMarkets", seenMarkets),
+		slog.Int("upsertOK", upsertOK),
+		slog.Int("upsertFailed", upsertFailed),
+	)
 	return nil
 }
 
-func (s *polymarketSyncService) syncMarketsPaged(ctx context.Context, db *gorm.DB, client *polymarket.GammaClient, params map[string]string, baseTags []string, now int64, pageSize int) error {
+func (s *polymarketSyncService) syncMarketsPaged(ctx context.Context, db *gorm.DB, client *polymarket.GammaClient, params map[string]string, baseTags []string, now int64, pageSize int, seenMarkets, upsertOK, upsertFailed *int) error {
 	// 控制最大页数，避免配置错误导致全站导出
 	maxPages := 200
 	for page := 0; page < maxPages; page++ {
 		offset := page * pageSize
 		list, err := client.ListMarkets(ctx, pageSize, offset, params)
 		if err != nil {
+			slog.Error("polymarket list markets failed", slog.Any("err", err), slog.Int("page", page), slog.Int("offset", offset), slog.Any("params", params))
 			return err
 		}
 		if len(list) == 0 {
 			break
 		}
+		slog.Info("polymarket list markets page", slog.Int("page", page), slog.Int("offset", offset), slog.Int("count", len(list)), slog.Any("params", params))
 		for i := range list {
 			m := list[i]
+			if seenMarkets != nil {
+				*seenMarkets = *seenMarkets + 1
+			}
 			if err := s.upsertMarketAndContext(db, &m, baseTags, now); err != nil {
+				if upsertFailed != nil {
+					*upsertFailed = *upsertFailed + 1
+				}
+				slog.Error("polymarket upsert market failed", slog.Any("err", err), slog.String("slug", strings.ToLower(strings.TrimSpace(m.Slug))), slog.String("marketID", anyToString(m.ID)))
 				return err
+			}
+			if upsertOK != nil {
+				*upsertOK = *upsertOK + 1
 			}
 		}
 		if len(list) < pageSize {
@@ -151,8 +199,7 @@ func (s *polymarketSyncService) upsertMarketAndContext(db *gorm.DB, m *polymarke
 	if m == nil {
 		return nil
 	}
-	// source_model/source_model_id 现有表是 int64，这里用 ExternalKey 保存外部 market id（字符串化）
-	// 同时用 SourceModel 固定为 Polymarket
+	// source_model/source_model_id 现有表是 int64，因此用 SourceModel=Polymarket + SourceModelId(外部 market id) 来保证幂等。
 	externalMarketID := anyToString(m.ID)
 	if externalMarketID == "" {
 		return nil
@@ -184,12 +231,24 @@ func (s *polymarketSyncService) upsertMarketAndContext(db *gorm.DB, m *polymarke
 	}
 
 	market := &models.PredictMarket{}
-	// 路线1：复用 SourceModel/SourceModelId，SourceModelId 只能 int64，因此用 ExternalKey 承载外部ID。
-	// 为保证幂等：用 (SourceModel, ExternalKey) 做查找。
-	if err := db.Where("source_model = ? AND external_key = ?", "Polymarket", externalMarketID).First(market).Error; err != nil {
+	// 注意：表的唯一索引是 (source_model, source_model_id)。
+	// 为避免所有 Polymarket 市场都落在 source_model_id=0 导致冲突，这里把外部 market id 尽量解析成 int64 写入 source_model_id。
+	// 不再写 external_key。
+	externalMarketIDNum := anyToInt64(m.ID)
+	if externalMarketIDNum <= 0 {
+		// 极少数情况下外部 id 不是纯数字：为了保证数据可落库且不冲突，用时间戳做一个弱兜底。
+		// 说明：该兜底不是强幂等；如遇到非数字 id，建议后续升级表结构（例如增加 (source_model, external_key) uniqueIndex）。
+		externalMarketIDNum = now
+	}
+
+	// 幂等查找：优先走唯一索引 (source_model, source_model_id)
+	err := db.Where("source_model = ? AND source_model_id = ?", "Polymarket", externalMarketIDNum).First(market).Error
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 		market.SourceModel = "Polymarket"
-		market.SourceModelId = 0
-		market.ExternalKey = externalMarketID
+		market.SourceModelId = externalMarketIDNum
 		market.MarketType = "AB"
 		market.Title = title
 		market.Status = status
@@ -248,7 +307,11 @@ func (s *polymarketSyncService) upsertMarketAndContext(db *gorm.DB, m *polymarke
 	}
 
 	ctxModel := &models.PredictContext{}
-	if e := db.Where("market_id = ?", market.Id).First(ctxModel).Error; e != nil {
+	e := db.Where("market_id = ?", market.Id).First(ctxModel).Error
+	if e != nil {
+		if !errors.Is(e, gorm.ErrRecordNotFound) {
+			return e
+		}
 		ctxModel.MarketId = market.Id
 		ctxModel.EventName = eventName
 		ctxModel.Tags = strings.Join(tags, ",")
@@ -326,4 +389,17 @@ func anyToString(v any) string {
 	default:
 		return strings.TrimSpace(fmt.Sprint(v))
 	}
+}
+
+func anyToInt64(v any) int64 {
+	s := anyToString(v)
+	if s == "" {
+		return 0
+	}
+	// Gamma 可能返回 "123" 或 123（被 json 解成 float64）；这里统一走 ParseInt。
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bbs-go/internal/models"
+	"bbs-go/internal/models/models"
 
 	"github.com/mlogclub/codegen"
 )
