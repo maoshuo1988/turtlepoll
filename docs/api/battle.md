@@ -716,6 +716,46 @@ Content-Type: application/json
 
 ## 管理员接口（/api/admin/battle）
 
+## 管理员看板接口
+
+### 1) 赌局趋势（每日新增赌局数）
+
+- **接口**：`GET /api/admin/battle/trends?range=7d`
+- **认证**：需要管理员（`AdminMiddleware`）
+- **说明**：按 `Battle.createTime`（秒级）聚合每日新增赌局数，并补齐空日期。
+
+#### 请求参数（query）
+
+- `range`: string，可选，默认 `7d`，支持：`7d/14d/30d`（最大 90d）
+
+#### 返回值（data）
+
+- `range`: string
+- `days`: int
+- `list`: 数组，每项：
+  - `day`: string（`YYYY-MM-DD`，UTC）
+  - `count`: int64
+
+---
+
+### 2) 活跃下注用户（按天去重）
+
+- **接口**：`GET /api/admin/battle/active_users?range=7d`
+- **认证**：需要管理员（`AdminMiddleware`）
+- **说明**：按 `BattleBet.createTime`（秒级）统计每日下注过的去重用户数，并补齐空日期。
+
+#### 请求参数（query）
+
+- `range`: string，可选，默认 `7d`，支持：`7d/14d/30d`（最大 90d）
+
+#### 返回值（data）
+
+- `range`: string
+- `days`: int
+- `list`: 数组，每项：
+  - `day`: string（`YYYY-MM-DD`，UTC）
+  - `activeUserCount`: int64
+
 ### 1) 管理员裁决
 
 - **接口**：`POST /api/admin/battle/resolve`

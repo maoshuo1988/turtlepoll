@@ -9,8 +9,11 @@ import (
 	"bbs-go/internal/services"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/kataras/iris/v12"
+	"github.com/mlogclub/simple/common/dates"
+	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
 	"github.com/mlogclub/simple/web/params"
 )
@@ -386,6 +389,123 @@ func (c *BattleController) PostChallenger_dispute() *web.JsonResult {
 // 路由：/api/admin/battle
 type AdminBattleController struct {
 	Ctx iris.Context
+}
+
+type battleTrendItem struct {
+	Day   string `json:"day"`
+	Count int64  `json:"count"`
+}
+
+// 管理员看板：赌局趋势（每日新增赌局数）：GET /api/admin/battle/trends?range=7d
+func (c *AdminBattleController) GetTrends() *web.JsonResult {
+	rangeStr := c.Ctx.URLParamDefault("range", "7d")
+	days := 7
+	if rangeStr == "14d" {
+		days = 14
+	}
+	if rangeStr == "30d" {
+		days = 30
+	}
+	if days <= 0 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+
+	nowSec := dates.NowTimestamp()
+	startOfToday := nowSec - (nowSec % 86400)
+	startSec := startOfToday - int64((days-1)*86400)
+
+	rows := make([]struct {
+		Day   string
+		Count int64
+	}, 0)
+	if err := sqls.DB().
+		Model(&models.Battle{}).
+		Select("to_char(date_trunc('day', to_timestamp(create_time)), 'YYYY-MM-DD') as day, count(1) as count").
+		Where("create_time >= ?", startSec).
+		Group("day").
+		Order("day asc").
+		Scan(&rows).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	m := map[string]int64{}
+	for _, r := range rows {
+		m[r.Day] = r.Count
+	}
+	list := make([]battleTrendItem, 0, days)
+	for i := 0; i < days; i++ {
+		daySec := startSec + int64(i*86400)
+		dayStr := time.Unix(daySec, 0).UTC().Format("2006-01-02")
+		list = append(list, battleTrendItem{Day: dayStr, Count: m[dayStr]})
+	}
+
+	return web.JsonData(map[string]any{
+		"range": rangeStr,
+		"days":  days,
+		"list":  list,
+	})
+}
+
+type battleActiveUserItem struct {
+	Day             string `json:"day"`
+	ActiveUserCount int64  `json:"activeUserCount"`
+}
+
+// 管理员看板：活跃下注用户（按天去重）：GET /api/admin/battle/active_users?range=7d
+// 说明：按 BattleBet.create_time（秒级）统计每日下注过的去重用户数。
+func (c *AdminBattleController) GetActive_users() *web.JsonResult {
+	rangeStr := c.Ctx.URLParamDefault("range", "7d")
+	days := 7
+	if rangeStr == "14d" {
+		days = 14
+	}
+	if rangeStr == "30d" {
+		days = 30
+	}
+	if days <= 0 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+
+	nowSec := dates.NowTimestamp()
+	startOfToday := nowSec - (nowSec % 86400)
+	startSec := startOfToday - int64((days-1)*86400)
+
+	rows := make([]struct {
+		Day   string
+		Count int64
+	}, 0)
+	if err := sqls.DB().
+		Model(&models.BattleBet{}).
+		Select("to_char(date_trunc('day', to_timestamp(create_time)), 'YYYY-MM-DD') as day, count(distinct user_id) as count").
+		Where("create_time >= ?", startSec).
+		Group("day").
+		Order("day asc").
+		Scan(&rows).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	m := map[string]int64{}
+	for _, r := range rows {
+		m[r.Day] = r.Count
+	}
+	list := make([]battleActiveUserItem, 0, days)
+	for i := 0; i < days; i++ {
+		daySec := startSec + int64(i*86400)
+		dayStr := time.Unix(daySec, 0).UTC().Format("2006-01-02")
+		list = append(list, battleActiveUserItem{Day: dayStr, ActiveUserCount: m[dayStr]})
+	}
+
+	return web.JsonData(map[string]any{
+		"range": rangeStr,
+		"days":  days,
+		"list":  list,
+	})
 }
 
 // 管理员裁决：POST /api/admin/battle/resolve

@@ -18,6 +18,8 @@ type pathRole struct {
 var (
 	authCfg = []pathRole{
 		{Pattern: "/api/admin/sys-config/**", Roles: []string{constants.RoleOwner}},
+		{Pattern: "/api/admin/user/grant_admin", Roles: []string{constants.RoleOwner}},
+		{Pattern: "/api/admin/user/revoke_admin", Roles: []string{constants.RoleOwner}},
 		{Pattern: "/api/admin/user/create", Roles: []string{constants.RoleOwner}},
 		{Pattern: "/api/admin/user/update", Roles: []string{constants.RoleOwner}},
 		{Pattern: "/api/admin/topic-node/create", Roles: []string{constants.RoleOwner}},

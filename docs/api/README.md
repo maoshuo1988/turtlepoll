@@ -4,6 +4,9 @@
 
 ## 文档列表
 
+- [运营侧（Admin）接口索引（按页面视角）](./admin.md)
+- [运营总览看板（Admin Dashboard）](./admin_dashboard.md)
+- [预测市场（Admin Predict）](./admin_predict.md)
 - [用户系统](./user.md)
 - [评论系统](./comment.md)
 - [帖子系统（Topic）](./topic.md)

@@ -136,6 +136,92 @@ func (c *UserController) PostUpdate() *web.JsonResult {
 	return web.JsonData(c.buildUserItem(user, true))
 }
 
+// PostGrantAdmin 授权为管理员（owner-only）：POST /api/admin/user/grant_admin
+// 表单参数：userId
+func (c *UserController) PostGrant_admin() *web.JsonResult {
+	operator := common.GetCurrentUser(c.Ctx)
+	if operator == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	if !operator.HasRole(constants.RoleOwner) {
+		return web.JsonError(errs.NoPermission())
+	}
+
+	userId, _ := params.FormValueInt64(c.Ctx, "userId")
+	if userId <= 0 {
+		return web.JsonErrorMsg("userId is required")
+	}
+	if userId == operator.Id {
+		return web.JsonErrorMsg("cannot grant admin to yourself")
+	}
+
+	// 找到 admin roleId
+	adminRole := services.RoleService.Take("code = ?", constants.RoleAdmin)
+	if adminRole == nil {
+		return web.JsonErrorMsg("admin role not found")
+	}
+
+	// idempotent
+	exists := services.UserRoleService.Take("user_id = ? AND role_id = ?", userId, adminRole.Id)
+	if exists == nil {
+		roleIds := services.UserRoleService.GetUserRoleIds(userId)
+		roleIds = append(roleIds, adminRole.Id)
+		if err := services.UserRoleService.UpdateUserRoles(userId, roleIds); err != nil {
+			return web.JsonError(err)
+		}
+	}
+
+	// operate log
+	services.OperateLogService.AddOperateLog(operator.Id, constants.OpTypeUpdate, constants.EntityUser, userId,
+		"grant_admin", c.Ctx.Request())
+
+	return web.JsonSuccess()
+}
+
+// PostRevokeAdmin 取消管理员（owner-only）：POST /api/admin/user/revoke_admin
+// 表单参数：userId
+func (c *UserController) PostRevoke_admin() *web.JsonResult {
+	operator := common.GetCurrentUser(c.Ctx)
+	if operator == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	if !operator.HasRole(constants.RoleOwner) {
+		return web.JsonError(errs.NoPermission())
+	}
+
+	userId, _ := params.FormValueInt64(c.Ctx, "userId")
+	if userId <= 0 {
+		return web.JsonErrorMsg("userId is required")
+	}
+	if userId == operator.Id {
+		return web.JsonErrorMsg("cannot revoke admin from yourself")
+	}
+
+	adminRole := services.RoleService.Take("code = ?", constants.RoleAdmin)
+	if adminRole == nil {
+		return web.JsonErrorMsg("admin role not found")
+	}
+
+	roleIds := services.UserRoleService.GetUserRoleIds(userId)
+	if len(roleIds) == 0 {
+		return web.JsonSuccess()
+	}
+	newRoleIds := make([]int64, 0, len(roleIds))
+	for _, rid := range roleIds {
+		if rid != adminRole.Id {
+			newRoleIds = append(newRoleIds, rid)
+		}
+	}
+	if err := services.UserRoleService.UpdateUserRoles(userId, newRoleIds); err != nil {
+		return web.JsonError(err)
+	}
+
+	services.OperateLogService.AddOperateLog(operator.Id, constants.OpTypeUpdate, constants.EntityUser, userId,
+		"revoke_admin", c.Ctx.Request())
+
+	return web.JsonSuccess()
+}
+
 // 禁言
 func (c *UserController) PostForbidden() *web.JsonResult {
 	user := common.GetCurrentUser(c.Ctx)
