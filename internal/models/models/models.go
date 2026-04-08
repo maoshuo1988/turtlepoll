@@ -41,6 +41,13 @@ var Models = []interface{}{
 	&BattleLedger{},
 	&BattleSettlement{},
 	&BattleSettlementItem{},
+
+	// TurtlePoll: Pet
+	&PetDefinition{},
+	&FeatureCatalogItem{},
+	&UserPetState{},
+	&UserPet{},
+	&PetDailySettleLog{},
 }
 
 type Model struct {

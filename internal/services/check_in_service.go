@@ -114,6 +114,15 @@ func (s *checkInService) CheckIn(userId int64) error {
 			UserId:  userId,
 			DayName: dayName,
 		})
+
+		// 签到成功后，发放宠物每日登录加成（signin_bonus）。
+		// 注意：当前仓库尚未落“用户当前装备龟种”的数据模型，这里先用连续签到天数兜底映射到 petId。
+		// 后续接入真实 currentPetId 后，替换此处 petId 来源即可。
+		func() {
+			defer func() { _ = recover() }()
+			petId := int64(consecutiveDays)
+			_ = PetSigninBonusService.GrantByCheckIn(userId, s.GetByUserId(userId), petId)
+		}()
 	}
 	return err
 }

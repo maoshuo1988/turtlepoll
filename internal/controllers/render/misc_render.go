@@ -114,8 +114,13 @@ func BuildLoginSuccess(ctx iris.Context, user *models.User, redirect string) *we
 	// 与「登录态访问」每日只发一次去重
 	cache.DailyVisitCache.MarkSentToday(user.Id)
 
+	// P0：登录成功触发每日结算（北京时间同日幂等；结算失败不阻断登录）
+	dailySettle := services.PetDailySettleService.SettleOnLogin(user.Id)
+
 	return web.NewEmptyRspBuilder().
 		Put("token", token).
 		Put("user", BuildUserProfile(user)).
-		Put("redirect", redirect).JsonResult()
+		Put("redirect", redirect).
+		Put("dailySettle", dailySettle).
+		JsonResult()
 }

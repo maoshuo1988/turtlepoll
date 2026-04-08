@@ -109,4 +109,5 @@ func init() {
 	register(6, "add football schedule & prediction models", migrate_add_football_models)
 	register(7, "add predict_market resolve fields", migrate_add_predict_market_resolve_fields)
 	register(8, "battle square init tables", migrate_battle_square_init_tables)
+	register(9, "pet user-side init tables", migrate_pet_user_side_init_tables)
 }
