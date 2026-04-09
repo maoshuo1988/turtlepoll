@@ -86,17 +86,35 @@ func (c *PredictTagController) GetList() *web.JsonResult {
 	}
 
 	// 排序
+	// 注意：market_count 字段只在 includeCounts=1 的 join 查询中才存在。
 	if sort == "marketCount" && includeCounts == "1" {
-		query = query.Order("market_count desc, t_predict_tag.id desc")
+		// 注意：避免某些 SQL 方言/ORM 解析把 market_count 误解析成 t_predict_tag.market_count
+		// 我们显式按 join 表字段排序，并用 COALESCE 保证 NULL 时排序稳定。
+		query = query.Order("COALESCE(s.market_count,0) desc, t_predict_tag.id desc")
 	} else {
 		query = query.Order("t_predict_tag.update_time desc, t_predict_tag.id desc")
 	}
 
-	// 返回结构：尽量保持简单
+	// 返回结构：显式字段映射，避免 GORM 因匿名嵌入 models.PredictTag
+	// 在某些情况下把统计字段（market_count）误当作 t_predict_tag 的列来选择。
 	type item struct {
-		models.PredictTag
+		Id         int64  `json:"id"`
+		Slug       string `json:"slug"`
+		Name       string `json:"name"`
+		LastSeenAt int64  `json:"lastSeenAt"`
+		CreateTime int64  `json:"createTime"`
+		UpdateTime int64  `json:"updateTime"`
+		// includeCounts=1 时通过 select 别名返回；否则为 0。
 		MarketCount int64 `json:"marketCount"`
 	}
+
+	// 基础 select：仅来自 t_predict_tag 的真实列
+	query = query.Select("t_predict_tag.id, t_predict_tag.slug, t_predict_tag.name, t_predict_tag.last_seen_at, t_predict_tag.create_time, t_predict_tag.update_time")
+	if includeCounts == "1" {
+		// 叠加 join 的统计字段（别名 market_count -> struct 字段 MarketCount）
+		query = query.Select("t_predict_tag.id, t_predict_tag.slug, t_predict_tag.name, t_predict_tag.last_seen_at, t_predict_tag.create_time, t_predict_tag.update_time, COALESCE(s.market_count,0) as market_count")
+	}
+
 	var list []item
 	if err := query.Offset(offset).Limit(pageSize).Find(&list).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
