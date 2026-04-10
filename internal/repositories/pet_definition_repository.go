@@ -19,6 +19,14 @@ func (r *petDefinitionRepository) Get(db *gorm.DB, id int64) *models.PetDefiniti
 	return ret
 }
 
+func (r *petDefinitionRepository) GetByPetKey(db *gorm.DB, petKey string) *models.PetDefinition {
+	ret := &models.PetDefinition{}
+	if err := db.Where("pet_key = ?", petKey).First(ret).Error; err != nil {
+		return nil
+	}
+	return ret
+}
+
 func (r *petDefinitionRepository) Take(db *gorm.DB, where ...interface{}) *models.PetDefinition {
 	ret := &models.PetDefinition{}
 	if err := db.Take(ret, where...).Error; err != nil {

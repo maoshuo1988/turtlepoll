@@ -44,7 +44,9 @@ func (c *PetController) PostDefs() *web.JsonResult {
 		// fallback: form
 		params.ReadForm(c.Ctx, &body)
 	}
-	// create or update by id
+	// upsert (preferred):
+	// 1) if id present -> update by id
+	// 2) else -> try update by petKey, fallback to create
 	if body.Id > 0 {
 		exists := services.PetDefinitionService.Get(body.Id)
 		if exists == nil {
@@ -56,6 +58,21 @@ func (c *PetController) PostDefs() *web.JsonResult {
 		}
 		return web.JsonData(&body)
 	}
+
+	// If client doesn't know id, use PetKey as natural key.
+	if byKey := services.PetDefinitionService.GetByPetKey(body.PetKey); byKey != nil {
+		body.Id = byKey.Id
+		body.CreateTime = byKey.CreateTime
+		// keep existing status if caller doesn't provide it
+		if body.Status == 0 {
+			body.Status = byKey.Status
+		}
+		if err := services.PetDefinitionService.Update(&body); err != nil {
+			return web.JsonErrorMsg(err.Error())
+		}
+		return web.JsonData(&body)
+	}
+
 	if err := services.PetDefinitionService.Create(&body); err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}

@@ -5,6 +5,7 @@ import (
 	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 	"errors"
+	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/common/jsons"
@@ -22,6 +23,14 @@ type petDefinitionService struct{}
 
 func (s *petDefinitionService) Get(id int64) *models.PetDefinition {
 	return repositories.PetDefinitionRepository.Get(sqls.DB(), id)
+}
+
+func (s *petDefinitionService) GetByPetKey(petKey string) *models.PetDefinition {
+	petKey = strings.TrimSpace(petKey)
+	if petKey == "" {
+		return nil
+	}
+	return repositories.PetDefinitionRepository.GetByPetKey(sqls.DB(), petKey)
 }
 
 func (s *petDefinitionService) FindPageByCnd(cnd *sqls.Cnd) (list []models.PetDefinition, paging *sqls.Paging) {

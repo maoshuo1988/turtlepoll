@@ -4,6 +4,7 @@ import (
 	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
@@ -17,6 +18,70 @@ func newFeatureCatalogService() *featureCatalogService {
 }
 
 type featureCatalogService struct{}
+
+// EnsureDefaultSeeds 会在服务启动时调用，用于把内置特性模板（FeatureCatalog）幂等写入数据库。
+//
+// 设计目标：
+// - 避免新环境启动后 FeatureCatalog 为空导致业务（例如每日登录加成）无法执行。
+// - 幂等：重复启动不会重复插入。
+// - 兼容运营改动：默认策略只在“记录不存在”时创建；若你希望强制覆盖某些字段，可按需启用 Update。
+func (s *featureCatalogService) EnsureDefaultSeeds() {
+	seeds := DefaultFeatureCatalogSeeds()
+	db := sqls.DB()
+	for _, seed := range seeds {
+		seed := seed
+		if strings.TrimSpace(seed.FeatureKey) == "" {
+			continue
+		}
+		exists := repositories.FeatureCatalogRepository.GetByFeatureKey(db, seed.FeatureKey)
+		if exists == nil {
+			if err := s.Create(&seed); err != nil {
+				slog.Error("seed feature_catalog create failed", slog.Any("err", err), slog.String("featureKey", seed.FeatureKey))
+			}
+			continue
+		}
+		// 默认不覆盖运营已维护的数据。
+		// 如需“随代码升级自动更新 Schema/名称/开关”，可以在这里做字段对比后 Save。
+	}
+}
+
+// DefaultFeatureCatalogSeeds 内置特性模板种子数据。
+//
+// 注意：models.FeatureCatalogItem 的字段在代码里使用 camelCase（json tag）：
+// - FeatureKey / EffectiveEvent / ParamsSchemaJSON / MetadataJSON
+//
+// 这里的 Name/ParamsSchemaJSON/MetadataJSON 使用 JSON 文本，便于直接存储。
+func DefaultFeatureCatalogSeeds() []models.FeatureCatalogItem {
+	return []models.FeatureCatalogItem{
+		{
+			FeatureKey:       "signin_bonus",
+			Name:             `{"zh-CN":"每日登录加成","en-US":"Signin Bonus"}`,
+			Scope:            "PET_DEF",
+			EffectiveEvent:   "DAILY_SIGNIN",
+			ParamsSchemaJSON: `{"type":"object","required":["enabled","base_amount","level_step","daily_cap"],"properties":{"enabled":{"type":"boolean"},"base_amount":{"type":"integer","minimum":0},"level_step":{"type":"integer","minimum":0},"daily_cap":{"type":"integer","minimum":0}}}`,
+			Enabled:          true,
+			MetadataJSON:     `{}`,
+		},
+		{
+			FeatureKey:       "spark_multiplier",
+			Name:             `{"zh-CN":"火花倍率","en-US":"Spark Multiplier"}`,
+			Scope:            "PET_DEF",
+			EffectiveEvent:   "DAILY_SIGNIN",
+			ParamsSchemaJSON: `{"type":"object","required":["enabled","base","per_level","cap"],"properties":{"enabled":{"type":"boolean"},"base":{"type":"number","minimum":0},"per_level":{"type":"number","minimum":0},"cap":{"type":"integer","minimum":0}}}`,
+			Enabled:          true,
+			MetadataJSON:     `{}`,
+		},
+		{
+			FeatureKey:       "first_bet_bonus",
+			Name:             `{"zh-CN":"首次下注奖励","en-US":"First Bet Bonus"}`,
+			Scope:            "PET_DEF",
+			EffectiveEvent:   "BET_PLACED",
+			ParamsSchemaJSON: `{"type":"object","required":["enabled","amount"],"properties":{"enabled":{"type":"boolean"},"amount":{"type":"integer","minimum":0}}}`,
+			Enabled:          true,
+			MetadataJSON:     `{}`,
+		},
+	}
+}
 
 func (s *featureCatalogService) GetByFeatureKey(featureKey string) *models.FeatureCatalogItem {
 	featureKey = strings.TrimSpace(featureKey)
