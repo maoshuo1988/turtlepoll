@@ -47,15 +47,12 @@ func (s *featureCatalogService) EnsureDefaultSeeds() {
 
 // DefaultFeatureCatalogSeeds 内置特性模板种子数据。
 //
-// 注意：models.FeatureCatalogItem 的字段在代码里使用 camelCase（json tag）：
-// - FeatureKey / EffectiveEvent / ParamsSchemaJSON / MetadataJSON
-//
-// 这里的 Name/ParamsSchemaJSON/MetadataJSON 使用 JSON 文本，便于直接存储。
+// 这里的 NameJSON/ParamsSchemaJSON/MetadataJSON 使用 JSON 文本，便于直接存储。
 func DefaultFeatureCatalogSeeds() []models.FeatureCatalogItem {
 	return []models.FeatureCatalogItem{
 		{
 			FeatureKey:       "signin_bonus",
-			Name:             `{"zh-CN":"每日登录加成","en-US":"Signin Bonus"}`,
+			NameJSON:         `{"zh-CN":"每日登录加成","en-US":"Signin Bonus"}`,
 			Scope:            "PET_DEF",
 			EffectiveEvent:   "DAILY_SIGNIN",
 			ParamsSchemaJSON: `{"type":"object","required":["enabled","base_amount","level_step","daily_cap"],"properties":{"enabled":{"type":"boolean"},"base_amount":{"type":"integer","minimum":0},"level_step":{"type":"integer","minimum":0},"daily_cap":{"type":"integer","minimum":0}}}`,
@@ -64,7 +61,7 @@ func DefaultFeatureCatalogSeeds() []models.FeatureCatalogItem {
 		},
 		{
 			FeatureKey:       "spark_multiplier",
-			Name:             `{"zh-CN":"火花倍率","en-US":"Spark Multiplier"}`,
+			NameJSON:         `{"zh-CN":"火花倍率","en-US":"Spark Multiplier"}`,
 			Scope:            "PET_DEF",
 			EffectiveEvent:   "DAILY_SIGNIN",
 			ParamsSchemaJSON: `{"type":"object","required":["enabled","base","per_level","cap"],"properties":{"enabled":{"type":"boolean"},"base":{"type":"number","minimum":0},"per_level":{"type":"number","minimum":0},"cap":{"type":"integer","minimum":0}}}`,
@@ -73,7 +70,7 @@ func DefaultFeatureCatalogSeeds() []models.FeatureCatalogItem {
 		},
 		{
 			FeatureKey:       "first_bet_bonus",
-			Name:             `{"zh-CN":"首次下注奖励","en-US":"First Bet Bonus"}`,
+			NameJSON:         `{"zh-CN":"首次下注奖励","en-US":"First Bet Bonus"}`,
 			Scope:            "PET_DEF",
 			EffectiveEvent:   "BET_PLACED",
 			ParamsSchemaJSON: `{"type":"object","required":["enabled","amount"],"properties":{"enabled":{"type":"boolean"},"amount":{"type":"integer","minimum":0}}}`,

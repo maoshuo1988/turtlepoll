@@ -33,6 +33,14 @@ func (s *petDefinitionService) GetByPetKey(petKey string) *models.PetDefinition 
 	return repositories.PetDefinitionRepository.GetByPetKey(sqls.DB(), petKey)
 }
 
+func (s *petDefinitionService) GetByPetId(petId string) *models.PetDefinition {
+	petId = strings.TrimSpace(petId)
+	if petId == "" {
+		return nil
+	}
+	return repositories.PetDefinitionRepository.GetByPetId(sqls.DB(), petId)
+}
+
 func (s *petDefinitionService) FindPageByCnd(cnd *sqls.Cnd) (list []models.PetDefinition, paging *sqls.Paging) {
 	return repositories.PetDefinitionRepository.FindPageByCnd(sqls.DB(), cnd)
 }

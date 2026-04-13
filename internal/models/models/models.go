@@ -45,6 +45,7 @@ var Models = []interface{}{
 	// TurtlePoll: Pet
 	&PetDefinition{},
 	&FeatureCatalogItem{},
+	&GachaPoolConfig{},
 	&UserPetState{},
 	&UserPet{},
 	&PetDailySettleLog{},

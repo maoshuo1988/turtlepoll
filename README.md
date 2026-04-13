@@ -21,6 +21,14 @@ scp -i /opt/pem/bbs.pem bbs-go-linux ubuntu@52.77.212.173:/tmp/
 ## 移动文件
 ``` bash
 sudo mv /tmp/bbs-go-linux /srv/project/turtlepoll/
+cd /srv/project/turtlepoll
+sudo chmod +x /srv/project/turtlepoll/bbs-go-linux
+sudo chown root:root /srv/project/turtlepoll/bbs-go-linux
+
+sudo bash -c 'mv /tmp/bbs-go-linux /srv/project/turtlepoll/ \
+  && cd /srv/project/turtlepoll \
+  && chmod +x bbs-go-linux \
+  && chown root:root bbs-go-linux'
 ```
 
 # 同步赛程
@@ -77,5 +85,41 @@ ps aux | grep go | grep -v grep
 ```
 
 ```
+sudo BBSGO_ENV=prod nohup ./bbs-go-linux
 BBSGO_ENV=prod go run ./main.go -c ./bbs-go.yaml
 ```
+
+```
+curl 'http://localhost:8082/api/predict-tag/list' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: zh-CN,zh;q=0.9' \
+  -H 'Authorization: Bearer 34b04557201242e8bdf7a7615f2cc6e0' \
+  -H 'Connection: keep-alive' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: cross-site' \
+  -H 'Sec-Fetch-Storage-Access: active' \
+  -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"'
+```
+
+```
+这是入参：
+curl 'http://localhost:8082/api/admin/pet/defs' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: zh-CN,zh;q=0.9' \
+  -H 'Authorization: Bearer 34b04557201242e8bdf7a7615f2cc6e0' \
+  -H 'Connection: keep-alive' \
+  -H 'Content-Type: application/json' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: cross-site' \
+  -H 'Sec-Fetch-Storage-Access: active' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  --data-raw '{"pet_id":"1","name":{"zh-CN":"222"},"rarity":"C","enabled":false,"obtainable_by_egg":false,"description":{"zh-CN":"11","en-US":"22"}}'
+  ```

@@ -110,4 +110,9 @@ func init() {
 	register(7, "add predict_market resolve fields", migrate_add_predict_market_resolve_fields)
 	register(8, "battle square init tables", migrate_battle_square_init_tables)
 	register(9, "pet user-side init tables", migrate_pet_user_side_init_tables)
+	register(10, "pet definition add pet_id", migrate_pet_definition_add_pet_id)
+	register(11, "pet definition add i18n fields", migrate_pet_definition_i18n_fields)
+	register(12, "pet definition add display/pricing fields", migrate_pet_definition_add_display_pricing_fields)
+	register(13, "feature catalog add name_json", migrate_feature_catalog_add_name_json)
+	register(14, "pet gacha pool config init tables", migrate_pet_gacha_pool_config_init_tables)
 }

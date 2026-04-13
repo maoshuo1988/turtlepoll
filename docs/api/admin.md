@@ -118,10 +118,14 @@
 ### 仲裁（resolve）
 
 - `POST /api/admin/battle/resolve`
-  - 详见：[开战广场（Battle Square）](./battle.md#管理员裁决-post-apiadminbattleresolve)
 
 
 ## 社区管理
+
+## 宠物与开蛋池运营
+
+- 开蛋池配置（概率和必须等于 1，否则保存失败）：
+  - 详见：[开蛋池（Gacha Pool）配置（Admin）](./pet_gacha.md)
 
 ### 帖子管理（删除 / 置顶 / 推荐，均支持取消）
 

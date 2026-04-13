@@ -39,7 +39,17 @@ func NewServer() {
 		path := ctx.Path()
 		var err error
 		if strings.Contains(path, "/api/admin/") {
-			err = ctx.JSON(web.JsonErrorCode(ctx.GetStatusCode(), "Http error"))
+			msg := "Http error"
+			e := ctx.GetErr()
+			if e != nil {
+				msg = e.Error()
+			}
+			slog.Error("admin request failed",
+				slog.Int("status", ctx.GetStatusCode()),
+				slog.String("path", path),
+				slog.Any("err", e),
+			)
+			err = ctx.JSON(web.JsonErrorCode(ctx.GetStatusCode(), msg))
 		}
 		if err != nil {
 			slog.Error(err.Error(), slog.Any("err", err))
@@ -99,6 +109,7 @@ func NewServer() {
 		m.Router.Use(middleware.AuthMiddleware)
 		m.Router.Use(middleware.AdminMiddleware)
 		m.Party("/pet").Handle(new(admin.PetController))
+		m.Party("/pet/gacha").Handle(new(admin.PetGachaController))
 		m.Party("/role").Handle(new(admin.RoleController))
 		m.Party("/menu").Handle(new(admin.MenuController))
 		m.Party("/api").Handle(new(admin.ApiController))
