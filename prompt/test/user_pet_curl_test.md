@@ -10,7 +10,7 @@
 
 ```bash
 export BASE_URL="http://127.0.0.1:8082"
-export USER_TOKEN="<your_user_token>"
+export USER_TOKEN="<YOUR_USER_TOKEN>"
 ```
 
 ### 0.2 通用 Header
@@ -67,13 +67,15 @@ curl -sS "${BASE_URL}/api/pet/equip" \
 
 ### 3.1 POST /api/pet/equip
 
-按文档：`petId` 或 `petKey` 二选一（建议只用一种口径）。这里以 `petId` 为例：
+说明：当前后端实现只支持用 **数字 petId**（int64）切换装备；不支持 `petKey`。
+
+建议流程：先调用 `GET /api/pet/owned`，从返回的 `list[].petId` 里挑一个你已拥有的 petId 再来装备。
 
 ```bash
 curl -sS "${BASE_URL}/api/pet/equip" \
   -H "${USER_AUTH_HEADER}" \
   -H "Content-Type: application/json" \
-  -d '{"petId":"basic"}' | jq
+  -d '{"petId": 1}' | jq
 ```
 
 输出检查点：
@@ -85,7 +87,7 @@ curl -sS "${BASE_URL}/api/pet/equip" \
 
 - `EQUIP_DAILY_LIMIT`
 - `DEBT_UNPAID`
-- `PARAM_INVALID`（或 `PET_NOT_OWNED`）
+- `PARAM_INVALID`（常见原因：petId 不存在 / 不属于该用户）
 
 ---
 
@@ -137,6 +139,10 @@ curl -sS "${BASE_URL}/api/pet/stamina/feed" \
 
 ### 6.1 POST /api/pet/egg/hatch
 
+> 说明：本接口的“抽取概率”来自运营侧开蛋池配置：`/api/admin/pet/gacha/config`。
+> 
+> 抽取口径：先按 `rarity_weights` 抽稀有度，再在该稀有度且 `obtainable_by_egg=true` 的龟种中均匀随机抽取。
+
 ```bash
 curl -sS "${BASE_URL}/api/pet/egg/hatch" \
   -H "${USER_AUTH_HEADER}" \
@@ -146,9 +152,48 @@ curl -sS "${BASE_URL}/api/pet/egg/hatch" \
 
 输出检查点：
 
-- `cost` / `refund` / `isDuplicate`
-- `pet`（petId/petKey/rarity/name）
-- `balanceBefore/balanceAfter`
+- `cost/refund/isDuplicate` 字段存在
+- `pet.petId/pet.petKey/pet.rarity` 有值
+- `balanceBefore/balanceAfter` 能反映本次扣费与（可选）重复返还
+
+重复返还检查点（可选）：
+
+- 当抽到用户已拥有的龟种时：`isDuplicate=true`。
+- `refund` 应约等于 `floor(cost * 0.3)`，且 `balanceAfter = balanceBefore - cost + refund`。
+
+#### 6.1.1 常见错误：开蛋池关闭（GACHA_DISABLED）
+
+当运营侧把开蛋池 `enabled=false` 时，接口应返回类似：`GACHA_DISABLED`。
+
+```bash
+curl -sS "${BASE_URL}/api/pet/egg/hatch" \
+  -H "${USER_AUTH_HEADER}" \
+  -H "Content-Type: application/json" \
+  -d '{}' | jq
+```
+
+#### 6.1.2 常见错误：余额不足（INSUFFICIENT_BALANCE）
+
+当用户余额不足以支付 `base_cost` 时，接口应返回类似：`INSUFFICIENT_BALANCE`。
+
+```bash
+curl -sS "${BASE_URL}/api/pet/egg/hatch" \
+  -H "${USER_AUTH_HEADER}" \
+  -H "Content-Type: application/json" \
+  -d '{}' | jq
+```
+
+#### 6.1.3（可选）排查：查看当前开蛋池配置（Admin）
+
+只用于排查环境是否正确写入配置。
+
+```bash
+export ADMIN_TOKEN="<YOUR_ADMIN_TOKEN>"
+export ADMIN_AUTH_HEADER="Authorization: Bearer ${ADMIN_TOKEN}"
+
+curl -sS "${BASE_URL}/api/admin/pet/gacha/config" \
+  -H "${ADMIN_AUTH_HEADER}" | jq
+```
 
 ---
 
@@ -179,5 +224,5 @@ curl -sS "${BASE_URL}/api/pet/status" \
 ## 常见问题排查
 
 - 401：token 不存在/过期，或 header 名不匹配。
-- 400：参数结构不对（例如 `petId` vs `pet_id` / `petKey` vs `pet_key`）。
+- 400：参数结构不对（例如 `petId` vs `pet_id`）。
 - 业务错误：对照文档错误码（EQUIP_DAILY_LIMIT / DEBT_UNPAID / STAMINA_NOT_ENOUGH / INSUFFICIENT_COINS）。

@@ -239,11 +239,9 @@
 
 - 描述：更新/新增单个特性到某龟种（推荐用于“单行编辑/弹窗编辑”）。
 - Body:
-	- `enabled` (bool, required)
-	- `params` (object, optional)
+	- `params` (object, required)
 - 行为：
-	- 若 `enabled=false`：表示对该龟种禁用该特性（保留 params 或清空由实现决定，但建议保留便于恢复）。
-	- 若 `enabled=true`：必须提供 params 并通过 schema 校验。
+	- 约定：是否启用由 `params.enabled` 控制。
 - 返回：200 OK
 
 ### DELETE /api/admin/pet/defs/:petId/abilities/:featureKey
@@ -252,6 +250,233 @@
 - 返回：204 No Content 或 404
 
 ---
+
+## 常用 abilities 入参与示例（附 curl）
+
+说明：下列能力参数是“当前产品侧约定的常用 key”，用于运营配置/后端校验对齐。
+
+- 写入方式 A（整页保存）：`PUT /api/admin/pet/defs/:petId/abilities`（一次性提交 `abilities` 整体对象）
+- 写入方式 B（单项调整）：`PATCH /api/admin/pet/defs/:petId/abilities/:featureKey`（提交单个 ability 的 `params`）
+
+下面每个能力都给出：参数说明 + JSON 示例 + PATCH curl 示例。
+
+### 1) signin_bonus（每日登录加成）
+
+params 示例：
+
+```json
+{
+	"enabled": true,
+	"base_amount": 100,
+	"level_step": 10,
+	"daily_cap": 500
+}
+```
+
+- `enabled` (bool)
+- `base_amount` (int) 基础发放金币
+- `level_step` (int) 等级加成的步进（示例口径：每级 +level_step）
+- `daily_cap` (int) 每日封顶
+
+PATCH curl：
+
+```bash
+export PET_ID="lava"
+export FEATURE_KEY="signin_bonus"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+	-H "${ADMIN_AUTH_HEADER}" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"params": {"enabled": true, "base_amount": 100, "level_step": 10, "daily_cap": 500}
+	}' | jq
+```
+
+### 2) spark_multiplier（火花倍率加成）
+
+params 示例：
+
+```json
+{
+	"enabled": true,
+	"base": 1.3,
+	"per_level": 0.03,
+	"cap": 400
+}
+```
+
+- `enabled` (bool)
+- `base` (number) 基础倍率
+- `per_level` (number) 每级提升倍率
+- `cap` (int) 上限（示例：某个内部计算的封顶）
+
+PATCH curl：
+
+```bash
+export PET_ID="lava"
+export FEATURE_KEY="spark_multiplier"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+	-H "${ADMIN_AUTH_HEADER}" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"params": {"enabled": true, "base": 1.3, "per_level": 0.03, "cap": 400}
+	}' | jq
+```
+
+### 3) debt（欠账能力：允许余额为负）
+
+params 示例：
+
+```json
+{
+	"enabled": true,
+	"debtFloor": -300,
+	"forbidEquipWhenDebt": true,
+	"errorCode": "DEBT_UNPAID"
+}
+```
+
+- `enabled` (bool)
+- `debtFloor` (int, <=0) 最低余额（例如 -300）
+- `forbidEquipWhenDebt` (bool) 是否启用“欠账禁止切龟”
+- `errorCode` (string) 装备被拒绝时的错误码（默认 `DEBT_UNPAID`）
+
+PATCH curl：
+
+```bash
+export PET_ID="lightning"
+export FEATURE_KEY="debt"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+	-H "${ADMIN_AUTH_HEADER}" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"params": {"enabled": true, "debtFloor": -300, "forbidEquipWhenDebt": true, "errorCode": "DEBT_UNPAID"}
+	}' | jq
+```
+
+### 4) debt_subsidy（欠款补贴）
+
+params 示例：
+
+```json
+{
+	"enabled": true,
+	"subsidyRate": 0.2,
+	"capPerDay": 500,
+	"rounding": "floor"
+}
+```
+
+- `enabled` (bool)
+- `subsidyRate` (number, 0..1) 补贴比例
+- `capPerDay` (int, optional) 每日补贴封顶
+- `rounding` (string) 取整方式（示例：`floor`）
+
+PATCH curl：
+
+```bash
+export PET_ID="lightning"
+export FEATURE_KEY="debt_subsidy"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+	-H "${ADMIN_AUTH_HEADER}" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"params": {"enabled": true, "subsidyRate": 0.2, "capPerDay": 500, "rounding": "floor"}
+	}' | jq
+```
+
+### 5) debt_lock（欠账锁龟标记/联动）
+
+params 示例：
+
+```json
+{
+	"enabled": true,
+	"lock_switch_when_debt": true
+}
+```
+
+- `enabled` (bool)
+- `lock_switch_when_debt` (bool) 是否在欠账时锁定切换
+
+PATCH curl：
+
+```bash
+export PET_ID="lightning"
+export FEATURE_KEY="debt_lock"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+	-H "${ADMIN_AUTH_HEADER}" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"params": {"enabled": true, "lock_switch_when_debt": true}
+	}' | jq
+```
+
+### 6) egg_discount（开蛋折扣，按龟种生效）
+
+params 示例（折扣率）：
+
+```json
+{
+	"enabled": true,
+	"discountRate": 0.05,
+	"rounding": "floor"
+}
+```
+
+- `enabled` (bool)
+- `discountRate` (number, 0..1) 折扣率（示例 0.05 表示 95 折）
+- `rounding` (string) 取整方式（示例：`floor`）
+
+PATCH curl：
+
+```bash
+export PET_ID="ninja"
+export FEATURE_KEY="egg_discount"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+	-H "${ADMIN_AUTH_HEADER}" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"params": {"enabled": true, "discountRate": 0.05, "rounding": "floor"}
+	}' | jq
+```
+
+### 7) egg_duplicate_refund（重复返还，全局规则口径）
+
+params 示例：
+
+```json
+{
+	"enabled": true,
+	"refundRate": 0.3,
+	"rounding": "floor"
+}
+```
+
+- `enabled` (bool)
+- `refundRate` (number, 0..1) 返还比例（示例：0.3）
+- `rounding` (string) 取整方式（示例：`floor`）
+
+PATCH curl：
+
+```bash
+export PET_ID="basic"
+export FEATURE_KEY="egg_duplicate_refund"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+	-H "${ADMIN_AUTH_HEADER}" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"params": {"enabled": true, "refundRate": 0.3, "rounding": "floor"}
+	}' | jq
+```
+
+> 备注：上面示例以“挂在某个 pet 上”的方式演示；若要作为全局规则生效，建议最终落一个 GLOBAL scope 的配置入口。
 
 ## 例子（完整请求/响应示例）
 

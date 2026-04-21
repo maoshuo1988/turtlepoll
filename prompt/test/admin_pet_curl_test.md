@@ -44,7 +44,9 @@ curl -sS "${BASE_URL}/api/admin/pet/defs?enabled=true&page=1&size=20" \
 按 rarity 过滤：
 
 ```bash
-curl -sS "${BASE_URL}/api/admin/pet/defs?rarity=S&page=1&size=20" \
+# 注意：当前后端实现的 rarity 过滤参数使用数字（1..6），对应 C/B/A/S/SS/SSS。
+# 例如：S=4
+curl -sS "${BASE_URL}/api/admin/pet/defs?rarity=4&page=1&size=20" \
   -H "${ADMIN_AUTH_HEADER}" | jq
 ```
 
@@ -66,7 +68,7 @@ curl -sS "${BASE_URL}/api/admin/pet/defs/not_exists_123" \
 
 ### 1.3 创建/更新（Upsert）：POST /api/admin/pet/defs
 
-> `docs/api/pet.md` 使用 snake_case 字段命名。若你的后端采用 camelCase（比如 `petId`），请按实际 JSON tag 调整。
+说明：当前后端实现对 Upsert 同时兼容 `pet_id`（推荐）与 `petKey`（兼容旧客户端）。
 
 创建/更新一个示例龟种：
 
@@ -74,9 +76,9 @@ curl -sS "${BASE_URL}/api/admin/pet/defs/not_exists_123" \
 curl -sS "${BASE_URL}/api/admin/pet/defs" \
   -H "${ADMIN_AUTH_HEADER}" \
   -H "Content-Type: application/json" \
-  -d '(
-{
+  -d '{
   "pet_id": "lava",
+  "petKey": "lava",
   "name": { "zh-CN": "熔岩龟", "en-US": "Lava Turtle" },
   "rarity": "S",
   "enabled": true,
@@ -87,8 +89,7 @@ curl -sS "${BASE_URL}/api/admin/pet/defs" \
     "spark_multiplier": { "enabled": true, "base": 1.3, "per_level": 0.03, "cap": 400 }
   },
   "pricing": { "egg_price": 500 }
-}
-)'
+}' | jq
 ```
 
 ### 1.4 删除/下架：DELETE /api/admin/pet/defs/:petId
@@ -157,8 +158,7 @@ curl -sS "${BASE_URL}/api/admin/pet/features/${FEATURE_KEY}" \
 curl -sS "${BASE_URL}/api/admin/pet/features" \
   -H "${ADMIN_AUTH_HEADER}" \
   -H "Content-Type: application/json" \
-  -d '(
-{
+  -d '{
   "feature_key": "spark_multiplier",
   "name": { "zh-CN": "火花倍率", "en-US": "Spark Multiplier" },
   "scope": "PET",
@@ -174,8 +174,7 @@ curl -sS "${BASE_URL}/api/admin/pet/features" \
     }
   },
   "enabled": true
-}
-)'
+}' | jq
 ```
 
 ### 3.4 删除：DELETE /api/admin/pet/features/:featureKey
@@ -209,7 +208,9 @@ curl -sS -X PUT "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities" \
 
 ### 4.2 单项更新/新增：PATCH /api/admin/pet/defs/:petId/abilities/:featureKey
 
-启用并更新 params：
+说明：当前后端实现的 PATCH body 只接收 `params`（不支持顶层 `enabled`）。
+
+启用并更新 params（以 spark_multiplier 为例）：
 
 ```bash
 export PET_ID="lava"
@@ -218,7 +219,7 @@ export FEATURE_KEY="spark_multiplier"
 curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
   -H "${ADMIN_AUTH_HEADER}" \
   -H "Content-Type: application/json" \
-  -d '{"enabled":true,"params":{"base":1.3,"per_level":0.03,"cap":400}}' | jq
+  -d '{"params":{"base":1.3,"per_level":0.03,"cap":400}}' | jq
 ```
 
 禁用（不阻塞保留 params 的实现）：
@@ -227,7 +228,33 @@ curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_
 curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
   -H "${ADMIN_AUTH_HEADER}" \
   -H "Content-Type: application/json" \
-  -d '{"enabled":false}' | jq
+  -d '{"params":{"enabled":false}}' | jq
+```
+
+#### 4.2.1 更多能力示例（复制即用）
+
+signin_bonus：
+
+```bash
+export PET_ID="lava"
+export FEATURE_KEY="signin_bonus"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+  -H "${ADMIN_AUTH_HEADER}" \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"enabled":true,"base_amount":100,"level_step":10,"daily_cap":500}}' | jq
+```
+
+debt：
+
+```bash
+export PET_ID="lightning"
+export FEATURE_KEY="debt"
+
+curl -sS -X PATCH "${BASE_URL}/api/admin/pet/defs/${PET_ID}/abilities/${FEATURE_KEY}" \
+  -H "${ADMIN_AUTH_HEADER}" \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"enabled":true,"debtFloor":-300,"forbidEquipWhenDebt":true,"errorCode":"DEBT_UNPAID"}}' | jq
 ```
 
 ### 4.3 单项移除：DELETE /api/admin/pet/defs/:petId/abilities/:featureKey

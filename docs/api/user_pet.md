@@ -134,6 +134,18 @@
 
 - `POST /api/pet/egg/hatch`
 
+行为：
+
+- 读取开蛋池配置（enabled/base_cost/rarity_weights）。
+- 先按 `rarity_weights` 抽稀有度，再在该稀有度、`obtainable_by_egg=true` 的龟种定义中**均匀随机**抽取一个龟种。
+- 事务内完成：扣费 →（若新龟）入库发放 /（若重复）按规则返还。
+
+重复返还规则：
+
+- 若抽中的龟种用户已拥有（`t_user_pet` 已存在），不重复发放。
+- 返还金额固定为：`refund = floor(cost * 0.3)`（即实际扣费的 30%）。
+- 记账：返还会额外写一条金币流水（`t_user_coin_log`），`biz_type=PET_EGG_DUPLICATE_REFUND`。
+
 响应：
 
 - `cost`：实际扣费（已折扣）

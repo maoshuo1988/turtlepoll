@@ -132,9 +132,37 @@ func (c *PetController) GetStamina() *web.JsonResult {
 	})
 }
 
-// PostEggHatch POST /api/pet/egg/hatch （占位，P1 再做事务扣费/抽取/返还）
+// PostEggHatch POST /api/pet/egg/hatch
 func (c *PetController) PostEggHatch() *web.JsonResult {
-	return web.JsonErrorMsg("NOT_IMPLEMENTED")
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonErrorMsg("unauthorized")
+	}
+	ret, err := services.PetEggService.HatchEgg(user.Id)
+	if err != nil {
+		// 业务错误码：保持简单字符串。
+		s := err.Error()
+		switch s {
+		case "GACHA_DISABLED":
+			return web.JsonErrorMsg("GACHA_DISABLED")
+		case "insufficient balance":
+			return web.JsonErrorMsg("INSUFFICIENT_BALANCE")
+		default:
+			return web.JsonError(err)
+		}
+	}
+	return web.JsonData(map[string]any{
+		"cost":          ret.Cost,
+		"refund":        ret.Refund,
+		"isDuplicate":   ret.IsDuplicate,
+		"balanceBefore": ret.BalanceBefore,
+		"balanceAfter":  ret.BalanceAfter,
+		"pet": map[string]any{
+			"petId":  ret.PetId,
+			"petKey": ret.PetKey,
+			"rarity": ret.Rarity,
+		},
+	})
 }
 
 // GetStatus GET /api/pet/status （占位）

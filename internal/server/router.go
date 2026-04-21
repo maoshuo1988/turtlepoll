@@ -30,7 +30,7 @@ func NewServer() {
 		AllowedOrigins:   conf.AllowedOrigins,
 		AllowCredentials: true,
 		MaxAge:           600,
-		AllowedMethods:   []string{iris.MethodGet, iris.MethodPost, iris.MethodOptions, iris.MethodHead, iris.MethodDelete, iris.MethodPut},
+		AllowedMethods:   []string{iris.MethodGet, iris.MethodPost, iris.MethodOptions, iris.MethodHead, iris.MethodDelete, iris.MethodPut, iris.MethodPatch},
 		AllowedHeaders:   []string{"*"},
 	}))
 	app.AllowMethods(iris.MethodOptions)
