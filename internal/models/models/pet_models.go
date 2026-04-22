@@ -126,6 +126,8 @@ func (t PetDefinition) MarshalJSON() ([]byte, error) {
 type FeatureCatalogItem struct {
 	Model
 	FeatureKey string `gorm:"not null;size:128;uniqueIndex" json:"feature_key" form:"feature_key"`
+	// Name 兼容旧表中的非空 name 列；新逻辑优先使用 NameJSON。
+	Name string `gorm:"not null;size:128;default:''" json:"name_plain" form:"name_plain"`
 	// NameJSON 多语言名称：{"zh-CN":"...","en-US":"..."}
 	NameJSON string `gorm:"column:name_json;type:text" json:"name" form:"name"`
 	// Scope: PET_DEF / GLOBAL
@@ -197,10 +199,12 @@ func (t FeatureCatalogItem) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Alias
 		Name     any    `json:"name"`
+		Plain    string `json:"name_plain,omitempty"`
 		NameJSON string `json:"-"`
 	}{
 		Alias:    (Alias)(t),
 		Name:     nameObj,
+		Plain:    t.Name,
 		NameJSON: t.NameJSON,
 	})
 }

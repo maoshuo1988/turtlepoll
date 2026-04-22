@@ -69,6 +69,13 @@ func (s *userPetService) EquipPet(userId int64, petId int64) (*models.UserPetSta
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
 		state := repositories.UserPetStateRepository.GetByUserId(tx, userId)
 		now := dates.NowTimestamp()
+		uc, err := repositories.UserCoinRepository.GetOrCreate(tx, userId)
+		if err != nil {
+			return err
+		}
+		if uc.Balance < 0 {
+			return errors.New("DEBT_UNPAID")
+		}
 		if state == nil {
 			state = &models.UserPetState{UserId: userId, CreateTime: now}
 		}

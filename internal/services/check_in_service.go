@@ -3,6 +3,7 @@ package services
 import (
 	"bbs-go/internal/cache"
 	"bbs-go/internal/models/models"
+	"bbs-go/internal/pkg/biztime"
 	"bbs-go/internal/pkg/event"
 	"bbs-go/internal/repositories"
 	"errors"
@@ -115,9 +116,8 @@ func (s *checkInService) CheckIn(userId int64) error {
 			DayName: dayName,
 		})
 
-		// 签到成功后，发放宠物每日登录加成（signin_bonus）。
-		// 注意：当前仓库尚未落“用户当前装备龟种”的数据模型，这里先用连续签到天数兜底映射到 petId。
-		// 后续接入真实 currentPetId 后，替换此处 petId 来源即可。
+		// 兼容保留旧签到入口上的每日登录加成发放逻辑。
+		// spark_multiplier 已收口到登录结算主链路，这里只保留 signin_bonus 的历史行为，避免回归。
 		func() {
 			defer func() { _ = recover() }()
 			petId := int64(consecutiveDays)
@@ -125,6 +125,63 @@ func (s *checkInService) CheckIn(userId int64) error {
 		}()
 	}
 	return err
+}
+
+// EnsureLoginStreak 在登录结算时同步签到日切口径。
+//
+// 约束：
+// - 同一北京时间自然日重复调用不会重复累加 streak。
+// - 只维护签到状态与连续登录天数，不发放任何奖励。
+func (s *checkInService) EnsureLoginStreak(userId int64) (*models.CheckIn, error) {
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	if userId <= 0 {
+		return nil, errors.New("userId is required")
+	}
+
+	now := biztime.NowInCST()
+	dayName := biztime.DayNameCST(now)
+	yesterdayName := biztime.DayNameCST(now.Add(-24 * time.Hour))
+	checkIn := s.GetByUserId(userId)
+
+	if checkIn != nil && checkIn.LatestDayName == dayName {
+		return checkIn, nil
+	}
+
+	consecutiveDays := 1
+	if checkIn != nil && checkIn.LatestDayName == yesterdayName {
+		consecutiveDays = checkIn.ConsecutiveDays + 1
+	}
+
+	nowTs := dates.NowTimestamp()
+	if checkIn == nil {
+		checkIn = &models.CheckIn{
+			Model:           models.Model{},
+			UserId:          userId,
+			LatestDayName:   dayName,
+			ConsecutiveDays: consecutiveDays,
+			CreateTime:      nowTs,
+			UpdateTime:      nowTs,
+		}
+		if err := s.Create(checkIn); err != nil {
+			return nil, err
+		}
+	} else {
+		checkIn.LatestDayName = dayName
+		checkIn.ConsecutiveDays = consecutiveDays
+		checkIn.UpdateTime = nowTs
+		if err := s.Update(checkIn); err != nil {
+			return nil, err
+		}
+	}
+
+	cache.UserCache.RefreshCheckInRank()
+	event.Send(event.CheckInEvent{
+		UserId:  userId,
+		DayName: dayName,
+	})
+	return checkIn, nil
 }
 
 func (s *checkInService) GetByUserId(userId int64) *models.CheckIn {

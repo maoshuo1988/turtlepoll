@@ -41,10 +41,14 @@
 - `dailySettle.alreadySettled`：bool
 - `dailySettle.balanceBefore` / `dailySettle.balanceAfter`
 - `dailySettle.items[]`：结算明细
-  - `type`：`base_checkin` | `spark_bonus` | `debt_subsidy` | `deposit_interest` | `pet_signin_bonus` | `dice_bonus` ...
+  - `type`：`base_checkin` | `spark_reward` | `spark_bonus` | `debt_subsidy` | `deposit_interest` | `pet_signin_bonus` | `dice_bonus` ...
   - `amount`：int64
   - `desc`：string
   - `meta`：object（可选）
+    - `spark_reward.meta.loginStreak`：本次计算使用的连续登录天数
+    - `spark_bonus.meta.raw`：基础火花奖励
+    - `spark_bonus.meta.final`：应用倍率后的最终火花奖励
+    - `spark_bonus.meta.petId/level/loginStreak`：触发倍率的宠物与等级信息
 - `dailySettle.streak.loginStreak`：int
 - `dailySettle.pet.petId` / `petKey` / `level`
 - `dailySettle.errorCode` / `errorMsg`：（可选）结算失败时填充，但登录仍成功

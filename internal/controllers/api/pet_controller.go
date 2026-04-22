@@ -69,6 +69,9 @@ func (c *PetController) PostEquip() *web.JsonResult {
 		if err.Error() == "EQUIP_DAILY_LIMIT" {
 			return web.JsonErrorMsg("EQUIP_DAILY_LIMIT")
 		}
+		if err.Error() == "DEBT_UNPAID" {
+			return web.JsonErrorMsg("DEBT_UNPAID")
+		}
 		return web.JsonError(err)
 	}
 	// nextEffectiveAt：北京时间次日 0 点

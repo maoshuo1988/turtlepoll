@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
+	"github.com/mlogclub/simple/common/jsons"
 	"github.com/mlogclub/simple/sqls"
 )
 
@@ -69,6 +70,33 @@ func DefaultFeatureCatalogSeeds() []models.FeatureCatalogItem {
 			MetadataJSON:     `{}`,
 		},
 		{
+			FeatureKey:       "debt",
+			NameJSON:         `{"zh-CN":"欠账能力","en-US":"Debt Ability"}`,
+			Scope:            "PET_DEF",
+			EffectiveEvent:   "BALANCE_CHANGE",
+			ParamsSchemaJSON: `{"type":"object","required":["enabled","debtFloor","forbidEquipWhenDebt"],"properties":{"enabled":{"type":"boolean"},"debtFloor":{"type":"integer","maximum":0},"forbidEquipWhenDebt":{"type":"boolean"},"errorCode":{"type":"string"}}}`,
+			Enabled:          true,
+			MetadataJSON:     `{}`,
+		},
+		{
+			FeatureKey:       "debt_subsidy",
+			NameJSON:         `{"zh-CN":"欠款补贴","en-US":"Debt Subsidy"}`,
+			Scope:            "PET_DEF",
+			EffectiveEvent:   "DAILY_SIGNIN",
+			ParamsSchemaJSON: `{"type":"object","required":["enabled","subsidyRate"],"properties":{"enabled":{"type":"boolean"},"subsidyRate":{"type":"number","minimum":0,"maximum":1},"capPerDay":{"type":"integer","minimum":0}}}`,
+			Enabled:          true,
+			MetadataJSON:     `{}`,
+		},
+		{
+			FeatureKey:       "deposit_interest",
+			NameJSON:         `{"zh-CN":"存款生息","en-US":"Deposit Interest"}`,
+			Scope:            "PET_DEF",
+			EffectiveEvent:   "DAILY_SIGNIN",
+			ParamsSchemaJSON: `{"type":"object","required":["enabled","interestRate"],"properties":{"enabled":{"type":"boolean"},"interestRate":{"type":"number","minimum":0,"maximum":1},"capPerDay":{"type":"integer","minimum":0}}}`,
+			Enabled:          true,
+			MetadataJSON:     `{}`,
+		},
+		{
 			FeatureKey:       "first_bet_bonus",
 			NameJSON:         `{"zh-CN":"首次下注奖励","en-US":"First Bet Bonus"}`,
 			Scope:            "PET_DEF",
@@ -96,6 +124,7 @@ func (s *featureCatalogService) Create(t *models.FeatureCatalogItem) error {
 	if strings.TrimSpace(t.FeatureKey) == "" {
 		return errors.New("featureKey is empty")
 	}
+	s.fillLegacyName(t)
 	now := dates.NowTimestamp()
 	if t.CreateTime <= 0 {
 		t.CreateTime = now
@@ -105,6 +134,7 @@ func (s *featureCatalogService) Create(t *models.FeatureCatalogItem) error {
 }
 
 func (s *featureCatalogService) Update(t *models.FeatureCatalogItem) error {
+	s.fillLegacyName(t)
 	t.UpdateTime = dates.NowTimestamp()
 	return repositories.FeatureCatalogRepository.Update(sqls.DB(), t)
 }
@@ -115,4 +145,35 @@ func (s *featureCatalogService) DeleteByFeatureKey(featureKey string) error {
 		return errors.New("featureKey is empty")
 	}
 	return repositories.FeatureCatalogRepository.DeleteByFeatureKey(sqls.DB(), featureKey)
+}
+
+func (s *featureCatalogService) fillLegacyName(t *models.FeatureCatalogItem) {
+	if t == nil || strings.TrimSpace(t.Name) != "" {
+		return
+	}
+	if strings.TrimSpace(t.NameJSON) == "" {
+		t.Name = t.FeatureKey
+		return
+	}
+	var m map[string]string
+	if err := jsons.Parse(t.NameJSON, &m); err != nil || len(m) == 0 {
+		t.Name = t.FeatureKey
+		return
+	}
+	if v := strings.TrimSpace(m["zh-CN"]); v != "" {
+		t.Name = v
+		return
+	}
+	if v := strings.TrimSpace(m["en-US"]); v != "" {
+		t.Name = v
+		return
+	}
+	for _, v := range m {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			t.Name = v
+			return
+		}
+	}
+	t.Name = t.FeatureKey
 }

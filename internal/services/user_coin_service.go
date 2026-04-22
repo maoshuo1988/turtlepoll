@@ -126,7 +126,8 @@ func (s *userCoinService) SpendBet(tx *gorm.DB, userId, betId, amount int64, rem
 	if err != nil {
 		return nil, err
 	}
-	if uc.Balance < amount {
+	debtFloor := PetBalanceFeatureService.ResolveDebtFloorForTx(tx, userId)
+	if !PetBalanceFeatureService.CanSpend(uc.Balance, amount, debtFloor) {
 		return nil, errors.New("insufficient balance")
 	}
 	uc.Balance -= amount
@@ -178,7 +179,11 @@ func (s *userCoinService) Transfer(tx *gorm.DB, fromUserId, toUserId int64, bizT
 	if err != nil {
 		return err
 	}
-	if from.Balance < amount {
+	debtFloor := int64(0)
+	if fromUserId > 0 {
+		debtFloor = PetBalanceFeatureService.ResolveDebtFloorForTx(tx, fromUserId)
+	}
+	if !PetBalanceFeatureService.CanSpend(from.Balance, amount, debtFloor) {
 		return errors.New("insufficient balance")
 	}
 	from.Balance -= amount

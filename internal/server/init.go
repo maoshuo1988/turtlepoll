@@ -21,6 +21,10 @@ func Init() {
 		}
 		// Ensure FeatureCatalog has default items so pet abilities can be validated/executed.
 		services.FeatureCatalogService.EnsureDefaultSeeds()
+		// Ensure default pets exist so P0 implemented features can be used immediately after deployment.
+		services.PetDefinitionService.EnsureDefaultSeeds()
+		// Grant those default pets to admin users so deployment can be used immediately without manual distribution.
+		services.PetDefinitionService.GrantDefaultPetsToAdmins()
 		install.InitOthers()
 	}
 }
