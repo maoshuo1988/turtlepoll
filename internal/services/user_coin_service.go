@@ -8,6 +8,7 @@ import (
 
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/sqls"
+	"github.com/mlogclub/simple/web/params"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,18 @@ func (s *userCoinService) GetOrCreate(userId int64) (*models.UserCoin, error) {
 		return nil, errors.New("userId is required")
 	}
 	return repositories.UserCoinRepository.GetOrCreate(sqls.DB(), userId)
+}
+
+func (s *userCoinService) GetLog(id int64) *models.UserCoinLog {
+	return repositories.UserCoinLogRepository.Get(sqls.DB(), id)
+}
+
+func (s *userCoinService) FindLogPageByParams(params *params.QueryParams) (list []models.UserCoinLog, paging *sqls.Paging) {
+	return repositories.UserCoinLogRepository.FindPageByParams(sqls.DB(), params)
+}
+
+func (s *userCoinService) FindLogPageByCnd(cnd *sqls.Cnd) (list []models.UserCoinLog, paging *sqls.Paging) {
+	return repositories.UserCoinLogRepository.FindPageByCnd(sqls.DB(), cnd)
 }
 
 // SettleBet 结算入账（派奖）。

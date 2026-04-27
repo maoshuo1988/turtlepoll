@@ -74,6 +74,70 @@
 
 ## 接口列表
 
+### 0) 管理员查询金币流水（分页）
+
+- **接口**：`GET /api/admin/coin/log/list`
+- **认证**：需要管理员权限
+- **参数（query）**：
+  - `userId`: int64（可选，按用户筛选）
+  - `bizType`: string（可选，按流水类型筛选，如 `MINT/BET/SETTLE/REFUND`）
+  - `startDate`: string（可选，格式 `YYYY-MM-DD`，按创建时间起始日筛选，包含当天 00:00:00）
+  - `endDate`: string（可选，格式 `YYYY-MM-DD`，按创建时间结束日筛选，包含当天整日）
+  - `page`: int（可选，默认 1）
+  - `limit`: int（可选，默认 20）
+
+> 说明：
+>
+> - 该接口由 `internal/controllers/admin/coin_controller.go` 中 `AnyLogList()` 实现。
+> - 日期筛选基于 `UserCoinLog.createTime`（秒级时间戳）。
+> - `endDate` 实现为“小于次日 00:00:00”，因此传 `2026-04-27` 会包含 `2026-04-27` 全天数据。
+
+#### 返回值（data）
+
+分页结果 `web.PageResult`
+
+- `results`: `UserCoinLog[]`
+- `page`: 分页信息
+
+示例：
+
+```json
+{
+  "results": [
+    {
+      "id": 12,
+      "userId": 100,
+      "bizType": "BET",
+      "bizId": 23,
+      "amount": -100,
+      "balanceAfter": 9900,
+      "remark": "predict bet marketId=8 option=A",
+      "createTime": 1777219200
+    },
+    {
+      "id": 13,
+      "userId": 100,
+      "bizType": "SETTLE",
+      "bizId": 23,
+      "amount": 183,
+      "balanceAfter": 10083,
+      "remark": "predict settle marketId=8 result=A",
+      "createTime": 1777305600
+    }
+  ],
+  "page": {
+    "page": 1,
+    "limit": 20,
+    "total": 2
+  }
+}
+```
+
+#### 可能错误
+
+- `invalid startDate, expected YYYY-MM-DD`
+- `invalid endDate, expected YYYY-MM-DD`
+
 ### 3) 结算（用户对自己下注过的预测市场进行结算，领取金币）
 
 - **接口**：`POST /api/coin/settle`
