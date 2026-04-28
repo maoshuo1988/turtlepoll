@@ -53,6 +53,17 @@ func Start() {
 		slog.Info("battle cron tick done", slog.Duration("cost", time.Since(start)))
 	})
 
+	// opposite pk 后台轮巡（每 1 分钟一次）
+	addCronFunc(c, "*/1 * * * *", func() {
+		start := time.Now()
+		slog.Info("pk cron tick start", slog.Time("now", start))
+		if err := services.PKService.CronTick(); err != nil {
+			slog.Error("pk cron tick failed", slog.Any("err", err))
+			return
+		}
+		slog.Info("pk cron tick done", slog.Duration("cost", time.Since(start)))
+	})
+
 	// 预测市场标签物化刷新（默认每 30 分钟一次）
 	addCronFunc(c, "*/30 * * * *", func() {
 		if err := services.PredictTagService.RefreshTagsFromContexts(); err != nil {

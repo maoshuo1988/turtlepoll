@@ -60,6 +60,7 @@ const (
 	EntityTopic    = "topic"
 	EntityComment  = "comment"
 	EntityBattle   = "battle"
+	EntityPKTopic  = "pk_topic"
 	EntityUser     = "user"
 	EntityCheckIn  = "checkIn"
 	EntityTask     = "task"

@@ -42,6 +42,15 @@ var Models = []interface{}{
 	&BattleSettlement{},
 	&BattleSettlementItem{},
 
+	// TurtlePoll: Opposite PK
+	&PKTopic{},
+	&PKSeason{},
+	&PKRound{},
+	&PKBet{},
+	&PKSettlementItem{},
+	&PKCommentMeta{},
+	&PKAction{},
+
 	// TurtlePoll: Pet
 	&PetDefinition{},
 	&FeatureCatalogItem{},

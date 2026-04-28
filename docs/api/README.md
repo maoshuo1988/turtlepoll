@@ -22,6 +22,8 @@
 - [预测标签（PredictTag / PredictTagStat）](./predict_tag.md)
 - [下注/结算系统（金币与预测下注）](./coin.md)
 - [开战广场（Battle Square）](./battle.md)
+- [对立PK（PK）](./pk.md)
+- [对立PK管理（Admin PK）](./admin_pk.md)
 
 ## 约定
 
