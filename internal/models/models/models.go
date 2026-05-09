@@ -58,6 +58,13 @@ var Models = []interface{}{
 	&UserPetState{},
 	&UserPet{},
 	&PetDailySettleLog{},
+
+	// TurtlePoll: AI Chat
+	&AIMessage{},
+	&UserAIMemory{},
+	&DialogueTemplate{},
+	&TemplateUserView{},
+	&UserAIPresence{},
 }
 
 type Model struct {

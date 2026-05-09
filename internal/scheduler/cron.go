@@ -13,7 +13,7 @@ import (
 )
 
 func Start() {
-	c := cron.New()
+	c := cron.New(cron.WithChain(cron.SkipIfStillRunning(cron.DefaultLogger)))
 	slog.Info("scheduler cron start")
 
 	// football-data 世界杯赛程同步（默认每 30 分钟一次）

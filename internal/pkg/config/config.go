@@ -80,6 +80,8 @@ type Config struct {
 	SmSEO          SmSEOConfig    `yaml:"smSEO"`          // 神马搜索SEO配置
 	FootballData   FootballData   `yaml:"footballData"`   // football-data.org
 	Polymarket     Polymarket     `yaml:"polymarket"`     // polymarket（只读同步）
+	DeepSeek       DeepSeek       `yaml:"deepseek"`       // DeepSeek API
+	AIChat         AIChat         `yaml:"aiChat"`         // AI 聊天
 	LoginCaptcha   LoginCaptcha   `yaml:"loginCaptcha"`   // 登录/注册相关验证码开关（仅配置文件层面）
 }
 
@@ -113,6 +115,27 @@ type Polymarket struct {
 	Tags        []string `yaml:"tags"`        // 只同步这些 tag slug（小写）
 	MarketSlugs []string `yaml:"marketSlugs"` // 额外同步指定 market slug 白名单
 	PageSize    int      `yaml:"pageSize"`    // 分页 size，默认 50
+}
+
+type DeepSeek struct {
+	Enabled        bool   `yaml:"enabled"`
+	BaseURL        string `yaml:"baseURL"`
+	APIKey         string `yaml:"apiKey"`
+	DefaultModel   string `yaml:"defaultModel"`
+	ReasoningModel string `yaml:"reasoningModel"`
+	TimeoutSeconds int    `yaml:"timeoutSeconds"`
+	MaxRetries     int    `yaml:"maxRetries"`
+}
+
+type AIChat struct {
+	Enabled                 bool `yaml:"enabled"`
+	DefaultStaminaCost      int  `yaml:"defaultStaminaCost"`
+	MaxInputChars           int  `yaml:"maxInputChars"`
+	MaxHistoryMessages      int  `yaml:"maxHistoryMessages"`
+	DailyUserMessageLimit   int  `yaml:"dailyUserMessageLimit"`
+	IdlePushCooldownMinutes int  `yaml:"idlePushCooldownMinutes"`
+	IdlePushDailyLimit      int  `yaml:"idlePushDailyLimit"`
+	IdleTriggerMinutes      int  `yaml:"idleTriggerMinutes"`
 }
 
 type IPLocator struct {
@@ -175,6 +198,7 @@ func ReadConfig() (cfg *Config, exists bool, err error) {
 			cfg.Language = DefaultLanguage
 		}
 		SetDbDefaults(&cfg.DB)
+		SetAIDefaults(cfg)
 	} else {
 		// default config
 		cfg = &Config{
@@ -189,6 +213,7 @@ func ReadConfig() (cfg *Config, exists bool, err error) {
 			},
 			DB: defaultDbConfig(),
 		}
+		SetAIDefaults(cfg)
 	}
 
 	slog.Info("Load config", slog.String("ENV", GetEnv()))
@@ -282,6 +307,57 @@ func SetDbDefaults(c *sqls.DbConfig) {
 	}
 	if c.ConnMaxLifetimeSeconds == 0 {
 		c.ConnMaxLifetimeSeconds = 3600
+	}
+}
+
+func SetAIDefaults(c *Config) {
+	if c == nil {
+		return
+	}
+	if c.DeepSeek.BaseURL == "" {
+		c.DeepSeek.BaseURL = "https://api.deepseek.com"
+	}
+	if c.DeepSeek.DefaultModel == "" {
+		c.DeepSeek.DefaultModel = "deepseek-v4-flash"
+	}
+	if c.DeepSeek.ReasoningModel == "" {
+		c.DeepSeek.ReasoningModel = "deepseek-v4-pro"
+	}
+	if c.DeepSeek.TimeoutSeconds == 0 {
+		c.DeepSeek.TimeoutSeconds = 120
+	}
+	if c.DeepSeek.MaxRetries == 0 {
+		c.DeepSeek.MaxRetries = 2
+	}
+	if env := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); env != "" {
+		c.DeepSeek.APIKey = env
+	}
+	if env := strings.TrimSpace(os.Getenv("DEEPSEEK_BASE_URL")); env != "" {
+		c.DeepSeek.BaseURL = env
+	}
+	if env := strings.TrimSpace(os.Getenv("DEEPSEEK_DEFAULT_MODEL")); env != "" {
+		c.DeepSeek.DefaultModel = env
+	}
+	if c.AIChat.DefaultStaminaCost == 0 {
+		c.AIChat.DefaultStaminaCost = 1
+	}
+	if c.AIChat.MaxInputChars == 0 {
+		c.AIChat.MaxInputChars = 500
+	}
+	if c.AIChat.MaxHistoryMessages == 0 {
+		c.AIChat.MaxHistoryMessages = 8
+	}
+	if c.AIChat.DailyUserMessageLimit == 0 {
+		c.AIChat.DailyUserMessageLimit = 50
+	}
+	if c.AIChat.IdlePushCooldownMinutes == 0 {
+		c.AIChat.IdlePushCooldownMinutes = 120
+	}
+	if c.AIChat.IdlePushDailyLimit == 0 {
+		c.AIChat.IdlePushDailyLimit = 2
+	}
+	if c.AIChat.IdleTriggerMinutes == 0 {
+		c.AIChat.IdleTriggerMinutes = 10
 	}
 }
 

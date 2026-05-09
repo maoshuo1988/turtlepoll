@@ -24,6 +24,8 @@
 - [开战广场（Battle Square）](./battle.md)
 - [对立PK（PK）](./pk.md)
 - [对立PK管理（Admin PK）](./admin_pk.md)
+- [AI 聊天](./ai.md)
+- [DeepSeek API 接入说明](./deepseek.md)
 
 ## 约定
 

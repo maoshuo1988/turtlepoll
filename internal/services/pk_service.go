@@ -666,12 +666,16 @@ func (s *pkService) AdminSeasons(page, pageSize int, topicId int64, status strin
 }
 
 func (s *pkService) RecalcRoundHeat(roundId int64) (map[string]any, error) {
-	round := repositories.PKRepository.TakeRound(sqls.DB(), "id = ?", roundId)
+	return s.recalcRoundHeat(sqls.DB(), roundId)
+}
+
+func (s *pkService) recalcRoundHeat(db *gorm.DB, roundId int64) (map[string]any, error) {
+	round := repositories.PKRepository.TakeRound(db, "id = ?", roundId)
 	if round == nil {
 		return nil, errors.New("pk round not found")
 	}
 	var actions []models.PKAction
-	if err := sqls.DB().Where("round_id = ?", round.Id).Find(&actions).Error; err != nil {
+	if err := db.Where("round_id = ?", round.Id).Find(&actions).Error; err != nil {
 		return nil, err
 	}
 	heatA, heatB := float64(0), float64(0)
@@ -691,13 +695,13 @@ func (s *pkService) RecalcRoundHeat(roundId int64) (map[string]any, error) {
 	}
 
 	var metas []models.PKCommentMeta
-	if err := sqls.DB().Where("round_id = ?", round.Id).Find(&metas).Error; err != nil {
+	if err := db.Where("round_id = ?", round.Id).Find(&metas).Error; err != nil {
 		return nil, err
 	}
 	commentCount := int64(len(metas))
 	likeCount := int64(0)
 	for i := range metas {
-		c := repositories.CommentRepository.Get(sqls.DB(), metas[i].CommentId)
+		c := repositories.CommentRepository.Get(db, metas[i].CommentId)
 		if c == nil || c.Status != constants.StatusOk {
 			continue
 		}
@@ -709,7 +713,7 @@ func (s *pkService) RecalcRoundHeat(roundId int64) (map[string]any, error) {
 		}
 		metas[i].HeatScore = commentHeat
 		metas[i].UpdateTime = dates.NowTimestamp()
-		_ = repositories.PKRepository.UpdateCommentMeta(sqls.DB(), &metas[i])
+		_ = repositories.PKRepository.UpdateCommentMeta(db, &metas[i])
 		if metas[i].Side == PKSideA {
 			heatA += commentHeat
 		} else if metas[i].Side == PKSideB {
@@ -722,7 +726,7 @@ func (s *pkService) RecalcRoundHeat(roundId int64) (map[string]any, error) {
 	round.LikeCount = likeCount
 	round.DownvoteCount = downvoteCount
 	round.UpdateTime = dates.NowTimestamp()
-	if err := repositories.PKRepository.UpdateRound(sqls.DB(), round); err != nil {
+	if err := repositories.PKRepository.UpdateRound(db, round); err != nil {
 		return nil, err
 	}
 	return map[string]any{"round": round, "heatA": heatA, "heatB": heatB}, nil
@@ -896,7 +900,7 @@ func (s *pkService) settleRound(tx *gorm.DB, topic *models.PKTopic, round *model
 	if round.SettledAt > 0 {
 		return nil
 	}
-	if _, err := s.RecalcRoundHeat(round.Id); err != nil {
+	if _, err := s.recalcRoundHeat(tx, round.Id); err != nil {
 		return err
 	}
 	round = repositories.PKRepository.TakeRound(tx, "id = ?", round.Id)

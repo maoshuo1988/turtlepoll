@@ -43,7 +43,7 @@ SmSEO:
   UserName:
   Token:
 
-# Football-Data.org 
+# Football-Data.org
 footballData:
   apiKey: "YOUR_FOOTBALL_DATA_API_KEY"
   competitionCode: "WC"
@@ -58,7 +58,28 @@ polymarket:
   tags:
     - politics
     - sports
-  marketSlugs: []   
+  marketSlugs: []
+
+# DeepSeek API（服务端调用；生产环境建议通过 DEEPSEEK_API_KEY 注入密钥）
+deepseek:
+  enabled: false
+  baseURL: "https://api.deepseek.com"
+  apiKey: ""
+  defaultModel: "deepseek-v4-flash"
+  reasoningModel: "deepseek-v4-pro"
+  timeoutSeconds: 120
+  maxRetries: 2
+
+# AI 聊天
+aiChat:
+  enabled: false
+  defaultStaminaCost: 1
+  maxInputChars: 500
+  maxHistoryMessages: 8
+  dailyUserMessageLimit: 50
+  idlePushCooldownMinutes: 120
+  idlePushDailyLimit: 2
+  idleTriggerMinutes: 10
 
 # login captcha
 loginCaptcha:
