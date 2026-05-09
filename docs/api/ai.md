@@ -5,8 +5,9 @@
 - 基础路径：`/api/ai`
 - 认证：需要登录。
 - DeepSeek 与 AI 聊天都需要在配置中开启：`deepseek.enabled=true`、`aiChat.enabled=true`。
-- 用户主动聊天会消耗 `aiChat.defaultStaminaCost` 龟币，当前返回字段沿用产品口径叫 `staminaCost`。
-- DeepSeek 调用失败时返回降级文案，不扣龟币，也不保存成功对话。
+- 用户主动聊天会消耗 `aiChat.defaultStaminaCost` 点 AI 体力。
+- DeepSeek 调用失败时返回降级文案，不扣体力，也不保存成功对话。
+- 体力不足时不调用 DeepSeek，可通过自然恢复或苹果恢复体力。
 
 ## 配置示例
 
@@ -23,6 +24,9 @@ deepseek:
 aiChat:
   enabled: true
   defaultStaminaCost: 1
+  defaultMaxStamina: 5
+  staminaRecoverMinutes: 60
+  appleCoinCost: 5
   maxInputChars: 500
   maxHistoryMessages: 8
   dailyUserMessageLimit: 50
@@ -84,7 +88,9 @@ export DEEPSEEK_DEFAULT_MODEL="deepseek-v4-flash"
     "createTime": 1760000000
   },
   "userMessage": {},
-  "balanceAfter": 99,
+  "staminaLeft": 4,
+  "maxStamina": 5,
+  "nextRecoverAt": 1760003600,
   "staminaCost": 1,
   "promptTokens": 120,
   "completionTokens": 32,
@@ -95,13 +101,15 @@ export DEEPSEEK_DEFAULT_MODEL="deepseek-v4-flash"
 }
 ```
 
-### 余额不足返回
+### 体力不足返回
 
-当前接口为了方便前端直接展示兜底文案，余额不足时仍返回 `data`：
+当前接口为了方便前端直接展示兜底文案，体力不足时仍返回 `data`：
 
 ```json
 {
-  "balanceAfter": 0,
+  "staminaLeft": 0,
+  "maxStamina": 5,
+  "nextRecoverAt": 1760003600,
   "staminaCost": 1,
   "degraded": false,
   "dailyRemaining": 49,
@@ -122,7 +130,8 @@ DeepSeek 超时或报错时：
     "staminaCost": 0
   },
   "degraded": true,
-  "balanceAfter": 100,
+  "staminaLeft": 5,
+  "maxStamina": 5,
   "staminaCost": 1
 }
 ```
@@ -133,3 +142,170 @@ DeepSeek 超时或报错时：
 - `content is required`
 - `content exceeds max length 500`
 - `daily ai chat limit reached`
+- `AI_STAMINA_NOT_ENOUGH`
+
+## 2. 查询 AI 体力
+
+- 接口：`GET /api/ai/stamina`
+- 功能：查询当前 AI 体力、上限、下次恢复时间和每日主动聊天次数。
+
+### 返回 data
+
+```json
+{
+  "userId": 1,
+  "stamina": 3,
+  "maxStamina": 5,
+  "nextRecoverAt": 1760003600,
+  "dailyUsedCount": 2,
+  "dailyLimit": 50,
+  "recoverMinutes": 60,
+  "appleCoinCost": 5,
+  "lastRecoverAt": 1760000000,
+  "dailyRemaining": 48
+}
+```
+
+说明：
+
+- 查询前会先做自然恢复懒结算。
+- `nextRecoverAt=0` 表示当前体力已满。
+
+## 3. 苹果恢复体力
+
+- 接口：`POST /api/ai/stamina/apple`
+- 功能：消耗龟币恢复 AI 体力。
+- 请求格式：JSON 或表单。
+
+### 请求体
+
+```json
+{
+  "count": 1
+}
+```
+
+### 返回 data
+
+```json
+{
+  "userId": 1,
+  "stamina": 4,
+  "maxStamina": 5,
+  "nextRecoverAt": 1760003600,
+  "dailyUsedCount": 2,
+  "dailyLimit": 50,
+  "recoverMinutes": 60,
+  "appleCoinCost": 5,
+  "lastRecoverAt": 1760000000,
+  "dailyRemaining": 48,
+  "requestedCount": 1,
+  "recoveredCount": 1,
+  "coinCost": 5,
+  "balanceAfter": 95
+}
+```
+
+### 可能错误
+
+- `count must be positive`
+- `AI_STAMINA_FULL`
+- `insufficient balance`
+
+## 4. 拉取未读 AI 推送
+
+- 接口：`GET /api/ai/pushes/unread`
+- 功能：拉取离线、断线或尚未展示的 AI 主动推送。
+
+### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `limit` | int | 否 | 默认 20，最大 100 |
+
+### 返回 data
+
+```json
+{
+  "results": [
+    {
+      "id": 20001,
+      "scene": "win_streak",
+      "content": "3 连了。小龟先帮你记一笔。",
+      "contextType": "predict_market",
+      "contextId": 123,
+      "createTime": 1760000000
+    }
+  ]
+}
+```
+
+## 5. 标记 AI 推送已读
+
+- 接口：`POST /api/ai/pushes/read`
+- 功能：将当前用户自己的未读 AI 推送标记为已读。
+- 请求格式：JSON。
+
+### 请求体
+
+```json
+{
+  "ids": [20001, 20002]
+}
+```
+
+### 返回 data
+
+```json
+{
+  "updated": 2
+}
+```
+
+说明：`updated` 表示本次真实从未读改为已读的数量；重复提交已读 ID 不视为错误。
+
+## 6. AI presence 上报
+
+- 接口：`POST /api/ai/presence`
+- 功能：上报用户在线、页面和活跃状态，用于闲置推送判断。
+- 请求格式：JSON 或表单。
+
+### 请求体
+
+```json
+{
+  "page": "predict_market",
+  "active": true
+}
+```
+
+### 返回 data
+
+```json
+{
+  "userId": 1,
+  "page": "predict_market",
+  "active": true,
+  "lastSeenAt": 1760000000
+}
+```
+
+## 7. AI 推送 SSE
+
+- 接口：`GET /api/ai/pushes/stream`
+- 功能：建立 SSE 长连接，在线接收 `ai_push` 事件。
+
+### 事件格式
+
+```text
+id: 20001
+event: ai_push
+data: {"id":20001,"scene":"win","content":"120 入账。低调。","contextType":"predict_market","contextId":123,"createTime":1760000000}
+```
+
+说明：
+
+- SSE 需要登录态。
+- 服务端每 30 秒发送 `: ping` 心跳。
+- 浏览器重连携带 `Last-Event-ID` 时，服务端会补发仍未读且 `id > Last-Event-ID` 的推送。
+- SSE 投递失败不影响消息落库；前端仍应通过 `GET /api/ai/pushes/unread` 兜底补拉。

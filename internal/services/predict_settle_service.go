@@ -45,6 +45,7 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 
 	now := dates.NowTimestamp()
 	results := make([]*SettleMyBetResult, 0)
+	pushEvents := make([]AISettlementEvent, 0)
 
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
 		market := &models.PredictMarket{}
@@ -103,11 +104,25 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 				Payout:   payout,
 				UserCoin: uc,
 			})
+			pushEvents = append(pushEvents, AISettlementEvent{
+				UserId:       bet.UserId,
+				BizType:      "predict",
+				BizId:        fmt.Sprintf("%d", bet.Id),
+				ContextType:  "predict_market",
+				ContextId:    marketId,
+				ProfitAmount: payout - bet.Amount,
+				SettleResult: strings.ToLower(settleResult),
+				EventTitle:   market.Title,
+				SettledAt:    now,
+			})
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	for _, event := range pushEvents {
+		_, _ = AIPushService.OnSettlement(event)
 	}
 	return results, nil
 }

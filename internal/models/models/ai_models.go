@@ -64,3 +64,27 @@ type UserAIPresence struct {
 	IdlePushCount     int    `gorm:"not null;default:0" json:"idlePushCount" form:"idlePushCount"`
 	UpdateTime        int64  `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
 }
+
+// UserAIStamina 用户 AI 体力状态。
+type UserAIStamina struct {
+	UserId         int64 `gorm:"primaryKey;not null" json:"userId" form:"userId"`
+	Stamina        int   `gorm:"not null;default:0" json:"stamina" form:"stamina"`
+	MaxStamina     int   `gorm:"not null;default:5" json:"maxStamina" form:"maxStamina"`
+	LastRecoverAt  int64 `gorm:"not null;default:0" json:"lastRecoverAt" form:"lastRecoverAt"`
+	DailyUsedDate  int   `gorm:"not null;default:0" json:"dailyUsedDate" form:"dailyUsedDate"`
+	DailyUsedCount int   `gorm:"not null;default:0" json:"dailyUsedCount" form:"dailyUsedCount"`
+	CreateTime     int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime     int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// UserAIStaminaLog 用户 AI 体力流水。
+type UserAIStaminaLog struct {
+	Model
+	UserId       int64  `gorm:"not null;index:idx_user_ai_stamina_log_user_time" json:"userId" form:"userId"`
+	BizType      string `gorm:"size:32;not null;index:idx_user_ai_stamina_log_biz" json:"bizType" form:"bizType"`
+	BizId        string `gorm:"size:128;index:idx_user_ai_stamina_log_biz" json:"bizId" form:"bizId"`
+	Amount       int    `gorm:"not null" json:"amount" form:"amount"`
+	StaminaAfter int    `gorm:"not null;default:0" json:"staminaAfter" form:"staminaAfter"`
+	Remark       string `gorm:"size:256" json:"remark" form:"remark"`
+	CreateTime   int64  `gorm:"not null;default:0;index:idx_user_ai_stamina_log_user_time" json:"createTime" form:"createTime"`
+}

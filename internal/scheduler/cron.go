@@ -71,6 +71,13 @@ func Start() {
 		}
 	})
 
+	// AI 闲置推送扫描（每 1 分钟一次）
+	addCronFunc(c, "*/1 * * * *", func() {
+		if err := services.AIPushService.CronTick(); err != nil {
+			slog.Error("ai push cron tick failed", slog.Any("err", err))
+		}
+	})
+
 	c.Start()
 	slog.Info("scheduler cron started")
 }

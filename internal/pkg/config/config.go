@@ -130,6 +130,9 @@ type DeepSeek struct {
 type AIChat struct {
 	Enabled                 bool `yaml:"enabled"`
 	DefaultStaminaCost      int  `yaml:"defaultStaminaCost"`
+	DefaultMaxStamina       int  `yaml:"defaultMaxStamina"`
+	StaminaRecoverMinutes   int  `yaml:"staminaRecoverMinutes"`
+	AppleCoinCost           int  `yaml:"appleCoinCost"`
 	MaxInputChars           int  `yaml:"maxInputChars"`
 	MaxHistoryMessages      int  `yaml:"maxHistoryMessages"`
 	DailyUserMessageLimit   int  `yaml:"dailyUserMessageLimit"`
@@ -340,6 +343,15 @@ func SetAIDefaults(c *Config) {
 	}
 	if c.AIChat.DefaultStaminaCost == 0 {
 		c.AIChat.DefaultStaminaCost = 1
+	}
+	if c.AIChat.DefaultMaxStamina == 0 {
+		c.AIChat.DefaultMaxStamina = 5
+	}
+	if c.AIChat.StaminaRecoverMinutes == 0 {
+		c.AIChat.StaminaRecoverMinutes = 60
+	}
+	if c.AIChat.AppleCoinCost == 0 {
+		c.AIChat.AppleCoinCost = 5
 	}
 	if c.AIChat.MaxInputChars == 0 {
 		c.AIChat.MaxInputChars = 500

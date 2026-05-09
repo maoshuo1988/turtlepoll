@@ -116,4 +116,6 @@ func init() {
 	register(13, "feature catalog add name_json", migrate_feature_catalog_add_name_json)
 	register(14, "pet gacha pool config init tables", migrate_pet_gacha_pool_config_init_tables)
 	register(15, "opposite pk init tables", migrate_pk_init_tables)
+	register(16, "ai stamina init tables", migrate_ai_stamina_tables)
+	register(17, "ai push indexes", migrate_ai_push_indexes)
 }

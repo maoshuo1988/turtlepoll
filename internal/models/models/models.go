@@ -65,6 +65,8 @@ var Models = []interface{}{
 	&DialogueTemplate{},
 	&TemplateUserView{},
 	&UserAIPresence{},
+	&UserAIStamina{},
+	&UserAIStaminaLog{},
 }
 
 type Model struct {

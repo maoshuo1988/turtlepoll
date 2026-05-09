@@ -74,6 +74,9 @@ deepseek:
 aiChat:
   enabled: false
   defaultStaminaCost: 1
+  defaultMaxStamina: 5
+  staminaRecoverMinutes: 60
+  appleCoinCost: 5
   maxInputChars: 500
   maxHistoryMessages: 8
   dailyUserMessageLimit: 50

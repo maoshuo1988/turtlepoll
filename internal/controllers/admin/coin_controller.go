@@ -63,6 +63,21 @@ func (c *CoinController) PostMint() *web.JsonResult {
 	return web.JsonData(uc)
 }
 
+// 赠送 AI 体力：POST /api/admin/coin/ai_stamina/grant
+// 表单参数：userId, amount, remark
+func (c *CoinController) PostAi_staminaGrant() *web.JsonResult {
+	adminUser := common.GetCurrentUser(c.Ctx)
+	userId, _ := params.GetInt64(c.Ctx, "userId")
+	amount, _ := params.GetInt(c.Ctx, "amount")
+	remark := params.FormValue(c.Ctx, "remark")
+
+	ret, err := services.AIStaminaService.GrantByAdmin(adminUser.Id, userId, amount, remark)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(ret)
+}
+
 func parseDateStart(dateStr string) (int64, error) {
 	t, err := time.ParseInLocation("2006-01-02", dateStr, time.Local)
 	if err != nil {
