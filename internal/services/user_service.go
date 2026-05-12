@@ -36,6 +36,9 @@ const emailVerifyExpireHour = 24
 // 密码重置邮件有效期（小时）
 const passwordResetExpireHour = 1
 
+// 新用户注册奖励金币数量。
+const signupCoinReward int64 = 500
+
 var UserService = newUserService()
 
 func newUserService() *userService {
@@ -246,7 +249,13 @@ func (s *userService) SignUp(username, email, nickname, password, rePassword str
 		UpdateTime: dates.NowTimestamp(),
 	}
 
-	err = repositories.UserRepository.Create(sqls.DB(), user)
+	err = sqls.DB().Transaction(func(tx *gorm.DB) error {
+		if err := repositories.UserRepository.Create(tx, user); err != nil {
+			return err
+		}
+		_, err := UserCoinService.mintWithTx(tx, 0, user.Id, signupCoinReward, "signup reward", dates.NowTimestamp())
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
