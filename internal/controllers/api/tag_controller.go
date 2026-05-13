@@ -95,6 +95,28 @@ func (c *TagController) GetTags() *web.JsonResult {
 	return web.JsonPageData(render.BuildTags(tags), paging)
 }
 
+// 标签评论统计分页
+func (c *TagController) GetComment_stats() *web.JsonResult {
+	page := params.FormValueIntDefault(c.Ctx, "page", 1)
+	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	keyword := strings.TrimSpace(c.Ctx.FormValue("keyword"))
+
+	stats, paging, err := services.TagService.FindCommentStatPage(page, limit, keyword)
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonPageData(&stats, paging)
+}
+
 // 标签自动完成
 func (c *TagController) PostAutocomplete() *web.JsonResult {
 	input := c.Ctx.FormValue("input")

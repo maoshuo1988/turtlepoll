@@ -95,6 +95,12 @@ type TagResponse struct {
 	Name string `json:"name"`
 }
 
+type TagCommentStatResponse struct {
+	TagId        int64  `json:"tagId"`
+	TagName      string `json:"tagName"`
+	CommentCount int64  `json:"commentCount"`
+}
+
 type ArticleSimpleResponse struct {
 	Id           int64          `json:"id"`
 	User         *UserInfo      `json:"user"`

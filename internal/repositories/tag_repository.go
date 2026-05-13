@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/resp"
 	"errors"
 	"strings"
 
@@ -63,6 +64,39 @@ func (r *tagRepository) FindPageByCnd(db *gorm.DB, cnd *sqls.Cnd) (list []models
 		Page:  cnd.Paging.Page,
 		Limit: cnd.Paging.Limit,
 		Total: count,
+	}
+	return
+}
+
+func (r *tagRepository) FindCommentStatPage(db *gorm.DB, page, limit int, keyword string) (list []resp.TagCommentStatResponse, paging *sqls.Paging, err error) {
+	baseQuery := db.Table("t_tag AS tg").Where("tg.status = ?", constants.StatusOk)
+	if keyword != "" {
+		baseQuery = baseQuery.Where("tg.name LIKE ?", "%"+keyword+"%")
+	}
+
+	var total int64
+	if err = baseQuery.Count(&total).Error; err != nil {
+		return
+	}
+
+	err = baseQuery.
+		Select("tg.id AS tag_id, tg.name AS tag_name, COUNT(c.id) AS comment_count").
+		Joins("LEFT JOIN t_topic_tag tt ON tt.tag_id = tg.id AND tt.status = ?", constants.StatusOk).
+		Joins("LEFT JOIN t_topic tp ON tp.id = tt.topic_id AND tp.status = ?", constants.StatusOk).
+		Joins("LEFT JOIN t_comment c ON c.entity_id = tp.id AND c.entity_type = ? AND c.status = ?", constants.EntityTopic, constants.StatusOk).
+		Group("tg.id, tg.name").
+		Order("comment_count DESC, tg.id ASC").
+		Offset((page - 1) * limit).
+		Limit(limit).
+		Scan(&list).Error
+	if err != nil {
+		return
+	}
+
+	paging = &sqls.Paging{
+		Page:  page,
+		Limit: limit,
+		Total: total,
 	}
 	return
 }
