@@ -1,6 +1,6 @@
 module bbs-go
 
-go 1.26.0
+go 1.24.0
 
 require (
 	github.com/88250/lute v1.7.6
@@ -28,6 +28,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mlogclub/codegen v1.0.1
 	github.com/mlogclub/simple v1.2.40
+	github.com/mojocn/base64Captcha v1.3.6
 	github.com/panjf2000/ants/v2 v2.10.0
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
@@ -145,7 +146,6 @@ require (
 	github.com/mediocregopher/radix/v3 v3.8.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/mojocn/base64Captcha v1.3.6 // indirect
 	github.com/mozillazg/go-httpheader v0.4.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/nats-io/nats.go v1.34.1 // indirect
