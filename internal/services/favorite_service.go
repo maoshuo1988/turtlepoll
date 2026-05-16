@@ -2,6 +2,7 @@ package services
 
 import (
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/resp"
 	"bbs-go/internal/pkg/event"
 	"errors"
 
@@ -44,6 +45,10 @@ func (s *favoriteService) FindPageByParams(params *params.QueryParams) (list []m
 
 func (s *favoriteService) FindPageByCnd(cnd *sqls.Cnd) (list []models.Favorite, paging *sqls.Paging) {
 	return repositories.FavoriteRepository.FindPageByCnd(sqls.DB(), cnd)
+}
+
+func (s *favoriteService) FindUserCenterFavoritePage(userId int64, page, limit int) (list []resp.UserCenterFavoriteResponse, paging *sqls.Paging, err error) {
+	return repositories.FavoriteRepository.FindUserCenterFavoritePage(sqls.DB(), userId, page, limit)
 }
 
 func (s *favoriteService) Create(t *models.Favorite) error {

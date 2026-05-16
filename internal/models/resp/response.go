@@ -117,6 +117,15 @@ type UserCenterCommentResponse struct {
 	CreateTime int64  `json:"create_time"`
 }
 
+type UserCenterFavoriteResponse struct {
+	Id         int64  `json:"id"`
+	UserId     int64  `json:"user_id"`
+	EntityId   int64  `json:"entity_id"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	CreateTime int64  `json:"create_time"`
+}
+
 type ArticleSimpleResponse struct {
 	Id           int64          `json:"id"`
 	User         *UserInfo      `json:"user"`

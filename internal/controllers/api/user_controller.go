@@ -34,6 +34,7 @@ type UserController struct {
 func (c *UserController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("GET", "/center/topics", "GetCenterTopics")
 	b.Handle("GET", "/center/comments", "GetCenterComments")
+	b.Handle("GET", "/center/favorites", "GetCenterFavorites")
 }
 
 // 获取当前登录用户
@@ -509,6 +510,33 @@ func (c *UserController) GetCenterComments() *web.JsonResult {
 	}
 
 	results, paging, err := services.CommentService.FindUserCenterCommentPage(userId, page, limit)
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonPageData(results, paging)
+}
+
+func (c *UserController) GetCenterFavorites() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	userId := currentUser.Id
+
+	page := params.FormValueIntDefault(c.Ctx, "page", 1)
+	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	results, paging, err := services.FavoriteService.FindUserCenterFavoritePage(userId, page, limit)
 	if err != nil {
 		return web.JsonError(err)
 	}
