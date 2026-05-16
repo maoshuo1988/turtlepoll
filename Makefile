@@ -24,6 +24,6 @@ clean:
 	@rm -f bbs-go
 
 generator:
-	@go run cmd/generator/generator.go
+	@cd cmd/generator && go run .
 
 .PHONY: all build run test clean

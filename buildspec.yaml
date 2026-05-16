@@ -3,7 +3,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      golang: 1.24      # 指定 Go 版本
+      golang: 1.23      # 指定 Go 版本
     commands:
       - echo "Go version $(go version)"
   
