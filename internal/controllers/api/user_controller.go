@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/mvc"
 	"github.com/mlogclub/simple/common/strs"
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
@@ -28,6 +29,10 @@ import (
 
 type UserController struct {
 	Ctx iris.Context
+}
+
+func (c *UserController) BeforeActivation(b mvc.BeforeActivation) {
+	b.Handle("GET", "/center/topics", "GetCenterTopics")
 }
 
 // 获取当前登录用户
@@ -357,6 +362,39 @@ func (c *UserController) GetScoreRank() *web.JsonResult {
 	return web.JsonData(results)
 }
 
+func (c *UserController) GetCenterTopics() *web.JsonResult {
+	if _, err := common.CheckLogin(c.Ctx); err != nil {
+		return web.JsonError(err)
+	}
+
+	userId, err := params.FormValueInt64(c.Ctx, "user")
+	if err != nil || userId <= 0 {
+		return web.JsonErrorMsg("param: user required")
+	}
+
+	page := params.FormValueIntDefault(c.Ctx, "page", 1)
+	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	cnd := sqls.NewCnd().
+		Eq("user_id", userId).
+		Eq("status", constants.StatusOk).
+		Page(page, limit).
+		Desc("create_time").
+		Desc("id")
+
+	topics, paging := services.TopicService.FindPageByCnd(cnd)
+	return web.JsonPageData(buildUserCenterTopics(topics), paging)
+}
+
 // 禁言
 func (c *UserController) PostForbidden() *web.JsonResult {
 	user := common.GetCurrentUser(c.Ctx)
@@ -449,4 +487,22 @@ func (c *UserController) GetGoogle_bind_info() *web.JsonResult {
 	return web.JsonData(map[string]any{
 		"bind": false,
 	})
+}
+
+func buildUserCenterTopics(topics []models.Topic) []resp.UserCenterTopicResponse {
+	if len(topics) == 0 {
+		return nil
+	}
+
+	results := make([]resp.UserCenterTopicResponse, 0, len(topics))
+	for _, topic := range topics {
+		results = append(results, resp.UserCenterTopicResponse{
+			Id:         topic.Id,
+			UserId:     topic.UserId,
+			Title:      topic.Title,
+			Content:    topic.Content,
+			CreateTime: topic.CreateTime,
+		})
+	}
+	return results
 }
