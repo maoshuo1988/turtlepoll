@@ -3,6 +3,7 @@ package services
 import (
 	"bbs-go/internal/models/constants"
 	"bbs-go/internal/models/req"
+	"bbs-go/internal/models/resp"
 	"bbs-go/internal/pkg/event"
 	"bbs-go/internal/pkg/iplocator"
 	"errors"
@@ -53,6 +54,10 @@ func (s *commentService) FindPageByParams(params *params.QueryParams) (list []mo
 
 func (s *commentService) FindPageByCnd(cnd *sqls.Cnd) (list []models.Comment, paging *sqls.Paging) {
 	return repositories.CommentRepository.FindPageByCnd(sqls.DB(), cnd)
+}
+
+func (s *commentService) FindUserCenterCommentPage(userId int64, page, limit int) (list []resp.UserCenterCommentResponse, paging *sqls.Paging, err error) {
+	return repositories.CommentRepository.FindUserCenterCommentPage(sqls.DB(), userId, page, limit)
 }
 
 func (s *commentService) Count(cnd *sqls.Cnd) int64 {

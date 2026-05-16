@@ -33,6 +33,7 @@ type UserController struct {
 
 func (c *UserController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("GET", "/center/topics", "GetCenterTopics")
+	b.Handle("GET", "/center/comments", "GetCenterComments")
 }
 
 // 获取当前登录用户
@@ -363,14 +364,12 @@ func (c *UserController) GetScoreRank() *web.JsonResult {
 }
 
 func (c *UserController) GetCenterTopics() *web.JsonResult {
-	if _, err := common.CheckLogin(c.Ctx); err != nil {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
 		return web.JsonError(err)
 	}
 
-	userId, err := params.FormValueInt64(c.Ctx, "user")
-	if err != nil || userId <= 0 {
-		return web.JsonErrorMsg("param: user required")
-	}
+	userId := currentUser.Id
 
 	page := params.FormValueIntDefault(c.Ctx, "page", 1)
 	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
@@ -487,6 +486,33 @@ func (c *UserController) GetGoogle_bind_info() *web.JsonResult {
 	return web.JsonData(map[string]any{
 		"bind": false,
 	})
+}
+
+func (c *UserController) GetCenterComments() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	userId := currentUser.Id
+
+	page := params.FormValueIntDefault(c.Ctx, "page", 1)
+	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	results, paging, err := services.CommentService.FindUserCenterCommentPage(userId, page, limit)
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonPageData(results, paging)
 }
 
 func buildUserCenterTopics(topics []models.Topic) []resp.UserCenterTopicResponse {
