@@ -3,9 +3,12 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      golang: 1.23      # 指定 Go 版本
+      golang: 1.23
     commands:
-      - echo "Go version $(go version)"
+      - echo "Fixing go.mod version format..."
+      - sed -i 's/go 1.23.0/go 1.23/' go.mod   # 直接替换文件内容
+      - cat go.mod  # 验证修改结果
+      - echo "Go version fixed"
   
   pre_build:
     commands:
