@@ -1,0 +1,26 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      golang: 1.24      # 指定 Go 版本
+    commands:
+      - echo "Go version $(go version)"
+  
+  pre_build:
+    commands:
+      - echo "Downloading dependencies..."
+      - go mod download
+  
+  build:
+    commands:
+      - echo "Building application..."
+      - make buildlinux   # 直接调用你现有的 Makefile 命令
+  
+  post_build:
+    commands:
+      - echo "Build completed"
+
+artifacts:
+  files:
+    - bbs-go-linux       # Makefile 中输出的文件名
