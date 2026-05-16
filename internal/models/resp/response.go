@@ -101,6 +101,14 @@ type TagCommentStatResponse struct {
 	CommentCount int64  `json:"commentCount"`
 }
 
+type UserCenterTopicResponse struct {
+	Id         int64  `json:"id"`
+	UserId     int64  `json:"userId"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	CreateTime int64  `json:"create_time"`
+}
+
 type ArticleSimpleResponse struct {
 	Id           int64          `json:"id"`
 	User         *UserInfo      `json:"user"`
