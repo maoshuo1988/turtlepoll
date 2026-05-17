@@ -26,6 +26,14 @@ BIN_DIR="${ROOT_DIR}/bin"
 RUN_DIR="${ROOT_DIR}/run"
 LOG_DIR="${ROOT_DIR}/logs"
 
+# Go 构建缓存目录。
+# AWS CodeBuild/CodePipeline 的某些执行环境可能没有设置 HOME/GOPATH，
+# 如果不显式指定，会出现：
+# go: module cache not found: neither GOMODCACHE nor GOPATH is set
+GO_WORK_DIR="${CACHE_DIR}/go-work"
+GO_BUILD_CACHE="${CACHE_DIR}/go-build"
+GO_MOD_CACHE="${GO_WORK_DIR}/pkg/mod"
+
 # 二进制文件、PID 文件和应用日志文件路径。
 BINARY_PATH="${BIN_DIR}/${APP_NAME}"
 PID_FILE="${RUN_DIR}/${APP_NAME}.pid"
@@ -56,7 +64,41 @@ run_step() {
 # 创建脚本需要使用的目录。
 ensure_dirs() {
   log "Create runtime directories"
-  mkdir -p "${TOOLS_DIR}/go" "${CACHE_DIR}" "${BIN_DIR}" "${RUN_DIR}" "${LOG_DIR}"
+  mkdir -p \
+    "${TOOLS_DIR}/go" \
+    "${CACHE_DIR}" \
+    "${BIN_DIR}" \
+    "${RUN_DIR}" \
+    "${LOG_DIR}" \
+    "${GO_WORK_DIR}" \
+    "${GO_BUILD_CACHE}" \
+    "${GO_MOD_CACHE}"
+}
+
+# 初始化 Go 相关环境变量，保证本地、hook、AWS 流水线使用一致的 Go 环境。
+setup_go_env() {
+  log "Setup Go environment"
+
+  # 使用项目内下载的 Go，避免 hook/CI 中调用到系统里的旧版本 Go。
+  export PATH="${GO_ROOT}/bin:${PATH}"
+
+  # 禁用自动切换工具链，确保使用脚本下载的 Go 版本。
+  export GOTOOLCHAIN=local
+
+  # 显式设置 Go 缓存目录，避免 AWS 环境中 HOME/GOPATH 缺失导致 module cache 报错。
+  export GOPATH="${GO_WORK_DIR}"
+  export GOMODCACHE="${GO_MOD_CACHE}"
+  export GOCACHE="${GO_BUILD_CACHE}"
+
+  # 部分极简 CI 环境可能没有 HOME，Go 或依赖工具偶尔会读取 HOME。
+  export HOME="${HOME:-${CACHE_DIR}/home}"
+  mkdir -p "${HOME}"
+
+  log "GOROOT=${GO_ROOT}"
+  log "GOPATH=${GOPATH}"
+  log "GOMODCACHE=${GOMODCACHE}"
+  log "GOCACHE=${GOCACHE}"
+  log "Go version: $(${GO_BIN} version)"
 }
 
 # 按 PID 停止进程：先优雅终止，等待后仍未退出则强制 kill。
@@ -136,10 +178,9 @@ download_go() {
 
 # 下载依赖并生成项目二进制文件。
 build_binary() {
+  setup_go_env
+
   log "Download Go modules"
-  # 使用项目内下载的 Go，避免 hook/CI 中调用到系统里的旧版本 Go。
-  export PATH="${GO_ROOT}/bin:${PATH}"
-  export GOTOOLCHAIN=local
   "${GO_BIN}" mod download
 
   log "Build binary ${BINARY_PATH}"
@@ -154,7 +195,7 @@ build_binary() {
 # 后台运行新生成的二进制，并记录 PID 和运行日志。
 run_app() {
   log "Run ${APP_NAME}; logs: ${APP_LOG}"
-  nohup "${BINARY_PATH}" >>"${APP_LOG}" 2>&1 &
+  BBSGO_ENV=prod nohup "${BINARY_PATH}" >>"${APP_LOG}" 2>&1 &
   local pid="$!"
   echo "${pid}" >"${PID_FILE}"
   sleep 1
