@@ -101,3 +101,8 @@ ssm日志
 ``` bash
 sudo tail -f /var/log/amazon/ssm/amazon-ssm-agent.log
 ```
+
+tmp磁盘
+```bash
+df -h /tmp
+```
