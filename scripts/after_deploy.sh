@@ -5,6 +5,30 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] [after_deploy] $*" >&2
 }
 
+cleanup_tmp() {
+  log "cleaning deployment temporary files under /tmp"
+
+  find /tmp -maxdepth 1 -mindepth 1 -type d -name "systemd-private-*" -print -exec rm -rf {} + 2>/dev/null || true
+  find /tmp -maxdepth 1 -mindepth 1 -type d -name "go-build*" -print -exec rm -rf {} + 2>/dev/null || true
+
+  if [ -d /tmp/codepipeline ]; then
+    log "removing /tmp/codepipeline"
+    rm -rf /tmp/codepipeline
+  fi
+
+  if [ -d /tmp/snap-private-tmp ]; then
+    log "removing /tmp/snap-private-tmp"
+    rm -rf /tmp/snap-private-tmp
+  fi
+
+  if [ -f /tmp/go1.21.5.linux-amd64.tar.gz ]; then
+    log "removing /tmp/go1.21.5.linux-amd64.tar.gz"
+    rm -f /tmp/go1.21.5.linux-amd64.tar.gz
+  fi
+
+  log "temporary file cleanup completed"
+}
+
 # 应用发布目录，需与 deployspec.yml 的 destination 保持一致。
 APP_DIR="/srv/project/turtlepoll"
 # 应用运行用户和用户组。
@@ -117,5 +141,7 @@ systemctl --no-pager --full status bbs-go >&2 || true
 
 log "recent bbs-go journal:"
 journalctl -u bbs-go --no-pager -n 80 >&2 || true
+
+cleanup_tmp
 
 log "done"
