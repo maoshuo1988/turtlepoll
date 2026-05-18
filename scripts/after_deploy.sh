@@ -3,6 +3,9 @@ set -euo pipefail
 
 # 应用发布目录，需与 deployspec.yml 的 destination 保持一致。
 APP_DIR="/srv/project/turtlepoll"
+# 应用运行用户和用户组。
+APP_USER="ubuntu"
+APP_GROUP="ubuntu"
 # systemd 服务中直接启动流水线生成的 Linux 二进制。
 APP_BIN="$APP_DIR/bbs-go-linux"
 # systemd 服务文件路径。
@@ -26,6 +29,9 @@ if [ ! -f "$APP_DIR/bbs-go.yaml" ] && [ -f "$APP_DIR/bbs-go.example.yaml" ]; the
   cp "$APP_DIR/bbs-go.example.yaml" "$APP_DIR/bbs-go.yaml"
 fi
 
+# CodePipeline/SSM 通常以 root 写入文件，这里统一交还给应用用户。
+chown -R "$APP_USER:$APP_GROUP" "$APP_DIR" /data/logs
+
 # 当前部署方式依赖 systemd 管理 Go 服务进程。
 if ! command -v systemctl >/dev/null 2>&1; then
   echo "systemd is required on the EC2 instance." >&2
@@ -40,6 +46,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=$APP_USER
+Group=$APP_GROUP
 WorkingDirectory=$APP_DIR
 ExecStart=$APP_BIN
 Environment=BBSGO_ENV=prod
