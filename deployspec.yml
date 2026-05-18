@@ -1,9 +1,23 @@
 version: 0.1
 
-# 将流水线产物中的全部文件复制到 EC2 上的应用目录。
+# 将流水线产物中的运行文件复制到 EC2 上的应用目录。
 files:
-  - source: /
+  - source: bbs-go-linux
     destination: /srv/project/turtlepoll
+  - source: bbs-go.example.yaml
+    destination: /srv/project/turtlepoll
+  - source: admin
+    destination: /srv/project/turtlepoll/admin
+  - source: site
+    destination: /srv/project/turtlepoll/site
+  - source: locales
+    destination: /srv/project/turtlepoll/locales
+  - source: res
+    destination: /srv/project/turtlepoll/res
+  - source: deployspec.yml
+    destination: /srv/project/turtlepoll
+  - source: scripts
+    destination: /srv/project/turtlepoll/scripts
 
 # EC2 Deploy 动作会按阶段执行这些脚本。
 scripts:
