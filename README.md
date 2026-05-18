@@ -96,3 +96,8 @@ ps aux | grep go | grep -v grep
 sudo BBSGO_ENV=prod nohup ./bbs-go-linux
 BBSGO_ENV=prod go run ./main.go -c ./bbs-go.yaml
 ```
+
+ssm日志
+``` bash
+sudo tail -f /var/log/amazon/ssm/amazon-ssm-agent.log
+```

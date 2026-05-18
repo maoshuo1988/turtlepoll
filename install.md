@@ -40,3 +40,9 @@ source ~/.bashrc
 ```bash
 go version
 ```
+
+# 安装 make
+```bash
+sudo apt install make -y
+make --version
+```
