@@ -2,7 +2,7 @@
 set -euo pipefail
 
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [after_deploy] $*"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [after_deploy] $*" >&2
 }
 
 # 应用发布目录，需与 deployspec.yml 的 destination 保持一致。
@@ -23,14 +23,27 @@ cd "$APP_DIR"
 log "changed directory to $(pwd)"
 
 log "top-level files in $APP_DIR:"
-find "$APP_DIR" -maxdepth 2 -mindepth 1 -printf "%M %u:%g %s %p\n" | sort | head -120 || true
+find "$APP_DIR" -maxdepth 2 -mindepth 1 -printf "%M %u:%g %s %p\n" | sort | head -120 >&2 || true
 
 log "searching for bbs-go-linux under $APP_DIR:"
-find "$APP_DIR" -maxdepth 5 -name "bbs-go-linux" -printf "%M %u:%g %s %p\n" | sort || true
+find "$APP_DIR" -maxdepth 5 -name "bbs-go-linux" -printf "%M %u:%g %s %p\n" | sort >&2 || true
 
 # 流水线产物必须包含 make buildlinux 生成的 bbs-go-linux。
 if [ ! -f "$APP_BIN" ]; then
   log "binary not found at expected path"
+  mapfile -t BIN_CANDIDATES < <(find "$APP_DIR" -maxdepth 5 -type f -name "bbs-go-linux" | sort)
+  if [ "${#BIN_CANDIDATES[@]}" -eq 1 ]; then
+    log "found binary candidate at ${BIN_CANDIDATES[0]}, copying to $APP_BIN"
+    cp "${BIN_CANDIDATES[0]}" "$APP_BIN"
+  elif [ "${#BIN_CANDIDATES[@]}" -gt 1 ]; then
+    log "found multiple bbs-go-linux candidates, cannot choose safely"
+    printf '%s\n' "${BIN_CANDIDATES[@]}" >&2
+    exit 1
+  fi
+fi
+
+if [ ! -f "$APP_BIN" ]; then
+  log "binary still missing after candidate search"
   echo "missing binary: $APP_BIN. Please build bbs-go-linux before EC2 deploy." >&2
   exit 1
 fi
@@ -90,7 +103,7 @@ EOF
 
 # 重新加载 systemd 配置，设置开机自启，并重启服务。
 log "systemd service file content:"
-sed -n '1,120p' "$SERVICE_FILE"
+sed -n '1,120p' "$SERVICE_FILE" >&2
 
 log "running systemctl daemon-reload"
 systemctl daemon-reload
@@ -100,9 +113,9 @@ log "running systemctl restart bbs-go"
 systemctl restart bbs-go
 
 log "systemctl status bbs-go:"
-systemctl --no-pager --full status bbs-go || true
+systemctl --no-pager --full status bbs-go >&2 || true
 
 log "recent bbs-go journal:"
-journalctl -u bbs-go --no-pager -n 80 || true
+journalctl -u bbs-go --no-pager -n 80 >&2 || true
 
 log "done"

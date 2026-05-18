@@ -2,7 +2,7 @@
 set -euo pipefail
 
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [before_deploy] $*"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [before_deploy] $*" >&2
 }
 
 # 应用发布目录，CodePipeline 会把产物复制到这里。
