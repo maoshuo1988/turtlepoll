@@ -53,6 +53,10 @@ func (s *topicService) FindPageByCnd(cnd *sqls.Cnd) (list []models.Topic, paging
 	return repositories.TopicRepository.FindPageByCnd(sqls.DB(), cnd)
 }
 
+func (s *topicService) FindUserHiddenTopicPage(userId int64, page, limit int) (list []models.Topic, paging *sqls.Paging) {
+	return repositories.TopicRepository.FindUserHiddenTopicPage(sqls.DB(), userId, page, limit)
+}
+
 func (s *topicService) Count(cnd *sqls.Cnd) int64 {
 	return repositories.TopicRepository.Count(sqls.DB(), cnd)
 }
@@ -77,6 +81,10 @@ func (s *topicService) UpdateColumn(id int64, name string, value interface{}) er
 	search.UpdateTopicIndex(s.Get(id))
 
 	return nil
+}
+
+func (s *topicService) UpdateDisplayStatus(topicId int64, displayStatus int) error {
+	return s.UpdateColumn(topicId, "display_status", displayStatus)
 }
 
 // Delete 删除

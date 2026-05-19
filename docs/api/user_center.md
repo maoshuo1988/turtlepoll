@@ -1,6 +1,6 @@
 # 用户中心
 
-本文档为新增需求接口文档，描述用户中心“登录用户帖子列表”接口。
+本文档为用户中心相关接口文档，主要描述登录用户自己的帖子列表、评论帖子列表、收藏帖子列表，以及帖子隐藏相关接口。
 
 ---
 
@@ -16,12 +16,12 @@
 
 接口说明：
 
-- 后端以登录态 token 解析出的当前用户 ID 为准
-- `user` 参数可兼容保留，但即使传入，与 token 对应用户不一致时也不会按该参数查询
+- 后端以登录态 `token` 解析出的当前用户 ID 为准
+- `page` 默认 `1`
+- `limit` 默认 `20`，最大 `200`
 
 ### Query 参数
 
-- `user`：用户 ID，选填，仅兼容保留，实际以后端从 token 解析出的当前登录用户 ID 为准
 - `page`：页码，默认 `1`
 - `limit`：每页数量，默认 `20`，最大 `200`
 
@@ -48,21 +48,14 @@ curl "http://localhost:8082/api/user/center/topics?page=1&limit=10" \
     {
       "id": 101,
       "userId": 1,
-      "title": "英超今晚怎么看",
+      "title": "英超今晚怎么看？",
       "content": "聊聊这场比赛的几个关键点。",
       "create_time": "2026-05-15 20:30:00"
-    },
-    {
-      "id": 102,
-      "userId": 1,
-      "title": "西甲本轮观察",
-      "content": "这轮更看好主场一方。",
-      "create_time": "2026-05-14 18:20:00"
     }
   ],
   "page": 1,
   "limit": 10,
-  "total": 2
+  "total": 1
 }
 ```
 
@@ -76,26 +69,20 @@ curl "http://localhost:8082/api/user/center/topics?page=1&limit=10" \
 
 ### 需求说明
 
-用于用户中心分页查询当前登录用户“评论过的别人帖子”列表。
-
-接口说明：
-
-- 后端以登录态 token 解析出的当前用户 ID 为准
-- `user` 参数可兼容保留，但即使传入，与 token 对应用户不一致时也不会按该参数查询
+用于用户中心分页查询当前登录用户“评论过的别人的帖子”列表。
 
 统计口径：
 
 - 查询表：`t_comment`
 - 只统计 `t_comment.entity_type = 'topic'` 的评论
-- 通过 `t_comment.entity_id = t_topic.id` 与帖子表 `t_topic` 关联，获取帖子标题 `title`
-- 只返回“登录用户自己发表的评论”
+- 通过 `t_comment.entity_id = t_topic.id` 关联帖子表 `t_topic`
+- 只返回“当前登录用户自己发表的评论”
 - 只返回“评论的是别人发的帖子”
 - 判定条件：`t_comment.user_id <> t_topic.user_id`
-- 按 `t_comment.create_time DESC` 排序，最新评论排在最前面
+- 按 `t_comment.create_time DESC` 排序
 
 ### Query 参数
 
-- `user`：登录用户 ID，选填，仅兼容保留，实际以后端从 token 解析出的当前登录用户 ID 为准
 - `page`：页码，默认 `1`
 - `limit`：每页数量，默认 `20`，最大 `200`
 
@@ -125,18 +112,11 @@ curl "http://localhost:8082/api/user/center/comments?page=1&limit=10" \
       "content": "这个观点我比较认同。",
       "title": "英超今晚怎么看？",
       "create_time": "2026-05-15 21:10:00"
-    },
-    {
-      "id": 202,
-      "user_id": 1,
-      "content": "我觉得这场比赛主队更稳一些。",
-      "title": "西甲本轮观察",
-      "create_time": "2026-05-14 19:05:00"
     }
   ],
   "page": 1,
   "limit": 10,
-  "total": 2
+  "total": 1
 }
 ```
 
@@ -171,72 +151,18 @@ LIMIT :limit OFFSET (:page - 1) * :limit;
 
 ### 需求说明
 
-用于用户中心分页查询当前登录用户“收藏过的别人帖子”列表。
-
-接口说明：
-
-- 后端以登录态 token 解析出的当前用户 ID 为准
-- 参数只保留 `page`、`limit`
-- 只查询帖子收藏，不查询文章收藏
+用于用户中心分页查询当前登录用户“收藏过的别人的帖子”列表。
 
 统计口径：
 
 - 查询表：`t_favorite`
 - 只统计 `t_favorite.entity_type = 'topic'` 的收藏记录
-- 通过 `t_favorite.entity_id = t_topic.id` 与帖子表 `t_topic` 关联，获取帖子标题 `title`、帖子内容 `content`
+- 通过 `t_favorite.entity_id = t_topic.id` 关联帖子表 `t_topic`
 - 只返回“当前登录用户自己收藏的帖子”
 - 只返回“收藏的是别人发的帖子”
 - 判定条件：`t_favorite.user_id <> t_topic.user_id`
 - 只返回正常状态帖子：`t_topic.status = 0`
-- 按 `t_favorite.create_time DESC, t_favorite.id DESC` 排序，最新收藏排在最前面
-
-### 数据表
-
-帖子收藏表：`t_favorite`
-
-```sql
-CREATE TABLE "public"."t_favorite" (
-  "id" int8 NOT NULL DEFAULT nextval('t_favorite_id_seq'::regclass),
-  "user_id" int8 NOT NULL,
-  "entity_type" varchar(32) NOT NULL,
-  "entity_id" int8 NOT NULL,
-  "create_time" int8,
-  CONSTRAINT "t_favorite_pkey" PRIMARY KEY ("id")
-);
-```
-
-帖子表：`t_topic`
-
-```sql
-CREATE TABLE "public"."t_topic" (
-  "id" int8 NOT NULL DEFAULT nextval('t_topic_id_seq'::regclass),
-  "type" int8 NOT NULL DEFAULT 0,
-  "node_id" int8 NOT NULL,
-  "user_id" int8 NOT NULL,
-  "title" varchar(128),
-  "content_type" varchar(32) DEFAULT 'markdown',
-  "content" text,
-  "image_list" text,
-  "hide_content" text,
-  "vote_id" int8 NOT NULL DEFAULT 0,
-  "recommend" bool NOT NULL,
-  "recommend_time" int8 NOT NULL,
-  "sticky" bool NOT NULL,
-  "sticky_time" int8 NOT NULL,
-  "view_count" int8 NOT NULL,
-  "comment_count" int8 NOT NULL,
-  "like_count" int8 NOT NULL,
-  "status" int8,
-  "last_comment_time" int8,
-  "last_comment_user_id" int8,
-  "user_agent" varchar(1024),
-  "ip" varchar(128),
-  "ip_location" varchar(64),
-  "create_time" int8,
-  "extra_data" text,
-  CONSTRAINT "t_topic_pkey" PRIMARY KEY ("id")
-);
-```
+- 按 `t_favorite.create_time DESC, t_favorite.id DESC` 排序
 
 ### Query 参数
 
@@ -271,19 +197,11 @@ curl "http://localhost:8082/api/user/center/favorites?page=1&limit=10" \
       "title": "英超今晚怎么看？",
       "content": "聊聊这场比赛的几个关键点。",
       "create_time": "2026-05-16 10:20:00"
-    },
-    {
-      "id": 302,
-      "user_id": 1,
-      "entity_id": 2002,
-      "title": "西甲本轮观察",
-      "content": "这轮更看好主场一方。",
-      "create_time": "2026-05-15 19:30:00"
     }
   ],
   "page": 1,
   "limit": 10,
-  "total": 2
+  "total": 1
 }
 ```
 
@@ -305,5 +223,194 @@ WHERE f.user_id = :current_user_id
   AND f.user_id <> t.user_id
   AND t.status = 0
 ORDER BY f.create_time DESC, f.id DESC
+LIMIT :limit OFFSET (:page - 1) * :limit;
+```
+
+---
+
+## 4. 帖子显示状态设计
+
+本次隐藏帖子需求不修改 `t_topic.status` 语义，新增字段 `display_status` 用于控制“用户自己隐藏的帖子”。
+
+### 字段建议
+
+表：`t_topic`
+
+- `display_status = 0`：显示
+- `display_status = 1`：隐藏
+
+### 设计说明
+
+- `status` 继续表示帖子业务状态，例如正常、删除、待审核
+- `display_status` 单独表示帖子是否被作者隐藏
+- “隐藏帖子列表”查询条件按 `user_id + display_status = 1` 查询
+- 隐藏/取消隐藏只更新 `display_status`，不改 `status`
+
+### 建议 DDL
+
+```sql
+ALTER TABLE t_topic
+ADD COLUMN display_status int2 NOT NULL DEFAULT 0;
+
+COMMENT ON COLUMN t_topic.display_status IS '显示状态：0-显示，1-隐藏';
+```
+
+### 本次维护脚本
+
+```sql
+ALTER TABLE t_topic
+ADD COLUMN display_status int2 NOT NULL DEFAULT 0;
+```
+
+---
+
+## 5. 隐藏帖子
+
+- 方法：`POST`
+- 路径：`/api/user/topic/hide/{topicId}`
+- 认证：是
+
+### 需求说明
+
+登录用户将自己的帖子设为隐藏状态。
+
+接口行为：
+
+- 仅允许操作当前登录用户自己发布的帖子
+- 更新 `t_topic.display_status = 1`
+- 不修改 `t_topic.status`
+
+### Path 参数
+
+- `topicId`：帖子 ID
+
+### 返回
+
+成功返回：
+
+```json
+{
+  "success": true
+}
+```
+
+### 可能错误
+
+- 未登录
+- 帖子不存在
+- 无权限操作他人帖子
+
+---
+
+## 6. 取消隐藏帖子
+
+- 方法：`POST`
+- 路径：`/api/user/topic/unhide/{topicId}`
+- 认证：是
+
+### 需求说明
+
+登录用户将自己已隐藏的帖子恢复为显示状态。
+
+接口行为：
+
+- 仅允许操作当前登录用户自己发布的帖子
+- 更新 `t_topic.display_status = 0`
+- 不修改 `t_topic.status`
+
+### Path 参数
+
+- `topicId`：帖子 ID
+
+### 返回
+
+成功返回：
+
+```json
+{
+  "success": true
+}
+```
+
+### 可能错误
+
+- 未登录
+- 帖子不存在
+- 无权限操作他人帖子
+
+---
+
+## 7. 登录用户自己隐藏的帖子列表
+
+- 方法：`POST`
+- 路径：`/api/user/topic/hide/list?page=1&limit=10`
+- 认证：是
+
+### 需求说明
+
+分页查询当前登录用户自己隐藏的帖子列表。
+
+查询口径：
+
+- 查询表：`t_topic`
+- 按当前登录用户 `user_id` 查询
+- 只查询 `display_status = 1` 的帖子
+- 建议按 `create_time DESC, id DESC` 排序
+
+### Query 参数
+
+- `page`：页码，默认 `1`
+- `limit`：每页数量，默认 `20`，最大 `200`
+
+### 返回字段
+
+- `id`：帖子 ID
+- `user_id`：用户 ID
+- `content`：帖子内容
+- `title`：帖子标题
+- `create_time`：帖子创建时间
+- `display_status`：显示状态，`0` 表示显示，`1` 表示隐藏
+
+### 示例
+
+```bash
+curl -X POST "http://localhost:8082/api/user/topic/hide/list?page=1&limit=10" \
+  -b "bbsgo_token=<YOUR_TOKEN>"
+```
+
+### 返回示例
+
+```json
+{
+  "results": [
+    {
+      "id": 201,
+      "user_id": 1,
+      "content": "这个观点我比较认同。",
+      "title": "英超今晚怎么看？",
+      "create_time": "2026-05-15 21:10:00",
+      "display_status": 1
+    }
+  ],
+  "page": 1,
+  "limit": 10,
+  "total": 1
+}
+```
+
+### 参考 SQL
+
+```sql
+SELECT
+    id,
+    user_id,
+    content,
+    title,
+    create_time,
+    display_status
+FROM t_topic
+WHERE user_id = :current_user_id
+  AND display_status = 1
+ORDER BY create_time DESC, id DESC
 LIMIT :limit OFFSET (:page - 1) * :limit;
 ```

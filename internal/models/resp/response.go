@@ -126,6 +126,15 @@ type UserCenterFavoriteResponse struct {
 	CreateTime int64  `json:"create_time"`
 }
 
+type UserCenterHiddenTopicResponse struct {
+	Id            int64  `json:"id"`
+	UserId        int64  `json:"user_id"`
+	Content       string `json:"content"`
+	Title         string `json:"title"`
+	CreateTime    string `json:"create_time"`
+	DisplayStatus int    `json:"display_status"`
+}
+
 type ArticleSimpleResponse struct {
 	Id           int64          `json:"id"`
 	User         *UserInfo      `json:"user"`
