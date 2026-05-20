@@ -9,7 +9,7 @@ Usage:
 Exports owner-role users from a TurtlePoll/bbs-go PostgreSQL database.
 
 Database:
-  postgres://appuser:root@127.0.0.1:5432/turtlepoll?sslmode=disable
+  postgres://appuser:root@52.77.212.173:5432/turtlepoll?sslmode=disable
 
 Output:
   output_dir/users.csv
@@ -41,7 +41,7 @@ fi
 
 require_cmd psql
 
-DB_URL="postgres://appuser:root@127.0.0.1:5432/turtlepoll?sslmode=disable"
+DB_URL="postgres://appuser:root@52.77.212.173:5432/turtlepoll?sslmode=disable"
 
 OUTPUT_DIR="${1:-owner-users-export-$(date '+%Y%m%d-%H%M%S')}"
 mkdir -p "$OUTPUT_DIR"
@@ -59,6 +59,18 @@ tables=t_user,t_user_role,t_third_user
 EOF
 
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "COPY (
+  WITH owner_users AS (
+    SELECT DISTINCT u.id
+    FROM t_user u
+    LEFT JOIN t_user_role ur ON ur.user_id = u.id
+    LEFT JOIN t_role r ON r.id = ur.role_id
+    WHERE r.code = 'owner'
+       OR EXISTS (
+         SELECT 1
+         FROM regexp_split_to_table(COALESCE(u.roles, ''), ',') AS role_code
+         WHERE trim(role_code) = 'owner'
+       )
+  )
   SELECT DISTINCT
     u.id,
     u.type,
@@ -87,26 +99,68 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "COPY (
     u.create_time,
     u.update_time
   FROM t_user u
-  JOIN t_user_role ur ON ur.user_id = u.id
-  JOIN t_role r ON r.id = ur.role_id
-  WHERE r.code = 'owner'
+  JOIN owner_users ou ON ou.id = u.id
   ORDER BY u.id
 ) TO STDOUT WITH (FORMAT csv, HEADER true, FORCE_QUOTE *);" >"$USERS_CSV"
 
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "COPY (
-  SELECT DISTINCT
-    ur.user_id,
-    r.code AS role_code,
-    ur.create_time
-  FROM t_user_role ur
-  JOIN t_role r ON r.id = ur.role_id
-  JOIN t_user_role owner_ur ON owner_ur.user_id = ur.user_id
-  JOIN t_role owner_role ON owner_role.id = owner_ur.role_id
-  WHERE owner_role.code = 'owner'
-  ORDER BY ur.user_id, r.code
+  WITH owner_users AS (
+    SELECT DISTINCT u.id
+    FROM t_user u
+    LEFT JOIN t_user_role ur ON ur.user_id = u.id
+    LEFT JOIN t_role r ON r.id = ur.role_id
+    WHERE r.code = 'owner'
+       OR EXISTS (
+         SELECT 1
+         FROM regexp_split_to_table(COALESCE(u.roles, ''), ',') AS role_code
+         WHERE trim(role_code) = 'owner'
+       )
+  ),
+  existing_roles AS (
+    SELECT DISTINCT
+      ur.user_id,
+      r.code AS role_code,
+      ur.create_time
+    FROM t_user_role ur
+    JOIN t_role r ON r.id = ur.role_id
+    JOIN owner_users ou ON ou.id = ur.user_id
+  ),
+  roles_from_user_cache AS (
+    SELECT DISTINCT
+      u.id AS user_id,
+      trim(role_code) AS role_code,
+      u.create_time
+    FROM t_user u
+    JOIN owner_users ou ON ou.id = u.id
+    CROSS JOIN regexp_split_to_table(COALESCE(u.roles, ''), ',') AS role_code
+    WHERE trim(role_code) <> ''
+  )
+  SELECT
+    user_id,
+    role_code,
+    MIN(create_time) AS create_time
+  FROM (
+    SELECT * FROM existing_roles
+    UNION ALL
+    SELECT * FROM roles_from_user_cache
+  ) roles
+  GROUP BY user_id, role_code
+  ORDER BY user_id, role_code
 ) TO STDOUT WITH (FORMAT csv, HEADER true, FORCE_QUOTE *);" >"$USER_ROLES_CSV"
 
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "COPY (
+  WITH owner_users AS (
+    SELECT DISTINCT u.id
+    FROM t_user u
+    LEFT JOIN t_user_role ur ON ur.user_id = u.id
+    LEFT JOIN t_role r ON r.id = ur.role_id
+    WHERE r.code = 'owner'
+       OR EXISTS (
+         SELECT 1
+         FROM regexp_split_to_table(COALESCE(u.roles, ''), ',') AS role_code
+         WHERE trim(role_code) = 'owner'
+       )
+  )
   SELECT
     tu.id,
     tu.user_id,
@@ -118,14 +172,12 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "COPY (
     tu.create_time,
     tu.update_time
   FROM t_third_user tu
-  JOIN t_user_role owner_ur ON owner_ur.user_id = tu.user_id
-  JOIN t_role owner_role ON owner_role.id = owner_ur.role_id
-  WHERE owner_role.code = 'owner'
+  JOIN owner_users ou ON ou.id = tu.user_id
   ORDER BY tu.id
 ) TO STDOUT WITH (FORMAT csv, HEADER true, FORCE_QUOTE *);" >"$THIRD_USERS_CSV"
 
-owner_count="$(psql "$DB_URL" -At -v ON_ERROR_STOP=1 -c "SELECT count(DISTINCT u.id) FROM t_user u JOIN t_user_role ur ON ur.user_id = u.id JOIN t_role r ON r.id = ur.role_id WHERE r.code = 'owner';")"
-third_user_count="$(psql "$DB_URL" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM t_third_user tu JOIN t_user_role ur ON ur.user_id = tu.user_id JOIN t_role r ON r.id = ur.role_id WHERE r.code = 'owner';")"
+owner_count="$(psql "$DB_URL" -At -v ON_ERROR_STOP=1 -c "WITH owner_users AS (SELECT DISTINCT u.id FROM t_user u LEFT JOIN t_user_role ur ON ur.user_id = u.id LEFT JOIN t_role r ON r.id = ur.role_id WHERE r.code = 'owner' OR EXISTS (SELECT 1 FROM regexp_split_to_table(COALESCE(u.roles, ''), ',') AS role_code WHERE trim(role_code) = 'owner')) SELECT count(*) FROM owner_users;")"
+third_user_count="$(psql "$DB_URL" -At -v ON_ERROR_STOP=1 -c "WITH owner_users AS (SELECT DISTINCT u.id FROM t_user u LEFT JOIN t_user_role ur ON ur.user_id = u.id LEFT JOIN t_role r ON r.id = ur.role_id WHERE r.code = 'owner' OR EXISTS (SELECT 1 FROM regexp_split_to_table(COALESCE(u.roles, ''), ',') AS role_code WHERE trim(role_code) = 'owner')) SELECT count(*) FROM t_third_user tu JOIN owner_users ou ON ou.id = tu.user_id;")"
 
 log "exported owner users: $owner_count"
 log "exported third-party bindings: $third_user_count"

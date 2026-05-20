@@ -53,13 +53,16 @@ for file in metadata.txt users.csv user_roles.csv third_users.csv; do
 done
 
 DB_URL="postgres://appuser:root@127.0.0.1:5432/turtlepoll?sslmode=disable"
+USERS_CSV="$EXPORT_DIR/users.csv"
+USER_ROLES_CSV="$EXPORT_DIR/user_roles.csv"
+THIRD_USERS_CSV="$EXPORT_DIR/third_users.csv"
 
 log "importing owner users from $EXPORT_DIR"
 
-psql "$DB_URL" -v ON_ERROR_STOP=1 \
-  -v users_csv="$EXPORT_DIR/users.csv" \
-  -v user_roles_csv="$EXPORT_DIR/user_roles.csv" \
-  -v third_users_csv="$EXPORT_DIR/third_users.csv" <<'SQL'
+log "target database: $DB_URL"
+log "csv rows: users=$(( $(wc -l < "$USERS_CSV") - 1 )), user_roles=$(( $(wc -l < "$USER_ROLES_CSV") - 1 )), third_users=$(( $(wc -l < "$THIRD_USERS_CSV") - 1 ))"
+
+psql "$DB_URL" -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
 
 CREATE TEMP TABLE tmp_owner_users (
@@ -109,11 +112,50 @@ CREATE TEMP TABLE tmp_owner_third_users (
   update_time bigint
 ) ON COMMIT DROP;
 
-\copy tmp_owner_users FROM :'users_csv' WITH (FORMAT csv, HEADER true)
-\copy tmp_owner_user_roles FROM :'user_roles_csv' WITH (FORMAT csv, HEADER true)
-\copy tmp_owner_third_users FROM :'third_users_csv' WITH (FORMAT csv, HEADER true)
+\copy tmp_owner_users FROM '$USERS_CSV' WITH (FORMAT csv, HEADER true)
+\copy tmp_owner_user_roles FROM '$USER_ROLES_CSV' WITH (FORMAT csv, HEADER true)
+\copy tmp_owner_third_users FROM '$THIRD_USERS_CSV' WITH (FORMAT csv, HEADER true)
 
-DO $$
+\echo ''
+\echo '== target database =='
+SELECT current_database() AS database, current_schema() AS schema, current_user AS user;
+
+\echo ''
+\echo '== required tables =='
+SELECT
+  to_regclass('public.t_user') AS t_user,
+  to_regclass('public.t_role') AS t_role,
+  to_regclass('public.t_user_role') AS t_user_role,
+  to_regclass('public.t_third_user') AS t_third_user;
+
+DO \$\$
+BEGIN
+  IF to_regclass('public.t_user') IS NULL THEN
+    RAISE EXCEPTION 'target table public.t_user does not exist; check DB_URL or run migrations first';
+  END IF;
+  IF to_regclass('public.t_role') IS NULL THEN
+    RAISE EXCEPTION 'target table public.t_role does not exist; check DB_URL or run migrations first';
+  END IF;
+  IF to_regclass('public.t_user_role') IS NULL THEN
+    RAISE EXCEPTION 'target table public.t_user_role does not exist; check DB_URL or run migrations first';
+  END IF;
+  IF to_regclass('public.t_third_user') IS NULL THEN
+    RAISE EXCEPTION 'target table public.t_third_user does not exist; check DB_URL or run migrations first';
+  END IF;
+END \$\$;
+
+\echo ''
+\echo '== source rows loaded into temp tables =='
+SELECT
+  (SELECT count(*) FROM tmp_owner_users) AS users_csv_rows,
+  (SELECT count(*) FROM tmp_owner_user_roles) AS user_roles_csv_rows,
+  (SELECT count(*) FROM tmp_owner_third_users) AS third_users_csv_rows;
+
+\echo ''
+\echo '== target t_user before import =='
+SELECT count(*) AS target_user_count_before FROM t_user;
+
+DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM t_role WHERE code = 'owner') THEN
     RAISE EXCEPTION 'target database is missing role code owner; run installation/migrations first';
@@ -133,7 +175,52 @@ BEGIN
         WHERE r.id IS NULL
       );
   END IF;
-END $$;
+END \$\$;
+
+\echo ''
+\echo '== conflicting existing users with different id =='
+SELECT 'username' AS conflict_type, tu.id AS import_id, u.id AS existing_id, tu.username AS value
+FROM tmp_owner_users tu
+JOIN t_user u ON u.username = NULLIF(tu.username, '')
+WHERE u.id <> tu.id
+UNION ALL
+SELECT 'email' AS conflict_type, tu.id AS import_id, u.id AS existing_id, tu.email AS value
+FROM tmp_owner_users tu
+JOIN t_user u ON u.email = NULLIF(tu.email, '')
+WHERE u.id <> tu.id
+UNION ALL
+SELECT 'phone' AS conflict_type, tu.id AS import_id, u.id AS existing_id, tu.phone AS value
+FROM tmp_owner_users tu
+JOIN t_user u ON u.phone = NULLIF(tu.phone, '')
+WHERE u.id <> tu.id
+ORDER BY conflict_type, import_id;
+
+DO \$\$
+DECLARE
+  conflict_count integer;
+BEGIN
+  SELECT count(*) INTO conflict_count
+  FROM (
+    SELECT 1
+    FROM tmp_owner_users tu
+    JOIN t_user u ON u.username = NULLIF(tu.username, '')
+    WHERE u.id <> tu.id
+    UNION ALL
+    SELECT 1
+    FROM tmp_owner_users tu
+    JOIN t_user u ON u.email = NULLIF(tu.email, '')
+    WHERE u.id <> tu.id
+    UNION ALL
+    SELECT 1
+    FROM tmp_owner_users tu
+    JOIN t_user u ON u.phone = NULLIF(tu.phone, '')
+    WHERE u.id <> tu.id
+  ) conflicts;
+
+  IF conflict_count > 0 THEN
+    RAISE EXCEPTION 'import aborted: username/email/phone already exists on different user id; see conflicting existing users above';
+  END IF;
+END \$\$;
 
 INSERT INTO t_user (
   id,
@@ -223,12 +310,19 @@ USING tmp_owner_users u
 WHERE ur.user_id = u.id;
 
 INSERT INTO t_user_role (user_id, role_id, create_time)
-SELECT DISTINCT
-  tur.user_id,
-  r.id,
-  COALESCE(tur.create_time, floor(extract(epoch FROM now()))::bigint)
-FROM tmp_owner_user_roles tur
-JOIN t_role r ON r.code = tur.role_code
+SELECT
+  user_id,
+  role_id,
+  MIN(create_time) AS create_time
+FROM (
+  SELECT
+    tur.user_id,
+    r.id AS role_id,
+    COALESCE(tur.create_time, floor(extract(epoch FROM now()))::bigint) AS create_time
+  FROM tmp_owner_user_roles tur
+  JOIN t_role r ON r.code = tur.role_code
+) role_rows
+GROUP BY user_id, role_id
 ON CONFLICT (user_id, role_id) DO UPDATE SET
   create_time = EXCLUDED.create_time;
 
@@ -279,6 +373,25 @@ SELECT setval(pg_get_serial_sequence('t_user', 'id'), GREATEST((SELECT COALESCE(
 SELECT setval(pg_get_serial_sequence('t_user_role', 'id'), GREATEST((SELECT COALESCE(MAX(id), 1) FROM t_user_role), 1), true);
 SELECT setval(pg_get_serial_sequence('t_third_user', 'id'), GREATEST((SELECT COALESCE(MAX(id), 1) FROM t_third_user), 1), true);
 
+\echo ''
+\echo '== target t_user after import =='
+SELECT count(*) AS target_user_count_after FROM t_user;
+
+\echo ''
+\echo '== imported users =='
+SELECT
+  u.id,
+  u.username,
+  u.email,
+  u.nickname,
+  u.status,
+  u.roles
+FROM t_user u
+JOIN tmp_owner_users tu ON tu.id = u.id
+ORDER BY u.id;
+
+\echo ''
+\echo '== imported owner users =='
 SELECT
   count(DISTINCT u.id) AS imported_owner_users
 FROM t_user u
