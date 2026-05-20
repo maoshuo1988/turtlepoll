@@ -16,7 +16,9 @@ scp -i /opt/pem/bbs.pem ubuntu@52.77.212.173:/srv/project/turtlepoll/bbs-go.yaml
 ## 上传
 ``` bash
 scp -i /opt/pem/bbs.pem bbs-go-linux ubuntu@<SERVER_IP>:/tmp/
+# 原始环境
 scp -i /opt/pem/bbs.pem bbs-go-linux ubuntu@52.77.212.173:/tmp/
+scp -i /opt/pem/bbs.pem -r owner-users-export-20260520-093511 ubuntu@13.250.108.70:/tmp/
 ```
 ## 配置文件
 ``` bash

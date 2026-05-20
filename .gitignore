@@ -59,3 +59,5 @@ frontTest/.vite/
 frontTest/dist/
 frontTest/.cache/
 
+owner-user-export-*/
+owner-users-export-*/
