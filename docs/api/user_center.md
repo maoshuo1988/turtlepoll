@@ -414,3 +414,243 @@ WHERE user_id = :current_user_id
 ORDER BY create_time DESC, id DESC
 LIMIT :limit OFFSET (:page - 1) * :limit;
 ```
+
+---
+
+## 8. 登录用户点踩别人的帖子列表
+
+- 方法：`GET`
+- 路径：`/api/user/center/dislike/list`
+- 认证：是
+
+### 需求说明
+用于用户中心分页查询当前登录用户“点踩过的别人的帖子”列表。
+
+### 表结构（t_user_dislike）
+
+字段说明（核心字段）：
+
+- `id`：主键 ID
+- `user_id`：点踩用户 ID
+- `entity_id`：实体 ID（当前仅支持帖子 ID）
+- `entity_type`：实体类型（当前固定为 `topic`）
+- `status`：点踩状态：`0`-已取消点踩，`1`-点踩中
+- `create_time`：点踩时间（重新点踩时可刷新时间）
+
+建议 DDL（Postgres）：
+
+```sql
+CREATE TABLE IF NOT EXISTS t_user_dislike (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL,
+    entity_id   BIGINT NOT NULL,
+    entity_type VARCHAR(32) NOT NULL,
+    status      INT NOT NULL DEFAULT 1,
+    create_time BIGINT
+);
+
+-- 防重复（同一用户对同一实体同一类型只保留一条记录，通过 status 表示是否有效）
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_dislike_unique
+ON t_user_dislike(user_id, entity_id, entity_type);
+
+-- 便于按实体统计/查询
+CREATE INDEX IF NOT EXISTS idx_user_dislike_entity
+ON t_user_dislike(entity_id, entity_type);
+
+-- 便于用户中心列表（按 create_time,id 倒序分页）
+CREATE INDEX IF NOT EXISTS idx_user_dislike_user_type_status_time
+ON t_user_dislike(user_id, entity_type, status, create_time DESC, id DESC);
+```
+
+统计口径：
+- 查询表：`t_user_dislike`
+- 只统计 `t_user_dislike.entity_type = 'topic'` 的记录
+- 只统计 `t_user_dislike.status = 1` 的记录（有效点踩）
+- 通过 `t_user_dislike.entity_id = t_topic.id` 关联帖子表 `t_topic`
+- 只返回“当前登录用户自己点踩过的帖子”
+- 只返回“点踩的是别人发布的帖子”
+- 判定条件：`t_user_dislike.user_id <> t_topic.user_id`
+- 只返回正常状态帖子：`t_topic.status = 0`
+- 建议按 `t_user_dislike.create_time DESC, t_user_dislike.id DESC` 排序
+
+### Query 参数
+
+- `page`：页码，默认 `1`
+- `limit`：每页数量，默认 `20`，最大 `200`
+
+### 返回字段
+
+- `id`：点踩记录主键 ID
+- `user_id`：点踩用户 ID
+- `entity_id`：帖子 ID
+- `entity_type`：实体类型，固定为 `topic`
+- `title`：帖子标题
+- `content`：帖子内容
+- `topic_user_id`：帖子作者 ID
+- `create_time`：点踩时间
+
+### 示例
+
+```bash
+curl "http://localhost:8082/api/user/center/dislike/list?page=1&limit=10" \
+  -b "bbsgo_token=<YOUR_TOKEN>"
+```
+
+### 返回示例
+
+```json
+{
+  "results": [
+    {
+      "id": 401,
+      "user_id": 1,
+      "entity_id": 2001,
+      "entity_type": "topic",
+      "title": "英超今晚怎么看？",
+      "content": "聊聊这场比赛的几个关键点。",
+      "topic_user_id": 2,
+      "create_time": "2026-05-20 11:30:00"
+    }
+  ],
+  "page": 1,
+  "limit": 10,
+  "total": 1
+}
+```
+
+### 参考 SQL
+
+```sql
+SELECT
+    d.id,
+    d.user_id,
+    d.entity_id,
+    d.entity_type,
+    t.title,
+    t.content,
+    t.user_id AS topic_user_id,
+    d.create_time
+FROM t_user_dislike d
+INNER JOIN t_topic t
+    ON t.id = d.entity_id
+WHERE d.user_id = :current_user_id
+  AND d.entity_type = 'topic'
+  AND d.status = 1
+  AND d.user_id <> t.user_id
+  AND t.status = 0
+ORDER BY d.create_time DESC, d.id DESC
+LIMIT :limit OFFSET (:page - 1) * :limit;
+```
+
+---
+
+## 9. 用户点踩帖子
+
+- 方法：`POST`
+- 路径：`/api/dislike/create`
+- 认证：是
+
+### 需求说明
+登录用户点击帖子列表中的某个帖子后，向 `t_user_dislike` 写入点踩记录（带 `status`），供前端调用。
+
+接口行为建议：
+- 仅允许登录用户调用
+- 当前版本仅支持 `entityType = 'topic'`
+- `entityId` 必须是有效帖子 ID
+- 不允许点踩自己发布的帖子
+- 点踩逻辑：
+  - 存在记录 → 把 `status` 改成 `1`（可同时刷新 `create_time`）
+  - 不存在 → 插入一条 `status = 1`
+- 成功后返回统一成功结构
+
+### Form 参数
+
+- `entityType`：实体类型，当前固定传 `topic`
+- `entityId`：帖子 ID
+
+### 示例
+
+```bash
+curl -X POST "http://localhost:8082/api/dislike/create" \
+  -b "bbsgo_token=<YOUR_TOKEN>" \
+  -d "entityType=topic" \
+  -d "entityId=2001"
+```
+
+### 成功返回
+
+```json
+{
+  "success": true
+}
+```
+
+### 建议插入 SQL
+
+```sql
+INSERT INTO t_user_dislike (
+    user_id,
+    entity_id,
+    entity_type,
+    status,
+    create_time
+) VALUES (
+    :current_user_id,
+    :entity_id,
+    'topic',
+    1,
+    :now_ts
+);
+```
+
+---
+
+## 10. 用户取消点踩帖子
+
+- 方法：`POST`
+- 路径：`/api/dislike/cancle`
+- 认证：是
+
+### 需求说明
+
+登录用户取消对某个帖子点踩。
+
+接口行为建议：
+- 仅允许登录用户调用
+- 当前版本仅支持 `entityType = 'topic'`
+- `entityId` 必须是有效帖子 ID
+- 帖子不存在时返回错误提示“帖子不存在”
+- 找到点踩记录 → 把 `status` 改成 `0`
+- 成功后返回统一成功结构
+
+### Form 参数
+
+- `entityType`：实体类型，当前固定传 `topic`
+- `entityId`：帖子 ID
+
+### 示例
+
+```bash
+curl -X POST "http://localhost:8082/api/dislike/cancle" \
+  -b "bbsgo_token=<YOUR_TOKEN>" \
+  -d "entityType=topic" \
+  -d "entityId=2001"
+```
+
+### 成功返回
+
+```json
+{
+  "success": true
+}
+```
+
+### 建议更新 SQL
+
+```sql
+UPDATE t_user_dislike
+SET status = 0
+WHERE user_id = :current_user_id
+  AND entity_type = 'topic'
+  AND entity_id = :entity_id;
+```

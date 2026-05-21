@@ -11,6 +11,18 @@ type UserLike struct {
 	CreateTime int64  `json:"createTime" form:"createTime"`                                                                                      // 创建时间
 }
 
+// UserDislike 用户点踩
+//
+// EntityId + EntityType 表示被点踩对象（当前版本仅用于 topic 点踩）。
+type UserDislike struct {
+	Model
+	UserId     int64  `gorm:"not null;uniqueIndex:idx_user_dislike_unique;" json:"userId" form:"userId"`                                               // 用户
+	EntityId   int64  `gorm:"not null;uniqueIndex:idx_user_dislike_unique;index:idx_user_dislike_entity;" json:"entityId" form:"entityId"`             // 实体编号
+	EntityType string `gorm:"not null;size:32;uniqueIndex:idx_user_dislike_unique;index:idx_user_dislike_entity;" json:"entityType" form:"entityType"` // 实体类型
+	Status     int    `gorm:"type:int;not null;default:1;index:idx_user_dislike_status;" json:"status" form:"status"`                                  // 状态：0-取消点踩，1-点踩
+	CreateTime int64  `json:"createTime" form:"createTime"`                                                                                            // 创建时间
+}
+
 // Message 站内消息
 type Message struct {
 	Model

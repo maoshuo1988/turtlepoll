@@ -36,6 +36,7 @@ func (c *UserController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("GET", "/center/topics", "GetCenterTopics")
 	b.Handle("GET", "/center/comments", "GetCenterComments")
 	b.Handle("GET", "/center/favorites", "GetCenterFavorites")
+	b.Handle("GET", "/center/dislike/list", "GetCenterDislikeList")
 	b.Handle("POST", "/topic/hide/list", "PostTopicHideList")
 	b.Handle("POST", "/topic/hide/{topicId}", "PostTopicHideBy")
 	b.Handle("POST", "/topic/unhide/{topicId}", "PostTopicUnhideBy")
@@ -591,6 +592,20 @@ func (c *UserController) GetCenterFavorites() *web.JsonResult {
 	}
 
 	results, paging, err := services.FavoriteService.FindUserCenterFavoritePage(userId, page, limit)
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonPageData(results, paging)
+}
+
+func (c *UserController) GetCenterDislikeList() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	page, limit := getUserCenterPageLimit(c.Ctx)
+	results, paging, err := services.UserDislikeService.FindUserCenterDislikePage(currentUser.Id, page, limit)
 	if err != nil {
 		return web.JsonError(err)
 	}

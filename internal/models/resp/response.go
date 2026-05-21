@@ -126,6 +126,17 @@ type UserCenterFavoriteResponse struct {
 	CreateTime int64  `json:"create_time"`
 }
 
+type UserCenterDislikeResponse struct {
+	Id          int64  `json:"id"`
+	UserId      int64  `json:"user_id"`
+	EntityId    int64  `json:"entity_id"`
+	EntityType  string `json:"entity_type"`
+	Title       string `json:"title"`
+	Content     string `json:"content"`
+	TopicUserId int64  `json:"topic_user_id"`
+	CreateTime  int64  `json:"create_time"`
+}
+
 type UserCenterHiddenTopicResponse struct {
 	Id            int64  `json:"id"`
 	UserId        int64  `json:"user_id"`
@@ -188,6 +199,7 @@ type TopicResponse struct {
 	ViewCount       int64               `json:"viewCount"`
 	CommentCount    int64               `json:"commentCount"`
 	LikeCount       int64               `json:"likeCount"`
+	DislikeCount    int64               `json:"disLikeCount"`
 	Liked           bool                `json:"liked"`
 	CreateTime      int64               `json:"createTime"`
 	Recommend       bool                `json:"recommend"`
