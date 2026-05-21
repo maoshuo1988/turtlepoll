@@ -1,6 +1,9 @@
 package repositories
 
 import (
+	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/resp"
+
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web/params"
 	"gorm.io/gorm"
@@ -58,6 +61,38 @@ func (r *commentRepository) FindPageByCnd(db *gorm.DB, cnd *sqls.Cnd) (list []mo
 		Page:  cnd.Paging.Page,
 		Limit: cnd.Paging.Limit,
 		Total: count,
+	}
+	return
+}
+
+func (r *commentRepository) FindUserCenterCommentPage(db *gorm.DB, userId int64, page, limit int) (list []resp.UserCenterCommentResponse, paging *sqls.Paging, err error) {
+	baseQuery := db.Table("t_comment AS c").
+		Joins("INNER JOIN t_topic t ON t.id = c.entity_id").
+		Where("c.user_id = ?", userId).
+		Where("c.entity_type = ?", constants.EntityTopic).
+		Where("c.status = ?", constants.StatusOk).
+		Where("t.status = ?", constants.StatusOk).
+		Where("c.user_id <> t.user_id")
+
+	var total int64
+	if err = baseQuery.Count(&total).Error; err != nil {
+		return
+	}
+
+	err = baseQuery.
+		Select("c.id, c.user_id, c.content, t.title, c.create_time").
+		Order("c.create_time DESC, c.id DESC").
+		Offset((page - 1) * limit).
+		Limit(limit).
+		Scan(&list).Error
+	if err != nil {
+		return
+	}
+
+	paging = &sqls.Paging{
+		Page:  page,
+		Limit: limit,
+		Total: total,
 	}
 	return
 }

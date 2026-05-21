@@ -95,6 +95,57 @@ type TagResponse struct {
 	Name string `json:"name"`
 }
 
+type TagCommentStatResponse struct {
+	TagId        int64  `json:"tagId"`
+	TagName      string `json:"tagName"`
+	CommentCount int64  `json:"commentCount"`
+}
+
+type UserCenterTopicResponse struct {
+	Id         int64  `json:"id"`
+	UserId     int64  `json:"userId"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	CreateTime int64  `json:"create_time"`
+}
+
+type UserCenterCommentResponse struct {
+	Id         int64  `json:"id"`
+	UserId     int64  `json:"user_id"`
+	Content    string `json:"content"`
+	Title      string `json:"title"`
+	CreateTime int64  `json:"create_time"`
+}
+
+type UserCenterFavoriteResponse struct {
+	Id         int64  `json:"id"`
+	UserId     int64  `json:"user_id"`
+	EntityId   int64  `json:"entity_id"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	CreateTime int64  `json:"create_time"`
+}
+
+type UserCenterDislikeResponse struct {
+	Id          int64  `json:"id"`
+	UserId      int64  `json:"user_id"`
+	EntityId    int64  `json:"entity_id"`
+	EntityType  string `json:"entity_type"`
+	Title       string `json:"title"`
+	Content     string `json:"content"`
+	TopicUserId int64  `json:"topic_user_id"`
+	CreateTime  int64  `json:"create_time"`
+}
+
+type UserCenterHiddenTopicResponse struct {
+	Id            int64  `json:"id"`
+	UserId        int64  `json:"user_id"`
+	Content       string `json:"content"`
+	Title         string `json:"title"`
+	CreateTime    string `json:"create_time"`
+	DisplayStatus int    `json:"display_status"`
+}
+
 type ArticleSimpleResponse struct {
 	Id           int64          `json:"id"`
 	User         *UserInfo      `json:"user"`
@@ -148,6 +199,7 @@ type TopicResponse struct {
 	ViewCount       int64               `json:"viewCount"`
 	CommentCount    int64               `json:"commentCount"`
 	LikeCount       int64               `json:"likeCount"`
+	DislikeCount    int64               `json:"disLikeCount"`
 	Liked           bool                `json:"liked"`
 	CreateTime      int64               `json:"createTime"`
 	Recommend       bool                `json:"recommend"`

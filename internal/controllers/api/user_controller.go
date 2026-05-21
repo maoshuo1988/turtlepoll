@@ -12,8 +12,10 @@ import (
 	"bbs-go/internal/pkg/validate"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/mvc"
 	"github.com/mlogclub/simple/common/strs"
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
@@ -28,6 +30,16 @@ import (
 
 type UserController struct {
 	Ctx iris.Context
+}
+
+func (c *UserController) BeforeActivation(b mvc.BeforeActivation) {
+	b.Handle("GET", "/center/topics", "GetCenterTopics")
+	b.Handle("GET", "/center/comments", "GetCenterComments")
+	b.Handle("GET", "/center/favorites", "GetCenterFavorites")
+	b.Handle("GET", "/center/dislike/list", "GetCenterDislikeList")
+	b.Handle("POST", "/topic/hide/list", "PostTopicHideList")
+	b.Handle("POST", "/topic/hide/{topicId}", "PostTopicHideBy")
+	b.Handle("POST", "/topic/unhide/{topicId}", "PostTopicUnhideBy")
 }
 
 // 获取当前登录用户
@@ -357,6 +369,62 @@ func (c *UserController) GetScoreRank() *web.JsonResult {
 	return web.JsonData(results)
 }
 
+func (c *UserController) GetCenterTopics() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	userId := currentUser.Id
+
+	page := params.FormValueIntDefault(c.Ctx, "page", 1)
+	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	cnd := sqls.NewCnd().
+		Eq("user_id", userId).
+		Eq("status", constants.StatusOk).
+		Page(page, limit).
+		Desc("create_time").
+		Desc("id")
+
+	topics, paging := services.TopicService.FindPageByCnd(cnd)
+	return web.JsonPageData(buildUserCenterTopics(topics), paging)
+}
+
+func (c *UserController) PostTopicHideBy(topicIdStr string) *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	topicId, err := strconv.ParseInt(topicIdStr, 10, 64)
+	if err != nil || topicId <= 0 {
+		return web.JsonErrorMsg(locales.Get("common.not_found"))
+	}
+
+	topic := services.TopicService.Get(topicId)
+	if topic == nil || topic.Status == constants.StatusDeleted {
+		return web.JsonErrorMsg(locales.Get("common.not_found"))
+	}
+	if topic.UserId != currentUser.Id {
+		return web.JsonErrorMsg(locales.Get("topic.no_permission"))
+	}
+
+	if err := services.TopicService.UpdateDisplayStatus(topicId, 1); err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonSuccess()
+}
+
 // 禁言
 func (c *UserController) PostForbidden() *web.JsonResult {
 	user := common.GetCurrentUser(c.Ctx)
@@ -449,4 +517,164 @@ func (c *UserController) GetGoogle_bind_info() *web.JsonResult {
 	return web.JsonData(map[string]any{
 		"bind": false,
 	})
+}
+
+func (c *UserController) GetCenterComments() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	userId := currentUser.Id
+
+	page := params.FormValueIntDefault(c.Ctx, "page", 1)
+	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	results, paging, err := services.CommentService.FindUserCenterCommentPage(userId, page, limit)
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonPageData(results, paging)
+}
+
+func (c *UserController) PostTopicUnhideBy(topicIdStr string) *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	topicId, err := strconv.ParseInt(topicIdStr, 10, 64)
+	if err != nil || topicId <= 0 {
+		return web.JsonErrorMsg(locales.Get("common.not_found"))
+	}
+
+	topic := services.TopicService.Get(topicId)
+	if topic == nil || topic.Status == constants.StatusDeleted {
+		return web.JsonErrorMsg(locales.Get("common.not_found"))
+	}
+	if topic.UserId != currentUser.Id {
+		return web.JsonErrorMsg(locales.Get("topic.no_permission"))
+	}
+
+	if err := services.TopicService.UpdateDisplayStatus(topicId, 0); err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonSuccess()
+}
+
+func (c *UserController) GetCenterFavorites() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	userId := currentUser.Id
+
+	page := params.FormValueIntDefault(c.Ctx, "page", 1)
+	limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	results, paging, err := services.FavoriteService.FindUserCenterFavoritePage(userId, page, limit)
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonPageData(results, paging)
+}
+
+func (c *UserController) GetCenterDislikeList() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	page, limit := getUserCenterPageLimit(c.Ctx)
+	results, paging, err := services.UserDislikeService.FindUserCenterDislikePage(currentUser.Id, page, limit)
+	if err != nil {
+		return web.JsonError(err)
+	}
+	return web.JsonPageData(results, paging)
+}
+
+func (c *UserController) PostTopicHideList() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	page, limit := getUserCenterPageLimit(c.Ctx)
+	topics, paging := services.TopicService.FindUserHiddenTopicPage(currentUser.Id, page, limit)
+	return web.JsonPageData(buildUserCenterHiddenTopics(topics), paging)
+}
+
+func getUserCenterPageLimit(ctx iris.Context) (page, limit int) {
+	page = params.FormValueIntDefault(ctx, "page", 1)
+	limit = params.FormValueIntDefault(ctx, "limit", 20)
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	return
+}
+
+func buildUserCenterTopics(topics []models.Topic) []resp.UserCenterTopicResponse {
+	if len(topics) == 0 {
+		return nil
+	}
+
+	results := make([]resp.UserCenterTopicResponse, 0, len(topics))
+	for _, topic := range topics {
+		results = append(results, resp.UserCenterTopicResponse{
+			Id:         topic.Id,
+			UserId:     topic.UserId,
+			Title:      topic.Title,
+			Content:    topic.Content,
+			CreateTime: topic.CreateTime,
+		})
+	}
+	return results
+}
+
+func buildUserCenterHiddenTopics(topics []models.Topic) []resp.UserCenterHiddenTopicResponse {
+	if len(topics) == 0 {
+		return nil
+	}
+
+	results := make([]resp.UserCenterHiddenTopicResponse, 0, len(topics))
+	for _, topic := range topics {
+		createTime := ""
+		if topic.CreateTime > 0 {
+			createTime = time.Unix(topic.CreateTime, 0).Format("2006-01-02 15:04:05")
+		}
+		results = append(results, resp.UserCenterHiddenTopicResponse{
+			Id:            topic.Id,
+			UserId:        topic.UserId,
+			Content:       topic.Content,
+			Title:         topic.Title,
+			CreateTime:    createTime,
+			DisplayStatus: topic.DisplayStatus,
+		})
+	}
+	return results
 }

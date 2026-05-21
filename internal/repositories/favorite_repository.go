@@ -1,6 +1,9 @@
 package repositories
 
 import (
+	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/resp"
+
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web/params"
 	"gorm.io/gorm"
@@ -58,6 +61,37 @@ func (r *favoriteRepository) FindPageByCnd(db *gorm.DB, cnd *sqls.Cnd) (list []m
 		Page:  cnd.Paging.Page,
 		Limit: cnd.Paging.Limit,
 		Total: count,
+	}
+	return
+}
+
+func (r *favoriteRepository) FindUserCenterFavoritePage(db *gorm.DB, userId int64, page, limit int) (list []resp.UserCenterFavoriteResponse, paging *sqls.Paging, err error) {
+	baseQuery := db.Table("t_favorite AS f").
+		Joins("INNER JOIN t_topic t ON t.id = f.entity_id").
+		Where("f.user_id = ?", userId).
+		Where("f.entity_type = ?", constants.EntityTopic).
+		Where("f.user_id <> t.user_id").
+		Where("t.status = ?", constants.StatusOk)
+
+	var total int64
+	if err = baseQuery.Count(&total).Error; err != nil {
+		return
+	}
+
+	err = baseQuery.
+		Select("f.id, f.user_id, f.entity_id, t.title, t.content, f.create_time").
+		Order("f.create_time DESC, f.id DESC").
+		Offset((page - 1) * limit).
+		Limit(limit).
+		Scan(&list).Error
+	if err != nil {
+		return
+	}
+
+	paging = &sqls.Paging{
+		Page:  page,
+		Limit: limit,
+		Total: total,
 	}
 	return
 }

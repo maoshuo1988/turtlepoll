@@ -108,12 +108,30 @@ func (c *TagController) GetAutocomplete() *web.JsonResult {
 // 根据标签编号批量获取
 func (c *TagController) GetTags() *web.JsonResult {
 	tagIds := params.FormValueInt64Array(c.Ctx, "tagIds")
-	var tags *[]resp.TagResponse
-	if len(tagIds) > 0 {
-		tagArr := services.TagService.Find(sqls.NewCnd().In("id", tagIds))
-		if len(tagArr) > 0 {
-			tags = render.BuildTags(tagArr)
+	if len(tagIds) == 0 {
+		page := params.FormValueIntDefault(c.Ctx, "page", 1)
+		limit := params.FormValueIntDefault(c.Ctx, "limit", 20)
+		if limit <= 0 {
+			limit = 20
 		}
+		if limit > 200 {
+			limit = 200
+		}
+
+		keyword := strings.TrimSpace(c.Ctx.FormValue("keyword"))
+		cnd := sqls.NewCnd().Eq("status", constants.StatusOk)
+		if keyword != "" {
+			cnd = cnd.Where("name like ?", "%"+keyword+"%")
+		}
+
+		tags, paging := services.TagService.FindPageByCnd(cnd.Page(page, limit).Desc("id"))
+		return web.JsonPageData(render.BuildTags(tags), paging)
+	}
+
+	var tags *[]resp.TagResponse
+	tagArr := services.TagService.Find(sqls.NewCnd().In("id", tagIds))
+	if len(tagArr) > 0 {
+		tags = render.BuildTags(tagArr)
 	}
 	return web.JsonData(tags)
 }

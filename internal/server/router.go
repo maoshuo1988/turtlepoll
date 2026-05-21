@@ -85,6 +85,7 @@ func NewServer() {
 		m.Party("/comment").Handle(new(api.CommentController))
 		m.Party("/favorite").Handle(new(api.FavoriteController))
 		m.Party("/like").Handle(new(api.LikeController))
+		m.Party("/dislike").Handle(new(api.DislikeController))
 		m.Party("/checkin").Handle(new(api.CheckinController))
 		m.Party("/config").Handle(new(api.ConfigController))
 		m.Party("/pet").Handle(new(api.PetController))

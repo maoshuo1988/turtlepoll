@@ -46,6 +46,10 @@ func (s *tagService) FindPageByCnd(cnd *sqls.Cnd) (list []models.Tag, paging *sq
 	return repositories.TagRepository.FindPageByCnd(sqls.DB(), cnd)
 }
 
+func (s *tagService) FindCommentStatPage(page, limit int, keyword string) (list []resp.TagCommentStatResponse, paging *sqls.Paging, err error) {
+	return repositories.TagRepository.FindCommentStatPage(sqls.DB(), page, limit, keyword)
+}
+
 func (s *tagService) Create(t *models.Tag) error {
 	return repositories.TagRepository.Create(sqls.DB(), t)
 }

@@ -62,6 +62,16 @@ func (r *topicRepository) FindPageByCnd(db *gorm.DB, cnd *sqls.Cnd) (list []mode
 	return
 }
 
+func (r *topicRepository) FindUserHiddenTopicPage(db *gorm.DB, userId int64, page, limit int) (list []models.Topic, paging *sqls.Paging) {
+	cnd := sqls.NewCnd().
+		Eq("user_id", userId).
+		Eq("display_status", 1).
+		Page(page, limit).
+		Desc("create_time").
+		Desc("id")
+	return r.FindPageByCnd(db, cnd)
+}
+
 func (r *topicRepository) FindBySql(db *gorm.DB, sqlStr string, paramArr ...interface{}) (list []models.Topic) {
 	db.Raw(sqlStr, paramArr...).Scan(&list)
 	return
