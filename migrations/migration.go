@@ -118,4 +118,5 @@ func init() {
 	register(15, "opposite pk init tables", migrate_pk_init_tables)
 	register(16, "ai stamina init tables", migrate_ai_stamina_tables)
 	register(17, "ai push indexes", migrate_ai_push_indexes)
+	register(18, "pk topic display fields", migrate_pk_topic_display_fields)
 }

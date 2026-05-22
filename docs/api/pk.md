@@ -34,6 +34,9 @@
 | `title` | 话题标题 |
 | `sideAName` / `sideBName` | A/B 阵营名称 |
 | `status` | `enabled/disabled` |
+| `listImage` | 列表展示图片 |
+| `sideABgImage` / `sideBBgImage` | A/B 撕裂带内容背景图片 |
+| `sideABgColor` / `sideBBgColor` | A/B 背景色 |
 | `currentRoundId` | 当前局ID |
 | `currentSeasonId` | 当前赛季ID |
 

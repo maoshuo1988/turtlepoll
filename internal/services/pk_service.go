@@ -51,6 +51,12 @@ type PKTopicSaveForm struct {
 	Status    string `json:"status"`
 	Sort      int    `json:"sort"`
 	Cover     string `json:"cover"`
+
+	ListImage    string `json:"listImage"`
+	SideABgImage string `json:"sideABgImage"`
+	SideBBgImage string `json:"sideBBgImage"`
+	SideABgColor string `json:"sideABgColor"`
+	SideBBgColor string `json:"sideBBgColor"`
 }
 
 type PKBetForm struct {
@@ -531,6 +537,12 @@ func (s *pkService) SaveTopic(form PKTopicSaveForm) (*models.PKTopic, error) {
 	form.SideAName = strings.TrimSpace(form.SideAName)
 	form.SideBName = strings.TrimSpace(form.SideBName)
 	form.Status = strings.TrimSpace(form.Status)
+	form.Cover = strings.TrimSpace(form.Cover)
+	form.ListImage = strings.TrimSpace(form.ListImage)
+	form.SideABgImage = strings.TrimSpace(form.SideABgImage)
+	form.SideBBgImage = strings.TrimSpace(form.SideBBgImage)
+	form.SideABgColor = strings.TrimSpace(form.SideABgColor)
+	form.SideBBgColor = strings.TrimSpace(form.SideBBgColor)
 	if form.Title == "" {
 		return nil, errors.New("title is required")
 	}
@@ -564,6 +576,11 @@ func (s *pkService) SaveTopic(form PKTopicSaveForm) (*models.PKTopic, error) {
 			topic.Status = form.Status
 			topic.Sort = form.Sort
 			topic.Cover = form.Cover
+			topic.ListImage = form.ListImage
+			topic.SideABgImage = form.SideABgImage
+			topic.SideBBgImage = form.SideBBgImage
+			topic.SideABgColor = form.SideABgColor
+			topic.SideBBgColor = form.SideBBgColor
 			topic.UpdateTime = now
 			return repositories.PKRepository.UpdateTopic(tx, topic)
 		}
@@ -571,15 +588,20 @@ func (s *pkService) SaveTopic(form PKTopicSaveForm) (*models.PKTopic, error) {
 			return errors.New("slug already exists")
 		}
 		topic = &models.PKTopic{
-			Slug:       form.Slug,
-			Title:      form.Title,
-			SideAName:  form.SideAName,
-			SideBName:  form.SideBName,
-			Status:     form.Status,
-			Sort:       form.Sort,
-			Cover:      form.Cover,
-			CreateTime: now,
-			UpdateTime: now,
+			Slug:         form.Slug,
+			Title:        form.Title,
+			SideAName:    form.SideAName,
+			SideBName:    form.SideBName,
+			Status:       form.Status,
+			Sort:         form.Sort,
+			Cover:        form.Cover,
+			ListImage:    form.ListImage,
+			SideABgImage: form.SideABgImage,
+			SideBBgImage: form.SideBBgImage,
+			SideABgColor: form.SideABgColor,
+			SideBBgColor: form.SideBBgColor,
+			CreateTime:   now,
+			UpdateTime:   now,
 		}
 		if err := repositories.PKRepository.CreateTopic(tx, topic); err != nil {
 			return err
