@@ -38,10 +38,12 @@ APP_GROUP="ubuntu"
 APP_BIN="$APP_DIR/bbs-go-linux"
 # systemd 服务文件路径。
 SERVICE_FILE="/etc/systemd/system/bbs-go.service"
+# systemd 环境变量文件，随 CI/CD 部署写入。
+SERVICE_ENV_FILE="/etc/default/bbs-go"
 
 log "start"
 log "whoami=$(whoami), pwd=$(pwd)"
-log "APP_DIR=$APP_DIR, APP_BIN=$APP_BIN, SERVICE_FILE=$SERVICE_FILE"
+log "APP_DIR=$APP_DIR, APP_BIN=$APP_BIN, SERVICE_FILE=$SERVICE_FILE, SERVICE_ENV_FILE=$SERVICE_ENV_FILE"
 
 cd "$APP_DIR"
 log "changed directory to $(pwd)"
@@ -102,6 +104,13 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 log "systemctl found at $(command -v systemctl)"
 
+# 写入服务运行环境变量，确保服务以生产环境启动。
+log "writing systemd environment file $SERVICE_ENV_FILE"
+cat > "$SERVICE_ENV_FILE" <<EOF
+BBSGO_ENV=prod
+EOF
+chmod 0644 "$SERVICE_ENV_FILE"
+
 # 创建或更新 systemd 服务，确保机器重启后服务能自动恢复。
 log "writing systemd service file $SERVICE_FILE"
 cat > "$SERVICE_FILE" <<EOF
@@ -115,7 +124,7 @@ User=$APP_USER
 Group=$APP_GROUP
 WorkingDirectory=$APP_DIR
 ExecStart=$APP_BIN
-Environment=BBSGO_ENV=prod
+EnvironmentFile=$SERVICE_ENV_FILE
 Restart=always
 RestartSec=5
 StandardOutput=append:/data/logs/bbs-go.stdout.log
