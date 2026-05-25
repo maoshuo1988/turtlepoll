@@ -34,6 +34,7 @@
 | `title` | 话题标题 |
 | `sideAName` / `sideBName` | A/B 阵营名称 |
 | `status` | `enabled/disabled` |
+| `cover` | 话题封面图 |
 | `listImage` | 列表展示图片 |
 | `sideABgImage` / `sideBBgImage` | A/B 撕裂带内容背景图片 |
 | `sideABgColor` / `sideBBgColor` | A/B 背景色 |
@@ -88,19 +89,96 @@
 {
   "list": [
     {
-      "topic": {},
-      "round": {},
-      "season": {},
+      "topic": {
+        "id": 1,
+        "slug": "cat-vs-dog",
+        "title": "猫派 vs 狗派",
+        "sideAName": "猫派",
+        "sideBName": "狗派",
+        "status": "enabled",
+        "sort": 10,
+        "cover": "https://example.com/pk/cat-dog-cover.png",
+        "listImage": "https://example.com/pk/cat-dog-list.png",
+        "sideABgImage": "https://example.com/pk/cat-bg.png",
+        "sideBBgImage": "https://example.com/pk/dog-bg.png",
+        "sideABgColor": "#F6D365",
+        "sideBBgColor": "#84FAB0",
+        "currentRoundId": 10,
+        "currentSeasonId": 2,
+        "totalRounds": 20,
+        "winsA": 11,
+        "winsB": 9,
+        "currentStreakSide": "A",
+        "currentStreak": 3,
+        "maxStreakA": 5,
+        "maxStreakB": 4,
+        "lastWinner": "A",
+        "createTime": 1710000000,
+        "updateTime": 1710000000
+      },
+      "round": {
+        "id": 10,
+        "topicId": 1,
+        "seasonId": 2,
+        "roundNo": 8,
+        "phase": "betting",
+        "startTime": 1710000000,
+        "lockTime": 1710172800,
+        "endTime": 1710259200,
+        "nextRoundTime": 1710259800,
+        "heatA": 128.5,
+        "heatB": 110.2,
+        "poolA": 1200,
+        "poolB": 900,
+        "betCountA": 12,
+        "betCountB": 9,
+        "commentCount": 33,
+        "likeCount": 88,
+        "downvoteCount": 4,
+        "winner": "",
+        "settledAt": 0,
+        "createTime": 1710000000,
+        "updateTime": 1710000000
+      },
+      "season": {
+        "id": 2,
+        "topicId": 1,
+        "seasonNo": 1,
+        "startTime": 1710000000,
+        "endTime": 1712592000,
+        "totalRounds": 8,
+        "winsA": 4,
+        "winsB": 3,
+        "champion": "",
+        "status": "active",
+        "createTime": 1710000000,
+        "updateTime": 1710000000
+      },
       "oddsA": 1.8,
       "oddsB": 2.2,
       "leader": "A",
       "streakStatus": "defending",
       "countdownSeconds": 3600,
       "mySide": "A",
-      "myBet": {}
+      "myBet": {
+        "id": 100,
+        "topicId": 1,
+        "roundId": 10,
+        "userId": 123,
+        "side": "A",
+        "amount": 100,
+        "requestId": "client-uuid",
+        "settleResult": "",
+        "payout": 0,
+        "settledAt": 0,
+        "createTime": 1710000000,
+        "updateTime": 1710000000
+      }
     }
   ],
-  "count": 16
+  "count": 16,
+  "page": 1,
+  "pageSize": 20
 }
 ```
 
@@ -127,20 +205,100 @@
 
 ```json
 {
-  "topic": {},
-  "round": {},
-  "season": {},
+  "topic": {
+    "id": 1,
+    "slug": "cat-vs-dog",
+    "title": "猫派 vs 狗派",
+    "sideAName": "猫派",
+    "sideBName": "狗派",
+    "status": "enabled",
+    "sort": 10,
+    "cover": "https://example.com/pk/cat-dog-cover.png",
+    "listImage": "https://example.com/pk/cat-dog-list.png",
+    "sideABgImage": "https://example.com/pk/cat-bg.png",
+    "sideBBgImage": "https://example.com/pk/dog-bg.png",
+    "sideABgColor": "#F6D365",
+    "sideBBgColor": "#84FAB0",
+    "currentRoundId": 10,
+    "currentSeasonId": 2,
+    "totalRounds": 20,
+    "winsA": 11,
+    "winsB": 9,
+    "currentStreakSide": "A",
+    "currentStreak": 3,
+    "maxStreakA": 5,
+    "maxStreakB": 4,
+    "lastWinner": "A",
+    "createTime": 1710000000,
+    "updateTime": 1710000000
+  },
+  "round": {
+    "id": 10,
+    "topicId": 1,
+    "seasonId": 2,
+    "roundNo": 8,
+    "phase": "betting",
+    "startTime": 1710000000,
+    "lockTime": 1710172800,
+    "endTime": 1710259200,
+    "nextRoundTime": 1710259800,
+    "heatA": 128.5,
+    "heatB": 110.2,
+    "poolA": 1200,
+    "poolB": 900,
+    "betCountA": 12,
+    "betCountB": 9,
+    "commentCount": 33,
+    "likeCount": 88,
+    "downvoteCount": 4,
+    "winner": "",
+    "settledAt": 0,
+    "createTime": 1710000000,
+    "updateTime": 1710000000
+  },
+  "season": {
+    "id": 2,
+    "topicId": 1,
+    "seasonNo": 1,
+    "startTime": 1710000000,
+    "endTime": 1712592000,
+    "totalRounds": 8,
+    "winsA": 4,
+    "winsB": 3,
+    "champion": "",
+    "status": "active",
+    "createTime": 1710000000,
+    "updateTime": 1710000000
+  },
   "stats": {
     "totalRounds": 20,
     "winsA": 11,
     "winsB": 9,
     "currentStreakSide": "A",
-    "currentStreak": 3
+    "currentStreak": 3,
+    "maxStreakA": 5,
+    "maxStreakB": 4
   },
   "recentRounds": [],
-  "myBet": {},
+  "mySide": "A",
+  "myBet": {
+    "id": 100,
+    "topicId": 1,
+    "roundId": 10,
+    "userId": 123,
+    "side": "A",
+    "amount": 100,
+    "requestId": "client-uuid",
+    "settleResult": "",
+    "payout": 0,
+    "settledAt": 0,
+    "createTime": 1710000000,
+    "updateTime": 1710000000
+  },
   "oddsA": 1.8,
   "oddsB": 2.2,
+  "leader": "A",
+  "streakStatus": "defending",
   "countdownSeconds": 3600
 }
 ```
@@ -366,11 +524,25 @@
   "list": [
     {
       "bet": {},
-      "topic": {},
+      "topic": {
+        "id": 1,
+        "slug": "cat-vs-dog",
+        "title": "猫派 vs 狗派",
+        "sideAName": "猫派",
+        "sideBName": "狗派",
+        "cover": "https://example.com/pk/cat-dog-cover.png",
+        "listImage": "https://example.com/pk/cat-dog-list.png",
+        "sideABgImage": "https://example.com/pk/cat-bg.png",
+        "sideBBgImage": "https://example.com/pk/dog-bg.png",
+        "sideABgColor": "#F6D365",
+        "sideBBgColor": "#84FAB0"
+      },
       "round": {}
     }
   ],
-  "count": 1
+  "count": 1,
+  "page": 1,
+  "pageSize": 20
 }
 ```
 
