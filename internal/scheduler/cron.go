@@ -28,16 +28,29 @@ func Start() {
 		}
 	})
 
-	// polymarket 只读同步（默认每 30 分钟一次；需 enabled=true 且配置了 tags 或 marketSlugs）
+	// polymarket 只读同步：Discovery 发现 + Tracking 精确跟踪
 	pm := config.Instance.Polymarket
 	if pm.Enabled {
-		pmSpec := pm.CronSpec
-		if pmSpec == "" {
-			pmSpec = "*/30 * * * *"
+		discoverySpec := pm.DiscoveryCron
+		if discoverySpec == "" {
+			discoverySpec = pm.CronSpec
 		}
-		addCronFunc(c, pmSpec, func() {
-			if err := services.PolymarketSyncService.SyncMarkets(context.Background()); err != nil {
-				slog.Error("polymarket sync failed", slog.Any("err", err))
+		if discoverySpec == "" {
+			discoverySpec = "*/30 * * * *"
+		}
+		addCronFunc(c, discoverySpec, func() {
+			if err := services.PolymarketSyncService.DiscoveryPoller(context.Background()); err != nil {
+				slog.Error("polymarket discovery failed", slog.Any("err", err))
+			}
+		})
+
+		trackingSpec := pm.TrackingCron
+		if trackingSpec == "" {
+			trackingSpec = "*/5 * * * *"
+		}
+		addCronFunc(c, trackingSpec, func() {
+			if err := services.PolymarketSyncService.TrackingPoller(context.Background()); err != nil {
+				slog.Error("polymarket tracking failed", slog.Any("err", err))
 			}
 		})
 	}

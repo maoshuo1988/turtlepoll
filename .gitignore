@@ -53,6 +53,7 @@ ip2region.xdb
 bbs-go.db
 bbs-go.db*
 ip-proxy
+commit-and-push.sh
 
 __debug_bin*
 bbs-go-server

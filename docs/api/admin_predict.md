@@ -244,3 +244,62 @@ result = DRAW
   "remark": "manual settle"
 }
 ```
+
+---
+
+## 1.6) Polymarket 运营接口
+
+### 手动触发 Discovery
+
+- **方法**：POST
+- **路径**：`/api/admin/polymarket/discovery_sync`
+- **认证**：需要管理员
+- **说明**：按配置 `polymarket.tags/marketSlugs/marketIds` 发现市场，创建/更新站内市场并登记 Tracking。
+
+### 手动触发 Tracking
+
+- **方法**：POST
+- **路径**：`/api/admin/polymarket/tracking_sync`
+- **认证**：需要管理员
+- **说明**：按本地 Tracking 表的 `externalMarketId` 精确拉取市场状态；resolved 且 outcome 映射明确时自动写 `PredictMarket.status=SETTLED` 与 `result=A/B`。
+
+### 查询自动结算问题
+
+- **方法**：GET
+- **路径**：`/api/admin/polymarket/issues`
+- **认证**：需要管理员
+- **参数**：
+  - `status`：可选，默认 `OPEN`，传 `ALL` 查询全部
+  - `marketId`：可选
+  - `reason`：可选，例：`NO_WINNER/NO_OUTCOME_MAPPING/AMBIGUOUS_OUTCOME/CANCELLED_OR_INVALID`
+
+### 修改 outcome 映射
+
+- **方法**：POST
+- **路径**：`/api/admin/polymarket/outcome_update`
+- **认证**：需要管理员
+- **请求格式**：JSON
+- **字段**：
+  - `marketId` (int64, 必填)
+  - `externalOutcomeId` (string, 必填)
+  - `option` (string, 必填)：`A/B`
+  - `displayName` (string, 可选)
+  - `locked` (bool, 可选)
+
+### 重试 Tracking
+
+- **方法**：POST
+- **路径**：`/api/admin/polymarket/tracking_retry`
+- **认证**：需要管理员
+- **参数**：
+  - `marketId` 或 `externalMarketId` 至少传一个
+- **说明**：将记录重置为 `TRACKING`，清空失败次数，等待下一轮 Tracking 或手动触发。
+
+### 忽略 issue
+
+- **方法**：POST
+- **路径**：`/api/admin/polymarket/issue_ignore`
+- **认证**：需要管理员
+- **参数**：
+  - `issueId` (int64, 必填)
+- **说明**：将自动结算问题标记为 `IGNORED`。

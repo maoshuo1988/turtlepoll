@@ -121,4 +121,5 @@ func init() {
 	register(18, "pk topic display fields", migrate_pk_topic_display_fields)
 	register(19, "worldcup predict market fields", migrate_worldcup_predict_market_fields)
 	register(20, "predict context display fields", migrate_predict_context_display_fields)
+	register(21, "polymarket tracking and outcome tables", migrate_polymarket_tracking_tables)
 }

@@ -141,6 +141,56 @@ type PredictTagStat struct {
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
 }
 
+// PredictMarketTracking Polymarket 市场精确跟踪记录。
+type PredictMarketTracking struct {
+	Model
+
+	MarketId         int64  `gorm:"not null;index" json:"marketId" form:"marketId"`
+	ExternalMarketId string `gorm:"size:128;not null;uniqueIndex" json:"externalMarketId" form:"externalMarketId"`
+	ExternalSlug     string `gorm:"size:256;index" json:"externalSlug" form:"externalSlug"`
+	Source           string `gorm:"size:32;not null;default:'tag'" json:"source" form:"source"`
+	TrackingStatus   string `gorm:"size:32;not null;default:'TRACKING';index:idx_predict_market_tracking_status_retry" json:"trackingStatus" form:"trackingStatus"`
+	LastSyncAt       int64  `gorm:"not null;default:0" json:"lastSyncAt" form:"lastSyncAt"`
+	NextRetryAt      int64  `gorm:"not null;default:0;index:idx_predict_market_tracking_status_retry" json:"nextRetryAt" form:"nextRetryAt"`
+	FailCount        int    `gorm:"not null;default:0" json:"failCount" form:"failCount"`
+	LastError        string `gorm:"size:512" json:"lastError" form:"lastError"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictMarketOutcome Polymarket outcome 到站内 A/B 的映射。
+type PredictMarketOutcome struct {
+	Model
+
+	MarketId            int64  `gorm:"not null;uniqueIndex:idx_predict_market_outcome_external;uniqueIndex:idx_predict_market_outcome_option" json:"marketId" form:"marketId"`
+	ExternalOutcomeId   string `gorm:"size:128;not null;uniqueIndex:idx_predict_market_outcome_external" json:"externalOutcomeId" form:"externalOutcomeId"`
+	ExternalOutcomeName string `gorm:"size:255" json:"externalOutcomeName" form:"externalOutcomeName"`
+	ExternalTokenId     string `gorm:"size:128" json:"externalTokenId" form:"externalTokenId"`
+	Option              string `gorm:"size:16;not null;uniqueIndex:idx_predict_market_outcome_option" json:"option" form:"option"`
+	DisplayName         string `gorm:"size:255" json:"displayName" form:"displayName"`
+	Sort                int    `gorm:"not null;default:0" json:"sort" form:"sort"`
+	Locked              bool   `gorm:"not null;default:false" json:"locked" form:"locked"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictMarketSettleIssue 记录 Polymarket 自动结算失败原因，供运营兜底。
+type PredictMarketSettleIssue struct {
+	Model
+
+	MarketId         int64  `gorm:"not null;uniqueIndex:idx_predict_market_settle_issue_open" json:"marketId" form:"marketId"`
+	ExternalMarketId string `gorm:"size:128;index" json:"externalMarketId" form:"externalMarketId"`
+	Reason           string `gorm:"size:64;not null;uniqueIndex:idx_predict_market_settle_issue_open" json:"reason" form:"reason"`
+	RawResolution    string `gorm:"size:255" json:"rawResolution" form:"rawResolution"`
+	RawPayload       string `gorm:"type:text" json:"rawPayload" form:"rawPayload"`
+	Status           string `gorm:"size:32;not null;default:'OPEN';uniqueIndex:idx_predict_market_settle_issue_open" json:"status" form:"status"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
 // UserCoin 用户金币账户（未来下注使用；此阶段只建表不接业务）
 type UserCoin struct {
 	Model
