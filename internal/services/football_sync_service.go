@@ -144,8 +144,8 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 		schedule.Status = m.Status
 		schedule.UtcDate = m.UtcDate.Unix()
 		if !teamsFrozen {
-			schedule.HomeTeam = m.HomeTeam.Name
-			schedule.AwayTeam = m.AwayTeam.Name
+			schedule.HomeTeam = translateFootballTeamName(m.HomeTeam.ID, m.HomeTeam.Name)
+			schedule.AwayTeam = translateFootballTeamName(m.AwayTeam.ID, m.AwayTeam.Name)
 			schedule.HomeTeamId = m.HomeTeam.ID
 			schedule.AwayTeamId = m.AwayTeam.ID
 		}
