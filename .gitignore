@@ -52,6 +52,7 @@ ip2region.xdb
 
 bbs-go.db
 bbs-go.db*
+ip-proxy
 
 __debug_bin*
 bbs-go-server

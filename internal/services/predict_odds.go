@@ -3,8 +3,16 @@ package services
 import "math"
 
 const (
-	PredictOptionA = "A"
-	PredictOptionB = "B"
+	PredictOptionA    = "A"
+	PredictOptionB    = "B"
+	PredictOptionDraw = "DRAW"
+
+	PredictMarketTypeBinary = "binary"
+	PredictMarketType1x2    = "1x2"
+
+	MatchPhaseGroup    = "GROUP"
+	MatchPhaseKnockout = "KNOCKOUT"
+	MatchPhaseUnknown  = "UNKNOWN"
 )
 
 // clampOdds 将赔率限制到 [min, max]，用于避免前端显示极端值。
@@ -44,4 +52,62 @@ func CalcClampedOdds(baseA, baseB, poolA, poolB int64) (oddsA, oddsB float64, ef
 	oddsA = math.Round(oddsA*100) / 100
 	oddsB = math.Round(oddsB*100) / 100
 	return
+}
+
+func calcOddsRaw3(baseA, baseB, baseDraw, poolA, poolB, poolDraw int64) (oddsA, oddsB, oddsDraw float64, effA, effB, effDraw, total int64) {
+	effA = baseA + poolA
+	effB = baseB + poolB
+	effDraw = baseDraw + poolDraw
+	if effA <= 0 {
+		effA = 1
+	}
+	if effB <= 0 {
+		effB = 1
+	}
+	if effDraw <= 0 {
+		effDraw = 1
+	}
+	total = effA + effB + effDraw
+	oddsA = float64(total) / float64(effA)
+	oddsB = float64(total) / float64(effB)
+	oddsDraw = float64(total) / float64(effDraw)
+	return
+}
+
+func CalcClampedOdds3(baseA, baseB, baseDraw, poolA, poolB, poolDraw int64) (oddsA, oddsB, oddsDraw float64, effA, effB, effDraw, total int64) {
+	oddsA, oddsB, oddsDraw, effA, effB, effDraw, total = calcOddsRaw3(baseA, baseB, baseDraw, poolA, poolB, poolDraw)
+	oddsA = math.Round(clampOdds(oddsA, 1.2, 5.0)*100) / 100
+	oddsB = math.Round(clampOdds(oddsB, 1.2, 5.0)*100) / 100
+	oddsDraw = math.Round(clampOdds(oddsDraw, 1.2, 5.0)*100) / 100
+	return
+}
+
+func NormalizePredictMarketType(marketType string) string {
+	if marketType == PredictMarketType1x2 {
+		return PredictMarketType1x2
+	}
+	return PredictMarketTypeBinary
+}
+
+func IsValidPredictOption(marketType, option string) bool {
+	switch NormalizePredictMarketType(marketType) {
+	case PredictMarketType1x2:
+		return option == PredictOptionA || option == PredictOptionB || option == PredictOptionDraw
+	default:
+		return option == PredictOptionA || option == PredictOptionB
+	}
+}
+
+func PredictOptionErrMsg(marketType string) string {
+	if NormalizePredictMarketType(marketType) == PredictMarketType1x2 {
+		return "option must be A, B or DRAW"
+	}
+	return "option must be A or B"
+}
+
+func normalizeBaseDraw(v int64) int64 {
+	if v > 0 {
+		return v
+	}
+	return 500
 }

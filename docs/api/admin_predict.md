@@ -150,14 +150,48 @@ GET /api/admin/predict/active_users?range=7d
 - `resolvedAt`: int64
 - `proUserCount`: int64（option=A 去重下注用户数）
 - `conUserCount`: int64（option=B 去重下注用户数）
+- `drawUserCount`: int64（option=DRAW 去重下注用户数，仅 `marketType=1x2` 有意义）
 - `proAmount`: int64（option=A 下注金额 sum）
 - `conAmount`: int64（option=B 下注金额 sum）
-- `totalAmount`: int64（A+B）
-- `totalBetCount`: int64（A/B 下单数 sum）
+- `drawAmount`: int64（option=DRAW 下注金额 sum，仅 `marketType=1x2` 有意义）
+- `totalAmount`: int64（A+B+DRAW）
+- `totalBetCount`: int64（A/B/DRAW 下单数 sum）
 
 ### 示例
 
 `GET /api/admin/predict/market/stats?marketId=1`
+
+---
+
+## 1.4.1) 管理员修改/创建预测市场上下文
+
+- **方法**：POST
+- **路径**：`/api/admin/predict/context/update`
+- **认证**：需要管理员（`AdminMiddleware`）
+- **请求格式**：表单（`application/x-www-form-urlencoded` 或 `multipart/form-data`）
+
+### Form 参数
+
+- `marketId` (int64, 必填)
+- `eventName` (string, 必填)
+- `imageUrl` (string, 可选)
+- `listImage` (string, 可选)
+- `sideABgImage` (string, 可选)
+- `sideBBgImage` (string, 可选)
+- `sideABgColor` (string, 可选，默认 `#E23D3D`)
+- `sideBBgColor` (string, 可选，默认 `#276EF1`)
+- `participantCount` (int64, 可选)
+- `proText` / `conText` (string, 可选)
+- `proVoteCount` / `conVoteCount` (int64, 可选)
+- `heat` (int64, 可选)
+- `detail` (string, 可选)
+- `tags` (string, 可选)
+
+### 行为说明
+
+- 按 `marketId` upsert `PredictContext`。
+- 记录一条 operate-log：`dataType=predictContext` + `opType=update`。
+- `/api/football/markets` 返回的 `context` 会包含 `listImage/sideABgImage/sideBBgImage/sideABgColor/sideBBgColor`。
 
 ---
 
@@ -171,7 +205,7 @@ GET /api/admin/predict/active_users?range=7d
 ### 请求体（JSON）
 
 - `marketId` (int64, 必填)
-- `result` (string, 必填)：`A` 或 `B`
+- `result` (string, 必填)：`binary` 市场允许 `A/B`；`1x2` 市场允许 `A/B/DRAW`
 - `requestId` (string, 必填)：用于审计/幂等标识（当前实现用于日志，不做硬幂等）
 - `remark` (string, 可选)
 - `allowReset` (bool, 可选，默认 false)：
@@ -181,9 +215,20 @@ GET /api/admin/predict/active_users?range=7d
 ### 行为说明
 
 - 将 `t_predict_market.status` 更新为 `SETTLED`。
-- 将 `t_predict_market.result` 写入 `A/B`。
+- 将 `t_predict_market.result` 写入 `A/B/DRAW`。
 - 同时将 `t_predict_market.resolved=true`（兼容外部市场字段）。
 - 记录一条 operate-log：`dataType=predictMarket` + `opType=update`。
+
+小组赛平局结算口径：
+
+```text
+marketType = 1x2
+result = DRAW
+
+用户调用 POST /api/coin/settle 后：
+  option = DRAW -> WIN，payout = floor(amount * odds)
+  option = A/B  -> LOSE，payout = 0
+```
 
 ### 返回（data）
 

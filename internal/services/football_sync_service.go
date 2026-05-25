@@ -19,6 +19,65 @@ type footballSyncService struct{}
 
 func newFootballSyncService() *footballSyncService { return &footballSyncService{} }
 
+func footballMatchPhase(stage, groupName string) string {
+	stage = strings.ToUpper(strings.TrimSpace(stage))
+	groupName = strings.TrimSpace(groupName)
+	if stage == "GROUP_STAGE" || groupName != "" {
+		return MatchPhaseGroup
+	}
+	switch stage {
+	case "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL":
+		return MatchPhaseKnockout
+	case "":
+		return MatchPhaseUnknown
+	default:
+		return MatchPhaseKnockout
+	}
+}
+
+func footballMarketTypeByPhase(phase string) string {
+	if phase == MatchPhaseGroup {
+		return PredictMarketType1x2
+	}
+	return PredictMarketTypeBinary
+}
+
+func footballTeamsReady(home, away string) bool {
+	return strings.TrimSpace(home) != "" && strings.TrimSpace(away) != ""
+}
+
+func footballTeamsFrozen(schedule *models.MatchSchedule) bool {
+	if schedule == nil {
+		return false
+	}
+	return schedule.HomeTeamId > 0 && schedule.AwayTeamId > 0 &&
+		strings.TrimSpace(schedule.HomeTeam) != "" &&
+		strings.TrimSpace(schedule.AwayTeam) != ""
+}
+
+func footballScore(m footballdata.Match) (homeScore, awayScore int, ok bool) {
+	if m.Score.FullTime.Home == nil || m.Score.FullTime.Away == nil {
+		return -1, -1, false
+	}
+	return *m.Score.FullTime.Home, *m.Score.FullTime.Away, true
+}
+
+func footballWinnerByScore(homeScore, awayScore int, phase string) string {
+	if homeScore < 0 || awayScore < 0 {
+		return ""
+	}
+	if homeScore > awayScore {
+		return PredictOptionA
+	}
+	if homeScore < awayScore {
+		return PredictOptionB
+	}
+	if phase == MatchPhaseGroup {
+		return PredictOptionDraw
+	}
+	return MatchPhaseUnknown
+}
+
 // SyncWorldCupSchedules 拉取 football-data 世界杯赛程并落库，同时为每个赛程创建/更新一个预测市场。
 // 这里是“第 0 阶段”：只做数据同步 + 市场占位，不实现下注/结算。
 func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
@@ -58,13 +117,11 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 		}
 		return "TBD vs TBD"
 	}
-	// 只有主客队都有值才允许 OPEN，其余都关闭
-	isTeamsReady := func(home, away string) bool {
-		return home != "" && away != ""
-	}
 	for _, m := range resp.Matches {
 		schedule := &models.MatchSchedule{}
 		err := db.Where("source = ? AND external_id = ?", "football-data", m.ID).First(schedule).Error
+		existing := schedule.Id > 0
+		teamsFrozen := existing && footballTeamsFrozen(schedule)
 		// upsert-ish
 		if err != nil {
 			// create
@@ -83,12 +140,29 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 		schedule.Matchday = m.Matchday
 		schedule.Stage = m.Stage
 		schedule.GroupName = m.Group
+		schedule.MatchPhase = footballMatchPhase(m.Stage, m.Group)
 		schedule.Status = m.Status
 		schedule.UtcDate = m.UtcDate.Unix()
-		schedule.HomeTeam = m.HomeTeam.Name
-		schedule.AwayTeam = m.AwayTeam.Name
-		schedule.HomeTeamId = m.HomeTeam.ID
-		schedule.AwayTeamId = m.AwayTeam.ID
+		if !teamsFrozen {
+			schedule.HomeTeam = m.HomeTeam.Name
+			schedule.AwayTeam = m.AwayTeam.Name
+			schedule.HomeTeamId = m.HomeTeam.ID
+			schedule.AwayTeamId = m.AwayTeam.ID
+		}
+		if homeScore, awayScore, ok := footballScore(m); ok {
+			schedule.HomeScore = homeScore
+			schedule.AwayScore = awayScore
+			schedule.Winner = footballWinnerByScore(homeScore, awayScore, schedule.MatchPhase)
+			if schedule.Winner == MatchPhaseUnknown && strings.EqualFold(schedule.Status, "FINISHED") {
+				slog.Error("knockout match ended draw, manual settlement required",
+					slog.Int64("externalId", schedule.ExternalId),
+					slog.String("stage", schedule.Stage),
+					slog.String("groupName", schedule.GroupName),
+					slog.Int("homeScore", homeScore),
+					slog.Int("awayScore", awayScore),
+				)
+			}
+		}
 		schedule.LastSyncedAt = now
 		schedule.UpdateTime = now
 
@@ -105,20 +179,33 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 		// 每个赛程一个预测市场
 		market := &models.PredictMarket{}
 		title := buildMarketTitle(schedule.HomeTeam, schedule.AwayTeam)
-		desiredStatus := "CLOSE"
-		if isTeamsReady(schedule.HomeTeam, schedule.AwayTeam) {
+		desiredStatus := "CLOSED"
+		if footballTeamsReady(schedule.HomeTeam, schedule.AwayTeam) {
 			desiredStatus = "OPEN"
 		}
+		if schedule.Status == "IN_PLAY" || schedule.Status == "PAUSED" || schedule.Status == "FINISHED" ||
+			schedule.Status == "POSTPONED" || schedule.Status == "CANCELLED" || schedule.Status == "SUSPENDED" {
+			desiredStatus = "CLOSED"
+		}
+		marketType := footballMarketTypeByPhase(schedule.MatchPhase)
 		if e := db.Where("source_model = ? AND source_model_id = ?", "MatchSchedule", schedule.Id).First(market).Error; e != nil {
 			market.SourceModel = "MatchSchedule"
 			market.SourceModelId = schedule.Id
-			market.MarketType = "1x2"
+			market.MarketType = marketType
 			market.Status = desiredStatus
 			// 默认在开赛前 10 分钟关闭（先占位规则）
 			if schedule.UtcDate > 0 {
 				market.CloseTime = schedule.UtcDate - int64((10 * time.Minute).Seconds())
 			}
 			market.Title = title
+			if strings.EqualFold(schedule.Status, "FINISHED") && schedule.Winner != "" && schedule.Winner != MatchPhaseUnknown {
+				market.Status = "SETTLED"
+				market.Result = schedule.Winner
+				market.Resolved = true
+				if market.ResolvedAt == 0 {
+					market.ResolvedAt = now
+				}
+			}
 			market.CreateTime = now
 			market.UpdateTime = now
 			if ce := db.Create(market).Error; ce != nil {
@@ -127,9 +214,20 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 		} else {
 			// 每次同步都更新 title 和 status；closeTime 按赛程时间刷新
 			market.Title = title
-			market.Status = desiredStatus
+			market.MarketType = marketType
+			if market.Status != "SETTLED" {
+				market.Status = desiredStatus
+			}
 			if schedule.UtcDate > 0 {
 				market.CloseTime = schedule.UtcDate - int64((10 * time.Minute).Seconds())
+			}
+			if market.Status != "SETTLED" && strings.EqualFold(schedule.Status, "FINISHED") && schedule.Winner != "" && schedule.Winner != MatchPhaseUnknown {
+				market.Status = "SETTLED"
+				market.Result = schedule.Winner
+				market.Resolved = true
+				if market.ResolvedAt == 0 {
+					market.ResolvedAt = now
+				}
 			}
 			market.UpdateTime = now
 			if ue := db.Save(market).Error; ue != nil {
@@ -144,6 +242,11 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 			ctxModel.MarketId = market.Id
 			ctxModel.EventName = market.Title
 			ctxModel.ImageUrl = ""
+			ctxModel.ListImage = ""
+			ctxModel.SideABgImage = ""
+			ctxModel.SideBBgImage = ""
+			ctxModel.SideABgColor = "#E23D3D"
+			ctxModel.SideBBgColor = "#276EF1"
 			ctxModel.ParticipantCount = 0
 			ctxModel.ProText = schedule.HomeTeam + " 胜"
 			ctxModel.ConText = schedule.AwayTeam + " 胜"

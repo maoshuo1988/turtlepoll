@@ -46,10 +46,23 @@ type Match struct {
 	Matchday    int         `json:"matchday"`
 	Stage       string      `json:"stage"`
 	Group       string      `json:"group"`
+	Score       Score       `json:"score"`
 	HomeTeam    Team        `json:"homeTeam"`
 	AwayTeam    Team        `json:"awayTeam"`
 	Competition Competition `json:"competition"`
 	Season      Season      `json:"season"`
+}
+
+type Score struct {
+	Winner   string     `json:"winner"`
+	Duration string     `json:"duration"`
+	FullTime ScoreGoals `json:"fullTime"`
+	HalfTime ScoreGoals `json:"halfTime"`
+}
+
+type ScoreGoals struct {
+	Home *int `json:"home"`
+	Away *int `json:"away"`
 }
 
 type Team struct {

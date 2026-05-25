@@ -15,12 +15,16 @@ type MatchSchedule struct {
 	Matchday     int    `gorm:"not null;default:0" json:"matchday" form:"matchday"`
 	Stage        string `gorm:"size:64" json:"stage" form:"stage"`
 	GroupName    string `gorm:"size:64" json:"groupName" form:"groupName"`
-	Status       string `gorm:"size:32" json:"status" form:"status"` // SCHEDULED/LIVE/FINISHED...
+	MatchPhase   string `gorm:"size:32;not null;default:''" json:"matchPhase" form:"matchPhase"` // GROUP/KNOCKOUT/UNKNOWN
+	Status       string `gorm:"size:32" json:"status" form:"status"`                             // SCHEDULED/LIVE/FINISHED...
 	UtcDate      int64  `gorm:"not null;index:idx_match_schedule_utc_date" json:"utcDate" form:"utcDate"`
 	HomeTeam     string `gorm:"size:128" json:"homeTeam" form:"homeTeam"`
 	AwayTeam     string `gorm:"size:128" json:"awayTeam" form:"awayTeam"`
 	HomeTeamId   int64  `gorm:"not null;default:0" json:"homeTeamId" form:"homeTeamId"`
 	AwayTeamId   int64  `gorm:"not null;default:0" json:"awayTeamId" form:"awayTeamId"`
+	HomeScore    int    `gorm:"not null;default:-1" json:"homeScore" form:"homeScore"`
+	AwayScore    int    `gorm:"not null;default:-1" json:"awayScore" form:"awayScore"`
+	Winner       string `gorm:"size:32;not null;default:''" json:"winner" form:"winner"` // A/B/DRAW/UNKNOWN
 	LastSyncedAt int64  `gorm:"not null;default:0" json:"lastSyncedAt" form:"lastSyncedAt"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
@@ -38,10 +42,10 @@ type PredictMarket struct {
 
 	// 市场基础信息
 	Title       string `gorm:"size:256;not null" json:"title" form:"title"`
-	MarketType  string `gorm:"size:32;not null" json:"marketType" form:"marketType"` // e.g. 1x2
+	MarketType  string `gorm:"size:32;not null" json:"marketType" form:"marketType"` // 1x2/binary
 	Status      string `gorm:"size:32;not null" json:"status" form:"status"`         // OPEN/CLOSED/SETTLED
 	CloseTime   int64  `gorm:"not null;default:0" json:"closeTime" form:"closeTime"` // 截止下注时间（先预留）
-	Result      string `gorm:"size:32" json:"result" form:"result"`                  // HOME/DRAW/AWAY（先预留）
+	Result      string `gorm:"size:32" json:"result" form:"result"`                  // A/B；小组赛目标支持 DRAW（由管理员或后续结果同步写入）
 	ExternalKey string `gorm:"size:128" json:"externalKey" form:"externalKey"`       // 预留：外部业务 key
 
 	// ============ TurtlePoll：外部市场结算（例如 Polymarket Gamma） ============
@@ -54,14 +58,16 @@ type PredictMarket struct {
 	// 外部结算时间（若外部不提供，则写首次检测到 resolved 的时间戳）。
 	ResolvedAt int64 `gorm:"not null;default:0" json:"resolvedAt" form:"resolvedAt"`
 
-	// ============ TurtlePoll：二元预测市场（A/B）下注池与赔率 ============
+	// ============ TurtlePoll：预测市场下注池与赔率 ============
 	// baseA/baseB：系统默认投放的虚拟底池（用于早期赔率稳定）
-	// poolA/poolB：所有用户对 A/B 的下注累计（真实用户下注池）
+	// poolA/poolB/poolDraw：所有用户对 A/B/DRAW 的下注累计（真实用户下注池）。
 	// 注意：赔率在下注时锁定到订单里，不在结算时按最新赔率重算。
-	BaseA int64 `gorm:"not null;default:500" json:"baseA" form:"baseA"`
-	BaseB int64 `gorm:"not null;default:500" json:"baseB" form:"baseB"`
-	PoolA int64 `gorm:"not null;default:0" json:"poolA" form:"poolA"`
-	PoolB int64 `gorm:"not null;default:0" json:"poolB" form:"poolB"`
+	BaseA    int64 `gorm:"not null;default:500" json:"baseA" form:"baseA"`
+	BaseB    int64 `gorm:"not null;default:500" json:"baseB" form:"baseB"`
+	BaseDraw int64 `gorm:"not null;default:500" json:"baseDraw" form:"baseDraw"`
+	PoolA    int64 `gorm:"not null;default:0" json:"poolA" form:"poolA"`
+	PoolB    int64 `gorm:"not null;default:0" json:"poolB" form:"poolB"`
+	PoolDraw int64 `gorm:"not null;default:0" json:"poolDraw" form:"poolDraw"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
@@ -78,6 +84,13 @@ type PredictContext struct {
 	EventName string `gorm:"size:256;not null" json:"eventName" form:"eventName"`
 	// 图片地址
 	ImageUrl string `gorm:"type:text" json:"imageUrl" form:"imageUrl"`
+	// 列表展示图片
+	ListImage string `gorm:"size:512" json:"listImage" form:"listImage"`
+	// A/B 阵营背景图与背景色
+	SideABgImage string `gorm:"size:512" json:"sideABgImage" form:"sideABgImage"`
+	SideBBgImage string `gorm:"size:512" json:"sideBBgImage" form:"sideBBgImage"`
+	SideABgColor string `gorm:"size:64;not null;default:'#E23D3D'" json:"sideABgColor" form:"sideABgColor"`
+	SideBBgColor string `gorm:"size:64;not null;default:'#276EF1'" json:"sideBBgColor" form:"sideBBgColor"`
 	// 参与人数
 	ParticipantCount int64 `gorm:"not null;default:0" json:"participantCount" form:"participantCount"`
 	// 正方文案
@@ -165,15 +178,16 @@ type PredictBet struct {
 	Model
 	UserId   int64 `gorm:"not null;index" json:"userId" form:"userId"`
 	MarketId int64 `gorm:"not null;index" json:"marketId" form:"marketId"`
-	// 下注选项：A/B
+	// 下注选项：A/B；小组赛目标支持 DRAW
 	Option string `gorm:"size:8;not null;index" json:"option" form:"option"`
 	// 下注金额（金币）
 	Amount int64 `gorm:"not null" json:"amount" form:"amount"`
 	// 下单时锁定赔率（范围 1.2 ~ 5.0）
 	Odds float64 `gorm:"not null" json:"odds" form:"odds"`
 	// 下单时的有效池（用于审计/展示）
-	EffA int64 `gorm:"not null" json:"effA" form:"effA"`
-	EffB int64 `gorm:"not null" json:"effB" form:"effB"`
+	EffA    int64 `gorm:"not null" json:"effA" form:"effA"`
+	EffB    int64 `gorm:"not null" json:"effB" form:"effB"`
+	EffDraw int64 `gorm:"not null;default:0" json:"effDraw" form:"effDraw"`
 
 	// 结算状态：
 	// - OPEN：未结算

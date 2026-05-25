@@ -163,7 +163,13 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-
+    # ========= 静态图片 ========
+    location /res/uploads/ {
+        alias /srv/project/turtlepoll/res/uploads/;
+        try_files $uri =404;
+        access_log off;
+        expires 30d;
+    }
     # 其他路径转发到 AWS Amplify
     location / {
         set $amplify_backend "main.d3t0t4yyv8sthr.amplifyapp.com";
@@ -240,6 +246,13 @@ server {
     resolver 8.8.8.8 8.8.4.4 valid=300s;
     resolver_timeout 5s;
 
+    # ========= 静态图片 ========
+    location /res/uploads/ {
+        alias /srv/project/turtlepoll/res/uploads/;
+        try_files $uri =404;
+        access_log off;
+        expires 30d;
+    }
     # ========== 前端 Amplify test 分支代理 ==========
     location / {
         set $amplify_backend "test.d3t0t4yyv8sthr.amplifyapp.com";

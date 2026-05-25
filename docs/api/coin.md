@@ -39,12 +39,14 @@
 - `createTime`: int64
 
 ### PredictMarket（预测市场池字段）
-为了支持下注赔率，本项目在 `PredictMarket` 上新增了 A/B 虚拟底池与真实下注池累计：
+为了支持下注赔率，本项目在 `PredictMarket` 上维护虚拟底池与真实下注池累计：
 
-- `baseA` / `baseB`: int64（虚拟底池，默认 `500/500`）
-- `poolA` / `poolB`: int64（用户下注累计池）
+- `baseA` / `baseB`: int64（二元与三元市场的 A/B 虚拟底池，默认 `500/500`）
+- `baseDraw`: int64（三元市场 DRAW 虚拟底池，默认 `500`）
+- `poolA` / `poolB`: int64（二元与三元市场的 A/B 用户下注累计池）
+- `poolDraw`: int64（三元市场 DRAW 用户下注累计池）
 
-赔率使用“有效池 = base + pool”计算。
+赔率使用“有效池 = base + pool”计算。淘汰赛 `marketType=binary` 使用 A/B 二元池；小组赛 `marketType=1x2` 使用 A/B/DRAW 三元池。
 
 ### PredictBet（预测下注订单）
 代码定义：`internal/models/models.go` -> `type PredictBet`
@@ -53,10 +55,10 @@
 - `id`: int64
 - `userId`: int64
 - `marketId`: int64
-- `option`: string（`A` 或 `B`）
+- `option`: string（淘汰赛 `A/B`；小组赛 `A/B/DRAW`）
 - `amount`: int64（下注金币）
 - `odds`: float64（下单时锁定赔率；结算时不重算）
-- `effA` / `effB`: int64（下单时看到的有效池快照）
+- `effA` / `effB` / `effDraw`: int64（下单时看到的有效池快照）
 - `status`: string（当前实现使用 `OPEN`）
 - `createTime`: int64
 
@@ -67,10 +69,34 @@
 - 下单时基于当前池计算 odds，并写入 `PredictBet.odds`
 - 后续池变化不会影响该订单已经锁定的赔率
 
-项目内实现：`internal/services/predict_odds.go` -> `CalcClampedOdds(...)`
+项目内实现：`internal/services/predict_odds.go`
 
 - 赔率范围 clamp：`[1.2, 5.0]`
 - 展示保留两位小数（代码中做了四舍五入）
+
+二元市场算法：
+
+```text
+effA = baseA + poolA
+effB = baseB + poolB
+total = effA + effB
+
+oddsA = clamp(total / effA, 1.2, 5.0)
+oddsB = clamp(total / effB, 1.2, 5.0)
+```
+
+三元市场算法：
+
+```text
+effA = baseA + poolA
+effB = baseB + poolB
+effDraw = baseDraw + poolDraw
+total = effA + effB + effDraw
+
+oddsA = clamp(total / effA, 1.2, 5.0)
+oddsB = clamp(total / effB, 1.2, 5.0)
+oddsDraw = clamp(total / effDraw, 1.2, 5.0)
+```
 
 ## 接口列表
 
@@ -157,9 +183,23 @@
 
 #### 结算规则（当前实现）
 - 仅允许结算 `PredictMarket.status = SETTLED` 的市场
-- `PredictMarket.result` 必须为 `A` 或 `B`（忽略大小写）
+- `PredictMarket.result` 按市场类型校验：
+  - `binary`：只允许 `A/B`
+  - `1x2`：允许 `A/B/DRAW`
 - 只结算该用户在该市场中 `PredictBet.status = OPEN` 的订单（幂等：重复调用不会重复派奖）
+- 中奖判断：`PredictBet.option == PredictMarket.result`
 - 中奖派发：`payout = floor(amount * odds)`（odds 为下注时锁定赔率）
+- 输单：`payout = 0`
+
+小组赛平局结算：
+
+```text
+marketType = 1x2
+PredictMarket.result = DRAW
+
+option = DRAW -> WIN, payout = floor(amount * odds)
+option = A/B  -> LOSE, payout = 0
+```
 
 #### 返回值（data）
 
@@ -237,7 +277,7 @@
   - `marketId is required`
 - 业务错误：
   - `market is not settled`
-  - `market result must be A or B`
+  - `market result must match market options`
 
 ---
 
@@ -286,7 +326,7 @@
 
 #### 请求参数（form）
 - `marketId`: int64，必填
-- `option`: string，必填，只能是 `A` 或 `B`（不区分大小写）
+- `option`: string，必填；淘汰赛 `binary` 只能是 `A/B`，小组赛 `1x2` 可以是 `A/B/DRAW`（不区分大小写）
 - `amount`: int64，必填，必须 > 0
 
 （文档用 JSON 展示字段结构；实际是表单）
@@ -303,7 +343,7 @@
 `PlaceBetResult`
 
 - `bet`: PredictBet
-- `market`: PredictMarket（已更新 poolA/poolB）
+- `market`: PredictMarket（已更新 `poolA/poolB/poolDraw`）
 - `userCoin`: UserCoin（已扣款后的余额）
 - `lockedOdds`: float64（等同于 bet.odds）
 
@@ -344,6 +384,7 @@
 - 参数校验：
   - `marketId is required`
   - `option must be A or B`
+  - `option must be A, B or DRAW`
   - `amount must be positive`
 - 业务错误：
   - `market is not open`
