@@ -166,7 +166,7 @@ GET /api/admin/predict/active_users?range=7d
 ## 1.4.1) 管理员修改/创建预测市场上下文
 
 - **方法**：POST
-- **路径**：`/api/admin/predict/context/update`
+- **路径**：`/api/admin/predict/context_update`
 - **认证**：需要管理员（`AdminMiddleware`）
 - **请求格式**：表单（`application/x-www-form-urlencoded` 或 `multipart/form-data`）
 

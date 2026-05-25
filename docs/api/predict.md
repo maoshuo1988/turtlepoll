@@ -236,7 +236,7 @@
 
 ### 3.1) 管理员修改/创建 PredictContext（按 marketId upsert）
 
-- **接口**：`POST /api/admin/predict/context/update`
+- **接口**：`POST /api/admin/predict/context_update`
 - **功能**：管理端按 `marketId` upsert PredictContext，支持编辑展示图、阵营背景图、阵营背景色等字段。
 - **认证**：需要管理员权限（`AdminMiddleware`）
 - **请求格式**：表单，与 `POST /api/football/predict_context/update` 字段一致。
