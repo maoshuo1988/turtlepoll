@@ -9,6 +9,8 @@ var footballTeamZhNameByName = map[string]string{
 	"australia":                "澳大利亚",
 	"austria":                  "奥地利",
 	"belgium":                  "比利时",
+	"bosnia and herzegovina":   "波黑",
+	"bosnia-herzegovina":       "波黑",
 	"brazil":                   "巴西",
 	"cameroon":                 "喀麦隆",
 	"canada":                   "加拿大",
