@@ -148,6 +148,13 @@ func (s *footballSyncService) SyncWorldCupSchedules(ctx context.Context) error {
 			schedule.AwayTeam = translateFootballTeamName(m.AwayTeam.ID, m.AwayTeam.Name)
 			schedule.HomeTeamId = m.HomeTeam.ID
 			schedule.AwayTeamId = m.AwayTeam.ID
+		} else {
+			if homeTeam, ok := translateKnownFootballTeamName(schedule.HomeTeamId, schedule.HomeTeam); ok {
+				schedule.HomeTeam = homeTeam
+			}
+			if awayTeam, ok := translateKnownFootballTeamName(schedule.AwayTeamId, schedule.AwayTeam); ok {
+				schedule.AwayTeam = awayTeam
+			}
 		}
 		if homeScore, awayScore, ok := footballScore(m); ok {
 			schedule.HomeScore = homeScore

@@ -101,6 +101,20 @@ func translateFootballTeamName(teamID int64, name string) string {
 	return name
 }
 
+func translateKnownFootballTeamName(teamID int64, name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+	if zh := footballTeamZhNameByID[teamID]; zh != "" {
+		return zh, true
+	}
+	if zh := footballTeamZhNameByName[normalizeFootballTeamNameKey(name)]; zh != "" {
+		return zh, true
+	}
+	return name, false
+}
+
 func normalizeFootballTeamNameKey(name string) string {
 	name = strings.TrimSpace(strings.ToLower(name))
 	name = strings.TrimSuffix(name, " national football team")
