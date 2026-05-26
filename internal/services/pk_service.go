@@ -5,9 +5,11 @@ import (
 	"bbs-go/internal/models/models"
 	"bbs-go/internal/models/req"
 	"bbs-go/internal/repositories"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
@@ -63,6 +65,44 @@ type PKBetForm struct {
 	TopicId   int64  `json:"topicId"`
 	Side      string `json:"side"`
 	RequestId string `json:"requestId"`
+}
+
+func (f *PKBetForm) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		TopicId   json.RawMessage `json:"topicId"`
+		Side      string          `json:"side"`
+		RequestId string          `json:"requestId"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	f.Side = raw.Side
+	f.RequestId = raw.RequestId
+	if len(raw.TopicId) == 0 || string(raw.TopicId) == "null" {
+		return nil
+	}
+
+	var topicId int64
+	if err := json.Unmarshal(raw.TopicId, &topicId); err == nil {
+		f.TopicId = topicId
+		return nil
+	}
+
+	var topicIdStr string
+	if err := json.Unmarshal(raw.TopicId, &topicIdStr); err != nil {
+		return err
+	}
+	topicIdStr = strings.TrimSpace(topicIdStr)
+	if topicIdStr == "" {
+		return nil
+	}
+	parsedTopicId, err := strconv.ParseInt(topicIdStr, 10, 64)
+	if err != nil {
+		return err
+	}
+	f.TopicId = parsedTopicId
+	return nil
 }
 
 type PKDownvoteForm struct {
