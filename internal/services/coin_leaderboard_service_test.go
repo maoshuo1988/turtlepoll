@@ -2,6 +2,7 @@ package services
 
 import (
 	"bbs-go/internal/models/models"
+	"bbs-go/internal/pkg/idcodec"
 	"testing"
 
 	"github.com/mlogclub/simple/sqls"
@@ -50,14 +51,14 @@ func TestCoinLeaderboardService_TopByBalance(t *testing.T) {
 	res, err := CoinLeaderboardService.TopByBalance(users[2].Id, 2)
 	require.NoError(t, err)
 	require.Len(t, res.Items, 2)
-	require.Equal(t, users[1].Id, res.Items[0].UserId)
+	require.Equal(t, idcodec.Encode(users[1].Id), res.Items[0].UserId)
 	require.EqualValues(t, 1, res.Items[0].Rank)
 	require.Equal(t, "u2", res.Items[0].Nickname)
 	require.Equal(t, "a2", res.Items[0].Avatar)
 	require.EqualValues(t, 300, res.Items[0].Balance)
 	require.InDelta(t, 0.5, res.Items[0].WinRate, 0.0001)
 	require.EqualValues(t, 1, res.Items[0].CurrentWinStreak)
-	require.Equal(t, users[2].Id, res.Items[1].UserId)
+	require.Equal(t, idcodec.Encode(users[2].Id), res.Items[1].UserId)
 
 	if res.MyRank == nil {
 		t.Fatal("myRank should not be nil")

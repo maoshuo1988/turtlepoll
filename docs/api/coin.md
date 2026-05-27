@@ -360,7 +360,7 @@ userId asc
 `items` 字段：
 
 - `rank`: 排名
-- `userId`: 用户 ID
+- `userId`: 混淆后的用户 ID，和评论返回的 `user.id` 一致
 - `nickname`: 用户名称
 - `avatar`: 用户头像
 - `balance`: 当前金币余额

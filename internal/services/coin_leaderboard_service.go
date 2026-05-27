@@ -2,6 +2,7 @@ package services
 
 import (
 	"bbs-go/internal/models/models"
+	"bbs-go/internal/pkg/idcodec"
 	"errors"
 	"sort"
 
@@ -19,7 +20,7 @@ type coinLeaderboardService struct{}
 
 type CoinLeaderboardItem struct {
 	Rank             int64   `json:"rank"`
-	UserId           int64   `json:"userId"`
+	UserId           string  `json:"userId"`
 	Nickname         string  `json:"nickname"`
 	Avatar           string  `json:"avatar"`
 	Balance          int64   `json:"balance"`
@@ -79,7 +80,7 @@ func (s *coinLeaderboardService) TopByBalance(userId int64, limit int) (*CoinLea
 	for i, coin := range coins {
 		item := CoinLeaderboardItem{
 			Rank:    int64(i + 1),
-			UserId:  coin.UserId,
+			UserId:  idcodec.Encode(coin.UserId),
 			Balance: coin.Balance,
 		}
 		if user := usersById[coin.UserId]; user != nil {
