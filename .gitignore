@@ -33,6 +33,7 @@ bbs-go.test.yaml
 .idea/*
 build/*
 
+cmd.md
 cscope.files
 tags
 

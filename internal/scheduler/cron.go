@@ -84,6 +84,13 @@ func Start() {
 		}
 	})
 
+	// 预测市场获胜方评论奖励（每 1 分钟一次）
+	addCronFunc(c, "*/1 * * * *", func() {
+		if err := services.PredictCommentRewardService.RunDue(); err != nil {
+			slog.Error("predict comment reward failed", slog.Any("err", err))
+		}
+	})
+
 	// AI 闲置推送扫描（每 1 分钟一次）
 	addCronFunc(c, "*/1 * * * *", func() {
 		if err := services.AIPushService.CronTick(); err != nil {

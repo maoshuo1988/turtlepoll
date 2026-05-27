@@ -32,6 +32,9 @@ type PredictController struct {
 
 func (c *PredictController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("POST", "/market/settle", "PostMarket_settle")
+	b.Handle("POST", "/comment_reward/run", "PostComment_rewardRun")
+	b.Handle("POST", "/comment_reward/retry", "PostComment_rewardRetry")
+	b.Handle("GET", "/comment_reward/logs", "GetComment_rewardLogs")
 }
 
 // PostSyncWorldcup POST /api/admin/predict/sync_worldcup
@@ -416,6 +419,62 @@ func (c *PredictController) PostMarket_settle() *web.JsonResult {
 	services.OperateLogService.AddOperateLog(adminUser.Id, constants.OpTypeUpdate, "predictMarket", form.MarketId, desc, c.Ctx.Request())
 
 	return web.JsonData(updated)
+}
+
+func (c *PredictController) PostComment_rewardRun() *web.JsonResult {
+	marketId, _ := params.GetInt64(c.Ctx, "marketId")
+	log, err := services.PredictCommentRewardService.RunForMarket(marketId, false)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(log)
+}
+
+func (c *PredictController) PostComment_rewardRetry() *web.JsonResult {
+	rewardLogId, _ := params.GetInt64(c.Ctx, "rewardLogId")
+	log, err := services.PredictCommentRewardService.Retry(rewardLogId)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(log)
+}
+
+func (c *PredictController) GetComment_rewardLogs() *web.JsonResult {
+	query := params.NewQueryParams(c.Ctx).
+		EqByReq("market_id").
+		EqByReq("status").
+		PageByReq().
+		Desc("id")
+	var list []models.PredictCommentRewardLog
+	query.Cnd.Find(sqls.DB(), &list)
+	count := query.Cnd.Count(sqls.DB(), &models.PredictCommentRewardLog{})
+	logIds := make([]int64, 0, len(list))
+	for _, row := range list {
+		logIds = append(logIds, row.Id)
+	}
+	itemsByLogId := map[int64][]models.PredictCommentRewardItem{}
+	if len(logIds) > 0 {
+		var items []models.PredictCommentRewardItem
+		_ = sqls.DB().Where("reward_log_id IN ?", logIds).Order("id asc").Find(&items).Error
+		for _, item := range items {
+			itemsByLogId[item.RewardLogId] = append(itemsByLogId[item.RewardLogId], item)
+		}
+	}
+	results := make([]map[string]any, 0, len(list))
+	for _, row := range list {
+		results = append(results, map[string]any{
+			"log":   row,
+			"items": itemsByLogId[row.Id],
+		})
+	}
+	return web.JsonData(&web.PageResult{
+		Results: results,
+		Page: &sqls.Paging{
+			Page:  query.Cnd.Paging.Page,
+			Limit: query.Cnd.Paging.Limit,
+			Total: count,
+		},
+	})
 }
 
 // 避免 iris 未使用（预留后续可能返回 map）

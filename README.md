@@ -108,14 +108,3 @@ tmp磁盘
 ```bash
 df -h /tmp
 ```
-
-
-
-curl -X POST "http://localhost:8082/api/football/sync_polymarket" \
-  --cookie "token=749c3b8056af4499ac276758760a5a58"
-
-curl -X POST "https://52.220.192.18:443/api/football/sync_polymarket" \
-  --cookie "token=101f4aa9d5d94763a040ef8991047ac0"
-
-
-  psql -U appuser -d turtlepoll 

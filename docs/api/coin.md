@@ -16,6 +16,7 @@
 - 金币服务：`internal/services/user_coin_service.go`
 - 排行榜服务：`internal/services/coin_leaderboard_service.go`
 - 用户预测战绩服务：`internal/services/predict_user_stat_service.go`
+- 预测评论奖励服务：`internal/services/predict_comment_reward_service.go`
 
 ## 数据模型
 
@@ -91,6 +92,25 @@
 
 约束：
 - 同一 `userId + marketId` 只记录一次，避免重复结算重复增加胜率或连胜。
+
+### PredictCommentMeta（预测市场评论选项）
+代码定义：`internal/models/models.go` -> `type PredictCommentMeta`
+
+常用字段：
+- `commentId`: int64
+- `marketId`: int64
+- `userId`: int64
+- `option`: string（`A/B/DRAW`）
+
+### PredictCommentRewardLog / PredictCommentRewardItem（评论奖励审计）
+代码定义：`internal/models/models.go`
+
+奖励规则：
+- 市场结算后 1 小时内发放。
+- 奖励池 = `floor((poolA + poolB + poolDraw) * 10%)`。
+- 只奖励获胜方评论用户。
+- 同一用户同一市场多条获胜方评论只发一份。
+- 金币流水 `bizType = COMMENT_REWARD`。
 
 ## 赔率说明
 
@@ -368,6 +388,75 @@ userId asc
   "myCurrentWinStreak": 1
 }
 ```
+
+---
+
+### 3.2) 预测市场评论并绑定选项
+
+- **接口**：`POST /api/comment/create`
+- **认证**：需要登录
+- **请求格式**：表单
+
+推荐参数：
+
+- `entityType`: `predict_market`
+- `entityId`: marketId
+- `option`: `A/B/DRAW`
+- `content`: 评论内容
+
+兼容参数：
+
+- 如果仍使用 `entityType=topic` 且 `entityId` 恰好为 marketId，传入 `option` 时也会写入 `PredictCommentMeta`。
+
+示例：
+
+```bash
+curl -X POST "http://localhost:8082/api/comment/create" \
+  --cookie "bbsgo_token=YOUR_TOKEN" \
+  -F "entityType=predict_market" \
+  -F "entityId=1" \
+  -F "option=A" \
+  -F "content=支持 A"
+```
+
+### 3.3) 管理员手动触发评论奖励
+
+- **接口**：`POST /api/admin/predict/comment_reward/run`
+- **认证**：需要管理员权限
+- **请求格式**：表单
+
+参数：
+
+- `marketId`: int64
+
+示例：
+
+```bash
+curl -X POST "http://localhost:8082/api/admin/predict/comment_reward/run" \
+  --cookie "bbsgo_token=ADMIN_TOKEN" \
+  -F "marketId=1"
+```
+
+### 3.4) 管理员重试失败评论奖励
+
+- **接口**：`POST /api/admin/predict/comment_reward/retry`
+- **认证**：需要管理员权限
+
+参数：
+
+- `rewardLogId`: int64
+
+### 3.5) 管理员查询评论奖励审计
+
+- **接口**：`GET /api/admin/predict/comment_reward/logs`
+- **认证**：需要管理员权限
+
+参数：
+
+- `marketId`: int64，可选
+- `status`: string，可选
+- `page`: int，可选
+- `limit`: int，可选
 
 ---
 

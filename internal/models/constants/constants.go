@@ -56,16 +56,17 @@ const (
 
 // EntityType
 const (
-	EntityArticle  = "article"
-	EntityTopic    = "topic"
-	EntityComment  = "comment"
-	EntityBattle   = "battle"
-	EntityPKTopic  = "pk_topic"
-	EntityUser     = "user"
-	EntityCheckIn  = "checkIn"
-	EntityTask     = "task"
-	EntityPredictA = "predictA"
-	EntityPredictB = "predictB"
+	EntityArticle       = "article"
+	EntityTopic         = "topic"
+	EntityComment       = "comment"
+	EntityBattle        = "battle"
+	EntityPKTopic       = "pk_topic"
+	EntityPredictMarket = "predict_market"
+	EntityUser          = "user"
+	EntityCheckIn       = "checkIn"
+	EntityTask          = "task"
+	EntityPredictA      = "predictA"
+	EntityPredictB      = "predictB"
 )
 
 // TaskEventType 任务事件类型（TaskConfig.EventType）

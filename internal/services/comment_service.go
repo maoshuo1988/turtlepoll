@@ -126,12 +126,29 @@ func (s *commentService) Publish(userId int64, form req.CreateCommentForm) (*mod
 		}
 
 		switch form.EntityType {
+		case constants.EntityPredictMarket:
+			market := &models.PredictMarket{}
+			if err := tx.Take(market, "id = ?", form.EntityId).Error; err != nil {
+				return errors.New("predict market not found")
+			}
+			if err := PredictCommentMetaService.CreateForComment(tx, market, comment, form.Option); err != nil {
+				return err
+			}
+			_ = PredictContextService.IncrHeatByMarketId(tx, form.EntityId, 1)
 		case constants.EntityTopic:
 			if err := TopicService.onComment(tx, form.EntityId, comment); err != nil {
 				return err
 			}
 			// 业务约定：当 topicId 与 PredictMarket.id 相同，评论 topic 同时提升对应预测市场热度
 			_ = PredictContextService.IncrHeatByMarketId(tx, form.EntityId, 1)
+			if strings.TrimSpace(form.Option) != "" {
+				market := &models.PredictMarket{}
+				if err := tx.Take(market, "id = ?", form.EntityId).Error; err == nil {
+					if err := PredictCommentMetaService.CreateForComment(tx, market, comment, form.Option); err != nil {
+						return err
+					}
+				}
+			}
 		case constants.EntityComment: // 二级评论
 			if err := s.onComment(tx, comment); err != nil {
 				return err
