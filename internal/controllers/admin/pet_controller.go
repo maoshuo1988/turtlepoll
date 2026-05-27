@@ -376,6 +376,30 @@ func (c *PetController) DeleteFeaturesBy(featureKey string) *web.JsonResult {
 	return web.JsonSuccess()
 }
 
+// GetAbility_options GET /api/admin/pet/ability-options
+func (c *PetController) GetAbility_options() *web.JsonResult {
+	selectableOnly := true
+	if v, has := parseBoolQuery(c.Ctx.URLParam("selectableOnly")); has {
+		selectableOnly = v
+	}
+	if v, has := parseBoolQuery(c.Ctx.URLParam("selectable_only")); has {
+		selectableOnly = v
+	}
+	featureKey := c.Ctx.URLParam("featureKey")
+	if strings.TrimSpace(featureKey) == "" {
+		featureKey = c.Ctx.URLParam("feature_key")
+	}
+	list := services.PetAbilityOptionService.List(services.PetAbilityOptionFilter{
+		FeatureKey:     featureKey,
+		Rarity:         c.Ctx.URLParam("rarity"),
+		SelectableOnly: selectableOnly,
+	})
+	return web.JsonData(map[string]any{
+		"results": list,
+		"total":   len(list),
+	})
+}
+
 // --- abilities attach ---
 
 // PutDefsByAbilities PUT /api/admin/pet/defs/{id}/abilities

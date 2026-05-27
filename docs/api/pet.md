@@ -216,6 +216,65 @@
 
 ---
 
+## 接口：运营能力列表（AbilityOption）
+
+说明：能力列表用于运营维护宠物时快速选择旧宠物沉淀下来的能力预设。它与 FeatureCatalog 的关系如下：
+
+- `FeatureCatalog` 是特性模板与白名单，返回 featureKey、schema、生效事件。
+- `AbilityOption` 是可直接选用的能力预设，返回可合并到 `PetDefinition.abilities` 的 JSON。
+
+### GET /api/admin/pet/ability-options
+
+- 描述：返回运营维护宠物时可选择的能力预设列表。
+- 参数：
+	- `?featureKey` 或 `?feature_key` (string, optional)：按 featureKey 过滤，例如 `signin_bonus`。
+	- `?rarity` (string, optional)：按来源旧宠物稀有度过滤，例如 `S`。
+	- `?selectableOnly` 或 `?selectable_only` (bool, optional)：默认 `true`，只返回当前可选择的预设。
+- 返回：200 OK
+	- body: { "results": [AbilityOption], "total": N }
+
+响应示例：
+
+```json
+{
+	"results": [
+		{
+			"optionKey": "signin_bonus_100",
+			"name": "每日登录额外奖励100",
+			"description": "来自凤凰龟的每日登录额外奖励能力",
+			"sourcePet": {
+				"petKey": "phoenix",
+				"name": "凤凰龟",
+				"rarity": "S"
+			},
+			"featureKeys": ["signin_bonus"],
+			"effectiveEvents": ["DAILY_SIGNIN"],
+			"abilities": {
+				"signin_bonus": {
+					"enabled": true,
+					"bonusCoins": 100,
+					"capPerDay": 500
+				}
+			},
+			"selectable": true,
+			"disabledReason": ""
+		}
+	],
+	"total": 1
+}
+```
+
+字段说明：
+
+- `optionKey`：能力预设唯一键，不等同于 featureKey。
+- `sourcePet`：该能力语义来自哪个旧宠物。
+- `featureKeys`：该预设会写入哪些 `abilities` key。
+- `effectiveEvents`：来自当前启用的 FeatureCatalog。
+- `abilities`：可直接合并到 `PetDefinition.abilities` 的 JSON。
+- `selectable=false` 时，`disabledReason` 会说明不可选原因。
+
+---
+
 ## 接口：给龟种配置特性（abilities）
 
 说明：`PetDefinition.abilities` 是一个 dict：`featureKey -> params`。
