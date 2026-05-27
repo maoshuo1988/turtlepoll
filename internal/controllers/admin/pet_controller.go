@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/mvc"
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
 	"github.com/mlogclub/simple/web/params"
@@ -104,6 +105,10 @@ func parseRarity(r string) int {
 
 type PetController struct {
 	Ctx iris.Context
+}
+
+func (c *PetController) BeforeActivation(b mvc.BeforeActivation) {
+	b.Handle("GET", "/ability-options", "GetAbility_options")
 }
 
 // GetDefs GET /api/admin/pet/defs
