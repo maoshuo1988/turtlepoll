@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/mvc"
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
@@ -27,6 +28,10 @@ import (
 // 注意：该 party 已经过 AuthMiddleware + AdminMiddleware。
 type PredictController struct {
 	Ctx iris.Context
+}
+
+func (c *PredictController) BeforeActivation(b mvc.BeforeActivation) {
+	b.Handle("POST", "/market/settle", "PostMarket_settle")
 }
 
 // PostSyncWorldcup POST /api/admin/predict/sync_worldcup

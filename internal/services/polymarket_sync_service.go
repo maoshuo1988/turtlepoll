@@ -59,11 +59,6 @@ func (s *polymarketSyncService) DiscoveryPoller(ctx context.Context) error {
 		slog.Debug("polymarket discovery disabled, skip")
 		return nil
 	}
-	if len(pm.Tags) == 0 && len(pm.MarketSlugs) == 0 && len(pm.MarketIds) == 0 {
-		err := errors.New("polymarket enabled but no tags/marketSlugs/marketIds configured")
-		slog.Error("polymarket discovery config invalid", slog.Any("err", err))
-		return err
-	}
 
 	client := polymarket.NewGammaClient(pm.BaseURL)
 	db := sqls.DB()
@@ -73,6 +68,7 @@ func (s *polymarketSyncService) DiscoveryPoller(ctx context.Context) error {
 	var seenMarkets, upsertOK, upsertFailed int
 	slog.Info("polymarket discovery start",
 		slog.Int("tags", len(pm.Tags)),
+		slog.Bool("matchTags", pm.MatchTags),
 		slog.Int("marketSlugs", len(pm.MarketSlugs)),
 		slog.Int("marketIds", len(pm.MarketIds)),
 		slog.Int("pageSize", pageSize),
@@ -97,24 +93,19 @@ func (s *polymarketSyncService) DiscoveryPoller(ctx context.Context) error {
 	}
 
 	if len(pm.Tags) > 0 {
-		tagSlugToID, err := s.buildTagSlugMap(ctx, client)
+		tagRefs, err := s.resolveGammaTags(ctx, client, pm.Tags)
 		if err != nil {
 			return err
 		}
-		for _, tagSlug := range pm.Tags {
-			tagSlug = strings.ToLower(strings.TrimSpace(tagSlug))
-			if tagSlug == "" {
-				continue
-			}
-			tagID, ok := tagSlugToID[tagSlug]
-			if !ok {
-				slog.Warn("polymarket tag not found in gamma tags", slog.String("tag", tagSlug))
-				continue
-			}
-			params := map[string]string{"tag_id": strconv.FormatInt(tagID, 10)}
-			if err := s.syncMarketsPaged(ctx, db, client, params, []string{"polymarket", tagSlug}, "tag", now, pageSize, &seenMarkets, &upsertOK, &upsertFailed); err != nil {
+		for _, tagRef := range tagRefs {
+			params := map[string]string{"tag_id": strconv.FormatInt(tagRef.ID, 10)}
+			if err := s.syncMarketsPaged(ctx, db, client, params, []string{"polymarket", tagRef.Slug}, "tag", now, pageSize, &seenMarkets, &upsertOK, &upsertFailed); err != nil {
 				return err
 			}
+		}
+	} else {
+		if err := s.syncMarketsPaged(ctx, db, client, nil, []string{"polymarket"}, "all", now, pageSize, &seenMarkets, &upsertOK, &upsertFailed); err != nil {
+			return err
 		}
 	}
 
@@ -126,32 +117,22 @@ func (s *polymarketSyncService) DiscoveryPoller(ctx context.Context) error {
 				target[slug] = true
 			}
 		}
-		maxPages := 50
-		for page := 0; page < maxPages; page++ {
-			offset := page * pageSize
-			list, err := client.ListMarkets(ctx, pageSize, offset, nil)
-			if err != nil {
+		list, _, err := client.ListMarketsKeyset(ctx, pageSize, "", nil)
+		if err != nil {
+			return err
+		}
+		for i := range list {
+			m := list[i]
+			slug := strings.ToLower(strings.TrimSpace(m.Slug))
+			if slug == "" || !target[slug] {
+				continue
+			}
+			seenMarkets++
+			if err := s.upsertMarketAndContext(db, &m, []string{"polymarket"}, "slug", now); err != nil {
+				upsertFailed++
 				return err
 			}
-			if len(list) == 0 {
-				break
-			}
-			for i := range list {
-				m := list[i]
-				slug := strings.ToLower(strings.TrimSpace(m.Slug))
-				if slug == "" || !target[slug] {
-					continue
-				}
-				seenMarkets++
-				if err := s.upsertMarketAndContext(db, &m, []string{"polymarket"}, "slug", now); err != nil {
-					upsertFailed++
-					return err
-				}
-				upsertOK++
-			}
-			if len(list) < pageSize {
-				break
-			}
+			upsertOK++
 		}
 	}
 
@@ -199,51 +180,82 @@ func (s *polymarketSyncService) TrackingPoller(ctx context.Context) error {
 	return nil
 }
 
-func (s *polymarketSyncService) buildTagSlugMap(ctx context.Context, client *polymarket.GammaClient) (map[string]int64, error) {
+type gammaTagRef struct {
+	ID   int64
+	Slug string
+	Name string
+}
+
+func (s *polymarketSyncService) resolveGammaTags(ctx context.Context, client *polymarket.GammaClient, configuredTags []string) ([]gammaTagRef, error) {
 	tags, err := client.ListTags(ctx)
 	if err != nil {
 		return nil, err
 	}
-	tagSlugToID := map[string]int64{}
+	return matchConfiguredGammaTags(tags, configuredTags), nil
+}
+
+func matchConfiguredGammaTags(tags []polymarket.Tag, configuredTags []string) []gammaTagRef {
+	tagLookup := map[string]gammaTagRef{}
 	for _, t := range tags {
 		slug := strings.ToLower(strings.TrimSpace(t.Slug))
+		name := strings.ToLower(strings.TrimSpace(t.Name))
 		id := anyToInt64(t.ID)
-		if slug != "" && id > 0 {
-			tagSlugToID[slug] = id
+		if id <= 0 {
+			continue
+		}
+		ref := gammaTagRef{ID: id, Slug: slug, Name: strings.TrimSpace(t.Name)}
+		if ref.Slug == "" {
+			ref.Slug = strconv.FormatInt(id, 10)
+		}
+		tagLookup[strconv.FormatInt(id, 10)] = ref
+		if slug != "" {
+			tagLookup[slug] = ref
+		}
+		if name != "" {
+			tagLookup[name] = ref
 		}
 	}
-	return tagSlugToID, nil
+
+	seenIDs := map[int64]bool{}
+	refs := make([]gammaTagRef, 0, len(configuredTags))
+	for _, configured := range configuredTags {
+		key := strings.ToLower(strings.TrimSpace(configured))
+		if key == "" {
+			continue
+		}
+		ref, ok := tagLookup[key]
+		if !ok {
+			slog.Warn("polymarket tag not found in gamma tags", slog.String("tag", configured))
+			continue
+		}
+		if seenIDs[ref.ID] {
+			continue
+		}
+		seenIDs[ref.ID] = true
+		refs = append(refs, ref)
+	}
+	return refs
 }
 
 func (s *polymarketSyncService) syncMarketsPaged(ctx context.Context, db *gorm.DB, client *polymarket.GammaClient, params map[string]string, baseTags []string, source string, now int64, pageSize int, seenMarkets, upsertOK, upsertFailed *int) error {
-	maxPages := 200
-	for page := 0; page < maxPages; page++ {
-		offset := page * pageSize
-		list, err := client.ListMarkets(ctx, pageSize, offset, params)
-		if err != nil {
-			slog.Error("polymarket list markets failed", slog.Any("err", err), slog.Int("page", page), slog.Int("offset", offset), slog.Any("params", params))
+	list, _, err := client.ListMarketsKeyset(ctx, pageSize, "", params)
+	if err != nil {
+		slog.Error("polymarket list markets failed", slog.Any("err", err), slog.Any("params", params))
+		return err
+	}
+	for i := range list {
+		m := list[i]
+		if seenMarkets != nil {
+			(*seenMarkets)++
+		}
+		if err := s.upsertMarketAndContext(db, &m, baseTags, source, now); err != nil {
+			if upsertFailed != nil {
+				(*upsertFailed)++
+			}
 			return err
 		}
-		if len(list) == 0 {
-			break
-		}
-		for i := range list {
-			m := list[i]
-			if seenMarkets != nil {
-				(*seenMarkets)++
-			}
-			if err := s.upsertMarketAndContext(db, &m, baseTags, source, now); err != nil {
-				if upsertFailed != nil {
-					(*upsertFailed)++
-				}
-				return err
-			}
-			if upsertOK != nil {
-				(*upsertOK)++
-			}
-		}
-		if len(list) < pageSize {
-			break
+		if upsertOK != nil {
+			(*upsertOK)++
 		}
 	}
 	return nil
@@ -361,6 +373,7 @@ func (s *polymarketSyncService) upsertPredictContext(tx *gorm.DB, marketId int64
 	if m.Event != nil && strings.TrimSpace(m.Event.Title) != "" {
 		eventName = strings.TrimSpace(m.Event.Title)
 	}
+	proText, conText := polymarketBinaryOutcomeTexts(m)
 	ctxModel := &models.PredictContext{}
 	err := tx.Where("market_id = ?", marketId).First(ctxModel).Error
 	if err != nil {
@@ -369,12 +382,20 @@ func (s *polymarketSyncService) upsertPredictContext(tx *gorm.DB, marketId int64
 		}
 		ctxModel.MarketId = marketId
 		ctxModel.EventName = eventName
+		ctxModel.ProText = proText
+		ctxModel.ConText = conText
 		ctxModel.Tags = strings.Join(tags, ",")
 		ctxModel.CreateTime = now
 		ctxModel.UpdateTime = now
 		return tx.Create(ctxModel).Error
 	}
 	ctxModel.EventName = eventName
+	if proText != "" {
+		ctxModel.ProText = proText
+	}
+	if conText != "" {
+		ctxModel.ConText = conText
+	}
 	ctxModel.Tags = strings.Join(tags, ",")
 	ctxModel.UpdateTime = now
 	return tx.Save(ctxModel).Error
@@ -699,6 +720,24 @@ func defaultOutcomeOption(count, idx int) string {
 	return ""
 }
 
+func polymarketBinaryOutcomeTexts(m *polymarket.Market) (proText, conText string) {
+	if m == nil || len(m.Outcomes) != 2 {
+		return "", ""
+	}
+	return polymarketOutcomeDisplayName(m.Outcomes[0]), polymarketOutcomeDisplayName(m.Outcomes[1])
+}
+
+func polymarketOutcomeDisplayName(outcome polymarket.Outcome) string {
+	name := strings.TrimSpace(outcome.Name)
+	if name == "" {
+		name = anyToString(outcome.ID)
+	}
+	if name == "" {
+		name = strings.TrimSpace(outcome.Slug)
+	}
+	return name
+}
+
 func isCancelledOutcome(vals ...string) bool {
 	for _, v := range vals {
 		v = strings.ToUpper(strings.TrimSpace(v))
@@ -747,8 +786,8 @@ func polymarketDiscoveryPageSize(pm config.Polymarket) int {
 	if pageSize <= 0 {
 		pageSize = 50
 	}
-	if pageSize > 200 {
-		pageSize = 200
+	if pageSize > 100 {
+		pageSize = 100
 	}
 	return pageSize
 }

@@ -164,6 +164,11 @@ type Event struct {
 	Slug  string `json:"slug"`
 }
 
+type MarketsKeysetPage struct {
+	Markets    []Market `json:"markets"`
+	NextCursor string   `json:"next_cursor"`
+}
+
 func (c *GammaClient) ListTags(ctx context.Context) ([]Tag, error) {
 	u, err := url.Parse(c.baseURL() + "/tags")
 	if err != nil {
@@ -178,6 +183,34 @@ func (c *GammaClient) ListTags(ctx context.Context) ([]Tag, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// ListMarketsKeyset 拉取 markets/keyset（Gamma 推荐的 cursor/keyset 分页）。
+func (c *GammaClient) ListMarketsKeyset(ctx context.Context, limit int, afterCursor string, params map[string]string) ([]Market, string, error) {
+	u, err := url.Parse(c.baseURL() + "/markets/keyset")
+	if err != nil {
+		return nil, "", err
+	}
+	q := u.Query()
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if afterCursor != "" {
+		q.Set("after_cursor", afterCursor)
+	}
+	for k, v := range params {
+		if v == "" {
+			continue
+		}
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+
+	var page MarketsKeysetPage
+	if err := c.getJSON(ctx, u.String(), &page); err != nil {
+		return nil, "", err
+	}
+	return page.Markets, page.NextCursor, nil
 }
 
 // ListMarkets 拉取 markets（Gamma 支持 limit/offset）。
