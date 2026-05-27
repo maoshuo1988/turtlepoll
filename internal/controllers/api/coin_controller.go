@@ -65,3 +65,18 @@ func (c *CoinController) PostSettle() *web.JsonResult {
 		"count": len(res),
 	})
 }
+
+// 账户余额排行榜：GET /api/coin/leaderboard
+// query: limit，默认 20，最大 100
+func (c *CoinController) GetLeaderboard() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+	limit, _ := params.GetInt(c.Ctx, "limit")
+	res, err := services.CoinLeaderboardService.TopByBalance(user.Id, limit)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(res)
+}

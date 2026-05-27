@@ -6,6 +6,7 @@
 
 - 用户接口：`/api/coin/**`（需要登录，`AuthMiddleware`）
 - 管理员接口：`/api/admin/coin/**`（需要管理员权限，`AdminMiddleware`）
+- 账户余额榜：`GET /api/coin/leaderboard`，返回余额 Top N 用户和当前用户排名摘要
 
 代码位置：
 
@@ -13,6 +14,8 @@
 - 管理员控制器：`internal/controllers/admin/coin_controller.go`
 - 下注服务：`internal/services/predict_bet_service.go`
 - 金币服务：`internal/services/user_coin_service.go`
+- 排行榜服务：`internal/services/coin_leaderboard_service.go`
+- 用户预测战绩服务：`internal/services/predict_user_stat_service.go`
 
 ## 数据模型
 
@@ -61,6 +64,33 @@
 - `effA` / `effB` / `effDraw`: int64（下单时看到的有效池快照）
 - `status`: string（当前实现使用 `OPEN`）
 - `createTime`: int64
+
+### PredictUserStat（用户预测战绩）
+代码定义：`internal/models/models.go` -> `type PredictUserStat`
+
+常用字段：
+- `userId`: int64
+- `settledMarketCount`: int64（计入胜率的已结算市场数）
+- `winMarketCount`: int64（命中市场数）
+- `loseMarketCount`: int64（未命中市场数）
+- `winRate`: float64（胜率）
+- `currentWinStreak`: int64（最新连胜场数）
+- `bestWinStreak`: int64（历史最高连胜，预留展示）
+
+### PredictUserMarketStat（用户单市场战绩）
+代码定义：`internal/models/models.go` -> `type PredictUserMarketStat`
+
+常用字段：
+- `userId`: int64
+- `marketId`: int64
+- `result`: string（`WIN/LOSE/VOID`）
+- `betAmount`: int64（该用户在该市场总下注额）
+- `payout`: int64（该用户在该市场总派奖额）
+- `settledBetCount`: int64（归并下注单数量）
+- `settleTime`: int64
+
+约束：
+- 同一 `userId + marketId` 只记录一次，避免重复结算重复增加胜率或连胜。
 
 ## 赔率说明
 
@@ -190,6 +220,9 @@ oddsDraw = clamp(total / effDraw, 1.2, 5.0)
 - 中奖判断：`PredictBet.option == PredictMarket.result`
 - 中奖派发：`payout = floor(amount * odds)`（odds 为下注时锁定赔率）
 - 输单：`payout = 0`
+- 用户战绩按“用户 + 市场”统计，同一用户同一市场多笔下注只计为一场
+- 该市场用户结果为 `WIN` 时，用户胜场 +1、最新连胜 +1
+- 该市场用户结果为 `LOSE` 时，用户负场 +1、最新连胜归零
 
 小组赛平局结算：
 
@@ -281,6 +314,63 @@ option = A/B  -> LOSE, payout = 0
 
 ---
 
+### 3.1) 账户余额排行榜
+
+- **接口**：`GET /api/coin/leaderboard`
+- **认证**：需要登录
+
+#### 请求参数（query）
+- `limit`: int，可选，默认 20，最大 100
+
+#### 排序规则
+
+```text
+balance desc
+userId asc
+```
+
+#### 返回值（data）
+
+- `items`: 账户余额 Top N 用户列表
+- `myRank`: 当前用户排名；当前用户没有金币账户时为空
+- `myBalance`: 当前用户余额；当前用户没有金币账户时为 0
+- `myWinRate`: 当前用户预测胜率
+- `myCurrentWinStreak`: 当前用户最新连胜场数
+
+`items` 字段：
+
+- `rank`: 排名
+- `userId`: 用户 ID
+- `nickname`: 用户名称
+- `avatar`: 用户头像
+- `balance`: 当前金币余额
+- `winRate`: 用户预测胜率
+- `currentWinStreak`: 用户最新连胜场数
+
+示例：
+
+```json
+{
+  "items": [
+    {
+      "rank": 1,
+      "userId": 101,
+      "nickname": "Alice",
+      "avatar": "https://example.com/a.png",
+      "balance": 9000,
+      "winRate": 0.75,
+      "currentWinStreak": 3
+    }
+  ],
+  "myRank": 12,
+  "myBalance": 1200,
+  "myWinRate": 0.5,
+  "myCurrentWinStreak": 1
+}
+```
+
+---
+
 ## 错误码与错误信息
 
 本服务接口统一返回 `web.JsonResult`；错误通常以 `msg` 文本形式返回（以实际实现为准）。本模块涉及的常见错误信息包括：
@@ -346,6 +436,13 @@ option = A/B  -> LOSE, payout = 0
 - `market`: PredictMarket（已更新 `poolA/poolB/poolDraw`）
 - `userCoin`: UserCoin（已扣款后的余额）
 - `lockedOdds`: float64（等同于 bet.odds）
+
+设计补充：
+
+- 下注成功后会按下注金额增加对应 `PredictContext.heat`。
+- P0 公式：`heatDelta = amount`，不设置上限。
+- 该热度规则覆盖世界杯市场与 Polymarket 市场。
+- 预测市场一级评论也会增加同一个 `PredictContext.heat`，评论热度增量为 1。
 
 示例（字段会随模型演进，这里仅展示结构）：
 

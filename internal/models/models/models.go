@@ -36,6 +36,8 @@ var Models = []interface{}{
 	&UserCoin{},
 	&UserCoinLog{},
 	&PredictBet{},
+	&PredictUserStat{},
+	&PredictUserMarketStat{},
 
 	// Battle Square
 	&Battle{},

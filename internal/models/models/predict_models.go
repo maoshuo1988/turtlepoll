@@ -194,8 +194,8 @@ type PredictMarketSettleIssue struct {
 // UserCoin 用户金币账户（未来下注使用；此阶段只建表不接业务）
 type UserCoin struct {
 	Model
-	UserId  int64 `gorm:"not null;uniqueIndex" json:"userId" form:"userId"`
-	Balance int64 `gorm:"not null;default:0" json:"balance" form:"balance"`
+	UserId  int64 `gorm:"not null;uniqueIndex;index:idx_user_coin_balance_user,priority:2" json:"userId" form:"userId"`
+	Balance int64 `gorm:"not null;default:0;index:idx_user_coin_balance_user,sort:desc,priority:1" json:"balance" form:"balance"`
 	// 预留：冻结金额等
 	Frozen int64 `gorm:"not null;default:0" json:"frozen" form:"frozen"`
 
@@ -251,4 +251,38 @@ type PredictBet struct {
 	SettleTime int64 `gorm:"not null;default:0" json:"settleTime" form:"settleTime"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+}
+
+// PredictUserStat 用户预测市场战绩物化统计。
+type PredictUserStat struct {
+	Model
+	UserId int64 `gorm:"not null;uniqueIndex" json:"userId" form:"userId"`
+
+	SettledMarketCount  int64   `gorm:"not null;default:0" json:"settledMarketCount" form:"settledMarketCount"`
+	WinMarketCount      int64   `gorm:"not null;default:0" json:"winMarketCount" form:"winMarketCount"`
+	LoseMarketCount     int64   `gorm:"not null;default:0" json:"loseMarketCount" form:"loseMarketCount"`
+	WinRate             float64 `gorm:"not null;default:0" json:"winRate" form:"winRate"`
+	CurrentWinStreak    int64   `gorm:"not null;default:0;index" json:"currentWinStreak" form:"currentWinStreak"`
+	BestWinStreak       int64   `gorm:"not null;default:0" json:"bestWinStreak" form:"bestWinStreak"`
+	LastSettledMarketId int64   `gorm:"not null;default:0" json:"lastSettledMarketId" form:"lastSettledMarketId"`
+	LastSettledAt       int64   `gorm:"not null;default:0" json:"lastSettledAt" form:"lastSettledAt"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictUserMarketStat 用户单市场战绩明细，用于幂等控制和重算。
+type PredictUserMarketStat struct {
+	Model
+	UserId   int64  `gorm:"not null;uniqueIndex:idx_predict_user_market_stat_user_market;index:idx_predict_user_market_stat_user_time" json:"userId" form:"userId"`
+	MarketId int64  `gorm:"not null;uniqueIndex:idx_predict_user_market_stat_user_market;index" json:"marketId" form:"marketId"`
+	Result   string `gorm:"size:16;not null" json:"result" form:"result"`
+
+	BetAmount       int64 `gorm:"not null;default:0" json:"betAmount" form:"betAmount"`
+	Payout          int64 `gorm:"not null;default:0" json:"payout" form:"payout"`
+	SettledBetCount int64 `gorm:"not null;default:0" json:"settledBetCount" form:"settledBetCount"`
+	SettleTime      int64 `gorm:"not null;default:0;index:idx_predict_user_market_stat_user_time" json:"settleTime" form:"settleTime"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
 }

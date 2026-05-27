@@ -72,6 +72,10 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 			return nil
 		}
 
+		totalBetAmount := int64(0)
+		totalPayout := int64(0)
+		settledBetCount := int64(0)
+		hasWin := false
 		for _, bet := range bets {
 			betOption := strings.ToUpper(strings.TrimSpace(bet.Option))
 			isWin := betOption == winner
@@ -83,6 +87,7 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 				if payout < 0 {
 					payout = 0
 				}
+				hasWin = hasWin || payout > 0
 			}
 
 			bet.Status = "SETTLED"
@@ -115,6 +120,25 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 				EventTitle:   market.Title,
 				SettledAt:    now,
 			})
+			totalBetAmount += bet.Amount
+			totalPayout += payout
+			settledBetCount++
+		}
+
+		marketResult := "LOSE"
+		if hasWin && totalPayout > 0 {
+			marketResult = "WIN"
+		}
+		if err := PredictUserStatService.RecordMarketResult(tx, PredictUserMarketStatInput{
+			UserId:          userId,
+			MarketId:        marketId,
+			Result:          marketResult,
+			BetAmount:       totalBetAmount,
+			Payout:          totalPayout,
+			SettledBetCount: settledBetCount,
+			SettleTime:      now,
+		}); err != nil {
+			return err
 		}
 		return nil
 	})
