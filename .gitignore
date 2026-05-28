@@ -1,5 +1,3 @@
-.gomodcache/
-
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -33,7 +31,6 @@ bbs-go.test.yaml
 .idea/*
 build/*
 
-cmd.md
 cscope.files
 tags
 
@@ -53,8 +50,6 @@ ip2region.xdb
 
 bbs-go.db
 bbs-go.db*
-ip-proxy
-commit-and-push.sh
 
 __debug_bin*
 bbs-go-server

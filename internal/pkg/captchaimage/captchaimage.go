@@ -11,6 +11,8 @@ const (
 	// ProtocolBase64Image 表示 base64Captcha 图片验证码的协议号。
 	// 与现有：1=dchest, 2=rotate 保持兼容。
 	ProtocolBase64Image = 3
+	// ProtocolSignupNoCaptcha 表示注册时跳过验证码校验。
+	ProtocolSignupNoCaptcha = 4
 )
 
 // 默认使用内存存储（单机/开发最简单）；如需多实例，请替换为 redis store。

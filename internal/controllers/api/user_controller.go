@@ -406,8 +406,8 @@ func (c *UserController) PostTopicHideBy(topicIdStr string) *web.JsonResult {
 		return web.JsonError(err)
 	}
 
-	topicId, err := strconv.ParseInt(topicIdStr, 10, 64)
-	if err != nil || topicId <= 0 {
+	topicId := idcodec.Decode(topicIdStr)
+	if topicId <= 0 {
 		return web.JsonErrorMsg(locales.Get("common.not_found"))
 	}
 
@@ -552,8 +552,8 @@ func (c *UserController) PostTopicUnhideBy(topicIdStr string) *web.JsonResult {
 		return web.JsonError(err)
 	}
 
-	topicId, err := strconv.ParseInt(topicIdStr, 10, 64)
-	if err != nil || topicId <= 0 {
+	topicId := idcodec.Decode(topicIdStr)
+	if topicId <= 0 {
 		return web.JsonErrorMsg(locales.Get("common.not_found"))
 	}
 

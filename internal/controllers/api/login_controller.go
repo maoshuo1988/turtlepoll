@@ -66,7 +66,9 @@ func (c *LoginController) PostSignup() *web.JsonResult {
 	}
 	// 根据验证码协议版本校验验证码（可通过 bbs-go.yaml 的 loginCaptcha 开关跳过）
 	if !shouldSkipLoginCaptcha() {
-		if captchaProtocol == 2 {
+		if captchaProtocol == captchaimage.ProtocolSignupNoCaptcha {
+			// 注册场景约定 protocol=4 时跳过验证码校验。
+		} else if captchaProtocol == 2 {
 			// rotate 被配置关闭时：不再接受/校验旋转验证码
 			if !isRotateCaptchaAllowed() {
 				return web.JsonError(errs.CaptchaError())
@@ -104,7 +106,9 @@ func (c *LoginController) PostSignin() *web.JsonResult {
 
 	// 根据验证码协议版本校验验证码（可通过 bbs-go.yaml 的 loginCaptcha 开关跳过）
 	if !shouldSkipLoginCaptcha() {
-		if captchaProtocol == 2 {
+		if captchaProtocol == captchaimage.ProtocolSignupNoCaptcha {
+			// 登录场景约定 protocol=4 时跳过验证码校验。
+		} else if captchaProtocol == 2 {
 			// rotate 被配置关闭时：不再接受/校验旋转验证码
 			if !isRotateCaptchaAllowed() {
 				return web.JsonError(errs.CaptchaError())
