@@ -118,4 +118,8 @@ func init() {
 	register(15, "opposite pk init tables", migrate_pk_init_tables)
 	register(16, "ai stamina init tables", migrate_ai_stamina_tables)
 	register(17, "ai push indexes", migrate_ai_push_indexes)
+	register(18, "pk topic display fields", migrate_pk_topic_display_fields)
+	register(19, "worldcup predict market fields", migrate_worldcup_predict_market_fields)
+	register(20, "predict context display fields", migrate_predict_context_display_fields)
+	register(21, "polymarket tracking and outcome tables", migrate_polymarket_tracking_tables)
 }

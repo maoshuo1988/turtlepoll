@@ -15,12 +15,16 @@ type MatchSchedule struct {
 	Matchday     int    `gorm:"not null;default:0" json:"matchday" form:"matchday"`
 	Stage        string `gorm:"size:64" json:"stage" form:"stage"`
 	GroupName    string `gorm:"size:64" json:"groupName" form:"groupName"`
-	Status       string `gorm:"size:32" json:"status" form:"status"` // SCHEDULED/LIVE/FINISHED...
+	MatchPhase   string `gorm:"size:32;not null;default:''" json:"matchPhase" form:"matchPhase"` // GROUP/KNOCKOUT/UNKNOWN
+	Status       string `gorm:"size:32" json:"status" form:"status"`                             // SCHEDULED/LIVE/FINISHED...
 	UtcDate      int64  `gorm:"not null;index:idx_match_schedule_utc_date" json:"utcDate" form:"utcDate"`
 	HomeTeam     string `gorm:"size:128" json:"homeTeam" form:"homeTeam"`
 	AwayTeam     string `gorm:"size:128" json:"awayTeam" form:"awayTeam"`
 	HomeTeamId   int64  `gorm:"not null;default:0" json:"homeTeamId" form:"homeTeamId"`
 	AwayTeamId   int64  `gorm:"not null;default:0" json:"awayTeamId" form:"awayTeamId"`
+	HomeScore    int    `gorm:"not null;default:-1" json:"homeScore" form:"homeScore"`
+	AwayScore    int    `gorm:"not null;default:-1" json:"awayScore" form:"awayScore"`
+	Winner       string `gorm:"size:32;not null;default:''" json:"winner" form:"winner"` // A/B/DRAW/UNKNOWN
 	LastSyncedAt int64  `gorm:"not null;default:0" json:"lastSyncedAt" form:"lastSyncedAt"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
@@ -38,10 +42,10 @@ type PredictMarket struct {
 
 	// 市场基础信息
 	Title       string `gorm:"size:256;not null" json:"title" form:"title"`
-	MarketType  string `gorm:"size:32;not null" json:"marketType" form:"marketType"` // e.g. 1x2
+	MarketType  string `gorm:"size:32;not null" json:"marketType" form:"marketType"` // 1x2/binary
 	Status      string `gorm:"size:32;not null" json:"status" form:"status"`         // OPEN/CLOSED/SETTLED
 	CloseTime   int64  `gorm:"not null;default:0" json:"closeTime" form:"closeTime"` // 截止下注时间（先预留）
-	Result      string `gorm:"size:32" json:"result" form:"result"`                  // HOME/DRAW/AWAY（先预留）
+	Result      string `gorm:"size:32" json:"result" form:"result"`                  // A/B；小组赛目标支持 DRAW（由管理员或后续结果同步写入）
 	ExternalKey string `gorm:"size:128" json:"externalKey" form:"externalKey"`       // 预留：外部业务 key
 
 	// ============ TurtlePoll：外部市场结算（例如 Polymarket Gamma） ============
@@ -54,14 +58,16 @@ type PredictMarket struct {
 	// 外部结算时间（若外部不提供，则写首次检测到 resolved 的时间戳）。
 	ResolvedAt int64 `gorm:"not null;default:0" json:"resolvedAt" form:"resolvedAt"`
 
-	// ============ TurtlePoll：二元预测市场（A/B）下注池与赔率 ============
+	// ============ TurtlePoll：预测市场下注池与赔率 ============
 	// baseA/baseB：系统默认投放的虚拟底池（用于早期赔率稳定）
-	// poolA/poolB：所有用户对 A/B 的下注累计（真实用户下注池）
+	// poolA/poolB/poolDraw：所有用户对 A/B/DRAW 的下注累计（真实用户下注池）。
 	// 注意：赔率在下注时锁定到订单里，不在结算时按最新赔率重算。
-	BaseA int64 `gorm:"not null;default:500" json:"baseA" form:"baseA"`
-	BaseB int64 `gorm:"not null;default:500" json:"baseB" form:"baseB"`
-	PoolA int64 `gorm:"not null;default:0" json:"poolA" form:"poolA"`
-	PoolB int64 `gorm:"not null;default:0" json:"poolB" form:"poolB"`
+	BaseA    int64 `gorm:"not null;default:500" json:"baseA" form:"baseA"`
+	BaseB    int64 `gorm:"not null;default:500" json:"baseB" form:"baseB"`
+	BaseDraw int64 `gorm:"not null;default:500" json:"baseDraw" form:"baseDraw"`
+	PoolA    int64 `gorm:"not null;default:0" json:"poolA" form:"poolA"`
+	PoolB    int64 `gorm:"not null;default:0" json:"poolB" form:"poolB"`
+	PoolDraw int64 `gorm:"not null;default:0" json:"poolDraw" form:"poolDraw"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
@@ -78,6 +84,13 @@ type PredictContext struct {
 	EventName string `gorm:"size:256;not null" json:"eventName" form:"eventName"`
 	// 图片地址
 	ImageUrl string `gorm:"type:text" json:"imageUrl" form:"imageUrl"`
+	// 列表展示图片
+	ListImage string `gorm:"size:512" json:"listImage" form:"listImage"`
+	// A/B 阵营背景图与背景色
+	SideABgImage string `gorm:"size:512" json:"sideABgImage" form:"sideABgImage"`
+	SideBBgImage string `gorm:"size:512" json:"sideBBgImage" form:"sideBBgImage"`
+	SideABgColor string `gorm:"size:64;not null;default:'#E23D3D'" json:"sideABgColor" form:"sideABgColor"`
+	SideBBgColor string `gorm:"size:64;not null;default:'#276EF1'" json:"sideBBgColor" form:"sideBBgColor"`
 	// 参与人数
 	ParticipantCount int64 `gorm:"not null;default:0" json:"participantCount" form:"participantCount"`
 	// 正方文案
@@ -128,11 +141,61 @@ type PredictTagStat struct {
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
 }
 
+// PredictMarketTracking Polymarket 市场精确跟踪记录。
+type PredictMarketTracking struct {
+	Model
+
+	MarketId         int64  `gorm:"not null;index" json:"marketId" form:"marketId"`
+	ExternalMarketId string `gorm:"size:128;not null;uniqueIndex" json:"externalMarketId" form:"externalMarketId"`
+	ExternalSlug     string `gorm:"size:256;index" json:"externalSlug" form:"externalSlug"`
+	Source           string `gorm:"size:32;not null;default:'tag'" json:"source" form:"source"`
+	TrackingStatus   string `gorm:"size:32;not null;default:'TRACKING';index:idx_predict_market_tracking_status_retry" json:"trackingStatus" form:"trackingStatus"`
+	LastSyncAt       int64  `gorm:"not null;default:0" json:"lastSyncAt" form:"lastSyncAt"`
+	NextRetryAt      int64  `gorm:"not null;default:0;index:idx_predict_market_tracking_status_retry" json:"nextRetryAt" form:"nextRetryAt"`
+	FailCount        int    `gorm:"not null;default:0" json:"failCount" form:"failCount"`
+	LastError        string `gorm:"size:512" json:"lastError" form:"lastError"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictMarketOutcome Polymarket outcome 到站内 A/B 的映射。
+type PredictMarketOutcome struct {
+	Model
+
+	MarketId            int64  `gorm:"not null;uniqueIndex:idx_predict_market_outcome_external;uniqueIndex:idx_predict_market_outcome_option" json:"marketId" form:"marketId"`
+	ExternalOutcomeId   string `gorm:"size:128;not null;uniqueIndex:idx_predict_market_outcome_external" json:"externalOutcomeId" form:"externalOutcomeId"`
+	ExternalOutcomeName string `gorm:"size:255" json:"externalOutcomeName" form:"externalOutcomeName"`
+	ExternalTokenId     string `gorm:"size:128" json:"externalTokenId" form:"externalTokenId"`
+	Option              string `gorm:"size:16;not null;uniqueIndex:idx_predict_market_outcome_option" json:"option" form:"option"`
+	DisplayName         string `gorm:"size:255" json:"displayName" form:"displayName"`
+	Sort                int    `gorm:"not null;default:0" json:"sort" form:"sort"`
+	Locked              bool   `gorm:"not null;default:false" json:"locked" form:"locked"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictMarketSettleIssue 记录 Polymarket 自动结算失败原因，供运营兜底。
+type PredictMarketSettleIssue struct {
+	Model
+
+	MarketId         int64  `gorm:"not null;uniqueIndex:idx_predict_market_settle_issue_open" json:"marketId" form:"marketId"`
+	ExternalMarketId string `gorm:"size:128;index" json:"externalMarketId" form:"externalMarketId"`
+	Reason           string `gorm:"size:64;not null;uniqueIndex:idx_predict_market_settle_issue_open" json:"reason" form:"reason"`
+	RawResolution    string `gorm:"size:255" json:"rawResolution" form:"rawResolution"`
+	RawPayload       string `gorm:"type:text" json:"rawPayload" form:"rawPayload"`
+	Status           string `gorm:"size:32;not null;default:'OPEN';uniqueIndex:idx_predict_market_settle_issue_open" json:"status" form:"status"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
 // UserCoin 用户金币账户（未来下注使用；此阶段只建表不接业务）
 type UserCoin struct {
 	Model
-	UserId  int64 `gorm:"not null;uniqueIndex" json:"userId" form:"userId"`
-	Balance int64 `gorm:"not null;default:0" json:"balance" form:"balance"`
+	UserId  int64 `gorm:"not null;uniqueIndex;index:idx_user_coin_balance_user,priority:2" json:"userId" form:"userId"`
+	Balance int64 `gorm:"not null;default:0;index:idx_user_coin_balance_user,sort:desc,priority:1" json:"balance" form:"balance"`
 	// 预留：冻结金额等
 	Frozen int64 `gorm:"not null;default:0" json:"frozen" form:"frozen"`
 
@@ -165,15 +228,16 @@ type PredictBet struct {
 	Model
 	UserId   int64 `gorm:"not null;index" json:"userId" form:"userId"`
 	MarketId int64 `gorm:"not null;index" json:"marketId" form:"marketId"`
-	// 下注选项：A/B
+	// 下注选项：A/B；小组赛目标支持 DRAW
 	Option string `gorm:"size:8;not null;index" json:"option" form:"option"`
 	// 下注金额（金币）
 	Amount int64 `gorm:"not null" json:"amount" form:"amount"`
 	// 下单时锁定赔率（范围 1.2 ~ 5.0）
 	Odds float64 `gorm:"not null" json:"odds" form:"odds"`
 	// 下单时的有效池（用于审计/展示）
-	EffA int64 `gorm:"not null" json:"effA" form:"effA"`
-	EffB int64 `gorm:"not null" json:"effB" form:"effB"`
+	EffA    int64 `gorm:"not null" json:"effA" form:"effA"`
+	EffB    int64 `gorm:"not null" json:"effB" form:"effB"`
+	EffDraw int64 `gorm:"not null;default:0" json:"effDraw" form:"effDraw"`
 
 	// 结算状态：
 	// - OPEN：未结算
@@ -187,4 +251,83 @@ type PredictBet struct {
 	SettleTime int64 `gorm:"not null;default:0" json:"settleTime" form:"settleTime"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+}
+
+// PredictUserStat 用户预测市场战绩物化统计。
+type PredictUserStat struct {
+	Model
+	UserId int64 `gorm:"not null;uniqueIndex" json:"userId" form:"userId"`
+
+	SettledMarketCount  int64   `gorm:"not null;default:0" json:"settledMarketCount" form:"settledMarketCount"`
+	WinMarketCount      int64   `gorm:"not null;default:0" json:"winMarketCount" form:"winMarketCount"`
+	LoseMarketCount     int64   `gorm:"not null;default:0" json:"loseMarketCount" form:"loseMarketCount"`
+	WinRate             float64 `gorm:"not null;default:0" json:"winRate" form:"winRate"`
+	CurrentWinStreak    int64   `gorm:"not null;default:0;index" json:"currentWinStreak" form:"currentWinStreak"`
+	BestWinStreak       int64   `gorm:"not null;default:0" json:"bestWinStreak" form:"bestWinStreak"`
+	LastSettledMarketId int64   `gorm:"not null;default:0" json:"lastSettledMarketId" form:"lastSettledMarketId"`
+	LastSettledAt       int64   `gorm:"not null;default:0" json:"lastSettledAt" form:"lastSettledAt"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictUserMarketStat 用户单市场战绩明细，用于幂等控制和重算。
+type PredictUserMarketStat struct {
+	Model
+	UserId   int64  `gorm:"not null;uniqueIndex:idx_predict_user_market_stat_user_market;index:idx_predict_user_market_stat_user_time" json:"userId" form:"userId"`
+	MarketId int64  `gorm:"not null;uniqueIndex:idx_predict_user_market_stat_user_market;index" json:"marketId" form:"marketId"`
+	Result   string `gorm:"size:16;not null" json:"result" form:"result"`
+
+	BetAmount       int64 `gorm:"not null;default:0" json:"betAmount" form:"betAmount"`
+	Payout          int64 `gorm:"not null;default:0" json:"payout" form:"payout"`
+	SettledBetCount int64 `gorm:"not null;default:0" json:"settledBetCount" form:"settledBetCount"`
+	SettleTime      int64 `gorm:"not null;default:0;index:idx_predict_user_market_stat_user_time" json:"settleTime" form:"settleTime"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictCommentMeta 预测市场一级评论绑定的选项元数据。
+type PredictCommentMeta struct {
+	Model
+	CommentId int64  `gorm:"not null;uniqueIndex" json:"commentId" form:"commentId"`
+	MarketId  int64  `gorm:"not null;index:idx_predict_comment_meta_market_option;index:idx_predict_comment_meta_market_user" json:"marketId" form:"marketId"`
+	UserId    int64  `gorm:"not null;index:idx_predict_comment_meta_market_user" json:"userId" form:"userId"`
+	Option    string `gorm:"size:16;not null;index:idx_predict_comment_meta_market_option" json:"option" form:"option"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictCommentRewardLog 预测市场获胜方评论奖励批次审计。
+type PredictCommentRewardLog struct {
+	Model
+	MarketId               int64  `gorm:"not null;uniqueIndex" json:"marketId" form:"marketId"`
+	WinnerOption           string `gorm:"size:16;not null;default:''" json:"winnerOption" form:"winnerOption"`
+	MarketBetTotal         int64  `gorm:"not null;default:0" json:"marketBetTotal" form:"marketBetTotal"`
+	RewardPool             int64  `gorm:"not null;default:0" json:"rewardPool" form:"rewardPool"`
+	WinnerCommentUserCount int64  `gorm:"not null;default:0" json:"winnerCommentUserCount" form:"winnerCommentUserCount"`
+	PerUserReward          int64  `gorm:"not null;default:0" json:"perUserReward" form:"perUserReward"`
+	Remainder              int64  `gorm:"not null;default:0" json:"remainder" form:"remainder"`
+	Status                 string `gorm:"size:32;not null;default:'PENDING';index:idx_predict_comment_reward_status_deadline" json:"status" form:"status"`
+	Reason                 string `gorm:"size:255;not null;default:''" json:"reason" form:"reason"`
+	SettledAt              int64  `gorm:"not null;default:0" json:"settledAt" form:"settledAt"`
+	DeadlineAt             int64  `gorm:"not null;default:0;index:idx_predict_comment_reward_status_deadline" json:"deadlineAt" form:"deadlineAt"`
+	PaidAt                 int64  `gorm:"not null;default:0" json:"paidAt" form:"paidAt"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PredictCommentRewardItem 预测市场评论奖励用户明细。
+type PredictCommentRewardItem struct {
+	Model
+	RewardLogId    int64 `gorm:"not null;uniqueIndex:idx_predict_comment_reward_item_log_user" json:"rewardLogId" form:"rewardLogId"`
+	MarketId       int64 `gorm:"not null;index:idx_predict_comment_reward_item_market_user" json:"marketId" form:"marketId"`
+	UserId         int64 `gorm:"not null;uniqueIndex:idx_predict_comment_reward_item_log_user;index:idx_predict_comment_reward_item_market_user" json:"userId" form:"userId"`
+	Amount         int64 `gorm:"not null;default:0" json:"amount" form:"amount"`
+	CommentCount   int64 `gorm:"not null;default:0" json:"commentCount" form:"commentCount"`
+	FirstCommentId int64 `gorm:"not null;default:0" json:"firstCommentId" form:"firstCommentId"`
+	CoinLogId      int64 `gorm:"not null;default:0" json:"coinLogId" form:"coinLogId"`
+	CreateTime     int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 }

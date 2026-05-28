@@ -30,9 +30,17 @@ var Models = []interface{}{
 	&PredictContext{},
 	&PredictTag{},
 	&PredictTagStat{},
+	&PredictMarketTracking{},
+	&PredictMarketOutcome{},
+	&PredictMarketSettleIssue{},
 	&UserCoin{},
 	&UserCoinLog{},
 	&PredictBet{},
+	&PredictUserStat{},
+	&PredictUserMarketStat{},
+	&PredictCommentMeta{},
+	&PredictCommentRewardLog{},
+	&PredictCommentRewardItem{},
 
 	// Battle Square
 	&Battle{},

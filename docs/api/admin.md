@@ -80,12 +80,12 @@
 - `POST /api/football/predict_context/update`
   - 详见：[预测事件系统（PredictMarket / PredictContext / 标签统计）](./predict.md#3-修改创建-predictcontext按-marketid-upsert)
 
-### 结算（管理员对 CLOSED 市场结算，选择正/反方 outcome）
+### 结算（管理员对 CLOSED 市场结算，选择市场结果）
 
 - 结算入口（当前用户侧实现）：`POST /api/coin/settle`
   - 详见：[下注/结算系统（金币与预测下注）](./coin.md#3-结算用户对自己下注过的预测市场进行结算领取金币)
 
-> 运营侧：`POST /api/admin/predict/market/settle`（已实现），仅允许对 `CLOSED` 市场结算（可选 allowReset 用于纠错），并强制 outcome 为“正方/反方”二选一，同时写入 operate-log。
+> 运营侧：`POST /api/admin/predict/market/settle`（已实现），仅允许对 `CLOSED` 市场结算（可选 allowReset 用于纠错）。`binary` 市场结果为 `A/B`，`1x2` 市场结果为 `A/B/DRAW`，同时写入 operate-log。
 
 ### 结算前盘口统计（正/反方人数与投注金额）
 

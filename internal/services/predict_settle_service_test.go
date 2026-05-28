@@ -16,6 +16,7 @@ func TestPredictSettleService_CalcPayoutAndIdempotent(t *testing.T) {
 		t.Skip("sqls.DB() is nil; skipping integration-style settle test")
 	}
 
+	userId := int64(999001)
 	// 准备 market + bet + coin
 	market := &models.PredictMarket{
 		SourceModel:   "Test",
@@ -32,10 +33,13 @@ func TestPredictSettleService_CalcPayoutAndIdempotent(t *testing.T) {
 	require.NoError(t, db.Create(market).Error)
 	t.Cleanup(func() {
 		db.Unscoped().Where("market_id = ?", market.Id).Delete(&models.PredictBet{})
+		db.Unscoped().Where("market_id = ?", market.Id).Delete(&models.PredictUserMarketStat{})
+		db.Unscoped().Where("user_id = ?", userId).Delete(&models.PredictUserStat{})
+		db.Unscoped().Where("user_id = ?", userId).Delete(&models.UserCoinLog{})
+		db.Unscoped().Where("user_id = ?", userId).Delete(&models.UserCoin{})
 		db.Unscoped().Delete(&models.PredictMarket{}, market.Id)
 	})
 
-	userId := int64(999001)
 	// 给用户铸币，确保够扣
 	_, err := UserCoinService.Mint(1, userId, 10000, "test")
 	require.NoError(t, err)
@@ -55,9 +59,27 @@ func TestPredictSettleService_CalcPayoutAndIdempotent(t *testing.T) {
 	res, err := PredictSettleService.SettleMyBet(userId, market.Id)
 	require.NoError(t, err)
 	require.Len(t, res, 2)
+	stat := &models.PredictUserStat{}
+	require.NoError(t, db.Take(stat, "user_id = ?", userId).Error)
+	require.EqualValues(t, 1, stat.SettledMarketCount)
+	require.EqualValues(t, 1, stat.WinMarketCount)
+	require.EqualValues(t, 0, stat.LoseMarketCount)
+	require.EqualValues(t, 1, stat.CurrentWinStreak)
+	require.InDelta(t, 1.0, stat.WinRate, 0.0001)
+
+	marketStat := &models.PredictUserMarketStat{}
+	require.NoError(t, db.Take(marketStat, "user_id = ? AND market_id = ?", userId, market.Id).Error)
+	require.Equal(t, "WIN", marketStat.Result)
+	require.EqualValues(t, 300, marketStat.BetAmount)
+	require.EqualValues(t, 183, marketStat.Payout)
+	require.EqualValues(t, 2, marketStat.SettledBetCount)
 
 	// 再结算一次，应当幂等：没有 OPEN 的单了
 	res2, err := PredictSettleService.SettleMyBet(userId, market.Id)
 	require.NoError(t, err)
 	require.Len(t, res2, 0)
+	stat2 := &models.PredictUserStat{}
+	require.NoError(t, db.Take(stat2, "user_id = ?", userId).Error)
+	require.EqualValues(t, 1, stat2.SettledMarketCount)
+	require.EqualValues(t, 1, stat2.CurrentWinStreak)
 }

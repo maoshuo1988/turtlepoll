@@ -31,7 +31,7 @@ type SettleMyBetResult struct {
 // SettleMyBet 用户结算自己在某个 market 的所有未结算下注单。
 // 结算规则（当前版本约定）：
 // - market.Status 必须为 SETTLED
-// - market.Result 作为胜方选项（A/B），忽略大小写
+// - market.Result 作为胜方选项（A/B/DRAW），忽略大小写
 // - bet.Odds 为下注时锁定赔率
 // - payout = floor(bet.Amount * bet.Odds)（输单 payout=0）
 // - 幂等：bet.Status=SETTLED 的单不会重复结算
@@ -57,8 +57,8 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 			return errors.New("market is not settled")
 		}
 		winner := strings.ToUpper(strings.TrimSpace(market.Result))
-		if winner != PredictOptionA && winner != PredictOptionB {
-			return errors.New("market result must be A or B")
+		if !IsValidPredictOption(market.MarketType, winner) {
+			return errors.New("market result must match market options")
 		}
 
 		// 锁住该用户在该市场的未结算订单
@@ -72,6 +72,10 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 			return nil
 		}
 
+		totalBetAmount := int64(0)
+		totalPayout := int64(0)
+		settledBetCount := int64(0)
+		hasWin := false
 		for _, bet := range bets {
 			betOption := strings.ToUpper(strings.TrimSpace(bet.Option))
 			isWin := betOption == winner
@@ -83,6 +87,7 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 				if payout < 0 {
 					payout = 0
 				}
+				hasWin = hasWin || payout > 0
 			}
 
 			bet.Status = "SETTLED"
@@ -115,6 +120,25 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 				EventTitle:   market.Title,
 				SettledAt:    now,
 			})
+			totalBetAmount += bet.Amount
+			totalPayout += payout
+			settledBetCount++
+		}
+
+		marketResult := "LOSE"
+		if hasWin && totalPayout > 0 {
+			marketResult = "WIN"
+		}
+		if err := PredictUserStatService.RecordMarketResult(tx, PredictUserMarketStatInput{
+			UserId:          userId,
+			MarketId:        marketId,
+			Result:          marketResult,
+			BetAmount:       totalBetAmount,
+			Payout:          totalPayout,
+			SettledBetCount: settledBetCount,
+			SettleTime:      now,
+		}); err != nil {
+			return err
 		}
 		return nil
 	})

@@ -37,6 +37,11 @@ func (c *PKController) PostTopicSave() *web.JsonResult {
 		form.Status = params.FormValue(c.Ctx, "status")
 		form.Sort, _ = params.GetInt(c.Ctx, "sort")
 		form.Cover = params.FormValue(c.Ctx, "cover")
+		form.ListImage = params.FormValue(c.Ctx, "listImage")
+		form.SideABgImage = params.FormValue(c.Ctx, "sideABgImage")
+		form.SideBBgImage = params.FormValue(c.Ctx, "sideBBgImage")
+		form.SideABgColor = params.FormValue(c.Ctx, "sideABgColor")
+		form.SideBBgColor = params.FormValue(c.Ctx, "sideBBgColor")
 	}
 	topic, err := services.PKService.SaveTopic(form)
 	if err != nil {

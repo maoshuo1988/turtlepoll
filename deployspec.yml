@@ -1,0 +1,19 @@
+version: 0.1
+
+# 将流水线产物中的全部文件复制到 EC2 上的应用目录。
+files:
+  - source: /
+    destination: /srv/project/turtlepoll
+
+# EC2 Deploy 动作会按阶段执行这些脚本。
+scripts:
+  # 部署前：准备目录，并尽量停止旧的 systemd 服务。
+  BeforeDeploy:
+    - location: scripts/before_deploy.sh
+      timeout: 300
+      runas: root
+  # 部署后：整理二进制、保留生产配置，并通过 systemd 启动/重启服务。
+  AfterDeploy:
+    - location: scripts/after_deploy.sh
+      timeout: 600
+      runas: root

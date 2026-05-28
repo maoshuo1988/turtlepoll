@@ -10,6 +10,11 @@ type PKTopic struct {
 	Status          string `gorm:"size:16;not null;default:'enabled';index" json:"status"`
 	Sort            int    `gorm:"not null;default:0;index" json:"sort"`
 	Cover           string `gorm:"size:512" json:"cover"`
+	ListImage       string `gorm:"size:512" json:"listImage"`
+	SideABgImage    string `gorm:"size:512" json:"sideABgImage"`
+	SideBBgImage    string `gorm:"size:512" json:"sideBBgImage"`
+	SideABgColor    string `gorm:"size:64" json:"sideABgColor"`
+	SideBBgColor    string `gorm:"size:64" json:"sideBBgColor"`
 	CurrentRoundId  int64  `gorm:"not null;default:0;index" json:"currentRoundId"`
 	CurrentSeasonId int64  `gorm:"not null;default:0;index" json:"currentSeasonId"`
 

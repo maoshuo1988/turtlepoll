@@ -4,14 +4,17 @@ import (
 	"bbs-go/internal/models/constants"
 	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/common"
+	"bbs-go/internal/pkg/config"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/services"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/mvc"
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
@@ -25,6 +28,70 @@ import (
 // 注意：该 party 已经过 AuthMiddleware + AdminMiddleware。
 type PredictController struct {
 	Ctx iris.Context
+}
+
+func (c *PredictController) BeforeActivation(b mvc.BeforeActivation) {
+	b.Handle("POST", "/market/settle", "PostMarket_settle")
+	b.Handle("POST", "/comment_reward/run", "PostComment_rewardRun")
+	b.Handle("POST", "/comment_reward/retry", "PostComment_rewardRetry")
+	b.Handle("GET", "/comment_reward/logs", "GetComment_rewardLogs")
+}
+
+// PostSyncWorldcup POST /api/admin/predict/sync_worldcup
+// 管理员手动同步世界杯赛程。可选 query: competition, season。
+func (c *PredictController) PostSync_worldcup() *web.JsonResult {
+	adminUser := common.GetCurrentUser(c.Ctx)
+	if adminUser == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+
+	competition := c.Ctx.URLParamDefault("competition", "")
+	season, _ := params.GetInt(c.Ctx, "season")
+
+	bak := config.Instance.FootballData
+	if competition != "" {
+		config.Instance.FootballData.CompetitionCode = competition
+	}
+	if season > 0 {
+		config.Instance.FootballData.Season = season
+	}
+	defer func() { config.Instance.FootballData = bak }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := services.FootballSyncService.SyncWorldCupSchedules(ctx); err != nil {
+		return web.JsonError(err)
+	}
+
+	services.OperateLogService.AddOperateLog(adminUser.Id, constants.OpTypeUpdate, "predictWorldCupSync", 0,
+		fmt.Sprintf("admin sync worldcup schedules: competition=%s season=%d", competition, season), c.Ctx.Request())
+	return web.JsonSuccess()
+}
+
+// PostContextUpdate POST /api/admin/predict/context/update
+// 管理员修改/创建预测市场上下文展示字段。
+func (c *PredictController) PostContext_update() *web.JsonResult {
+	adminUser := common.GetCurrentUser(c.Ctx)
+	if adminUser == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+
+	form := &models.PredictContext{}
+	if err := params.ReadForm(c.Ctx, form); err != nil {
+		return web.JsonError(err)
+	}
+	if form.MarketId <= 0 {
+		marketId, _ := params.GetInt64(c.Ctx, "marketId")
+		form.MarketId = marketId
+	}
+
+	ctxModel, err := services.PredictContextService.UpsertByMarketId(form)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	services.OperateLogService.AddOperateLog(adminUser.Id, constants.OpTypeUpdate, "predictContext", ctxModel.Id,
+		fmt.Sprintf("admin update predict context: marketId=%d", form.MarketId), c.Ctx.Request())
+	return web.JsonData(ctxModel)
 }
 
 // GetStats GET /api/admin/predict/stats
@@ -208,8 +275,10 @@ type predictMarketStatsResp struct {
 	ResolvedAt    int64  `json:"resolvedAt"`
 	ProUserCount  int64  `json:"proUserCount"`
 	ConUserCount  int64  `json:"conUserCount"`
+	DrawUserCount int64  `json:"drawUserCount"`
 	ProAmount     int64  `json:"proAmount"`
 	ConAmount     int64  `json:"conAmount"`
+	DrawAmount    int64  `json:"drawAmount"`
 	TotalAmount   int64  `json:"totalAmount"`
 	TotalBetCount int64  `json:"totalBetCount"`
 }
@@ -253,6 +322,7 @@ func (c *PredictController) GetMarket_stats() *web.JsonResult {
 	}
 	proAmount, proUserCnt, proBetCnt := get("A")
 	conAmount, conUserCnt, conBetCnt := get("B")
+	drawAmount, drawUserCnt, drawBetCnt := get("DRAW")
 
 	resp := &predictMarketStatsResp{
 		MarketId:      market.Id,
@@ -263,24 +333,26 @@ func (c *PredictController) GetMarket_stats() *web.JsonResult {
 		ResolvedAt:    market.ResolvedAt,
 		ProUserCount:  proUserCnt,
 		ConUserCount:  conUserCnt,
+		DrawUserCount: drawUserCnt,
 		ProAmount:     proAmount,
 		ConAmount:     conAmount,
-		TotalAmount:   proAmount + conAmount,
-		TotalBetCount: proBetCnt + conBetCnt,
+		DrawAmount:    drawAmount,
+		TotalAmount:   proAmount + conAmount + drawAmount,
+		TotalBetCount: proBetCnt + conBetCnt + drawBetCnt,
 	}
 	return web.JsonData(resp)
 }
 
 type adminSettlePredictMarketForm struct {
 	MarketId   int64  `json:"marketId"`
-	Result     string `json:"result"`     // A/B
+	Result     string `json:"result"`     // A/B/DRAW（DRAW only for 1x2）
 	RequestId  string `json:"requestId"`  // for audit
 	Remark     string `json:"remark"`     // optional
 	AllowReset bool   `json:"allowReset"` // if true: allow SETTLED -> SETTLED (admin fix), default false
 }
 
 // PostMarketSettle POST /api/admin/predict/market/settle
-// 管理员结算：将 market 从 CLOSED 结算为 SETTLED，并写入最终结果（A/B）。
+// 管理员结算：将 market 从 CLOSED 结算为 SETTLED，并写入最终结果（A/B/DRAW）。
 func (c *PredictController) PostMarket_settle() *web.JsonResult {
 	adminUser := common.GetCurrentUser(c.Ctx)
 	if adminUser == nil {
@@ -295,9 +367,6 @@ func (c *PredictController) PostMarket_settle() *web.JsonResult {
 		return web.JsonErrorMsg("marketId is required")
 	}
 	result := strings.ToUpper(strings.TrimSpace(form.Result))
-	if result != "A" && result != "B" {
-		return web.JsonErrorMsg("result must be A or B")
-	}
 	if strings.TrimSpace(form.RequestId) == "" {
 		return web.JsonErrorMsg("requestId is required")
 	}
@@ -313,6 +382,9 @@ func (c *PredictController) PostMarket_settle() *web.JsonResult {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Take(m, "id = ?", form.MarketId).Error; err != nil {
 			return err
 		}
+		if !services.IsValidPredictOption(m.MarketType, result) {
+			return errors.New(services.PredictOptionErrMsg(m.MarketType))
+		}
 
 		// 默认仅允许 CLOSED -> SETTLED
 		if m.Status == "SETTLED" {
@@ -320,7 +392,7 @@ func (c *PredictController) PostMarket_settle() *web.JsonResult {
 				return errors.New("market already settled")
 			}
 		}
-		if m.Status != "CLOSED" && !(form.AllowReset && m.Status == "SETTLED") {
+		if m.Status != "CLOSED" && m.Status != "CLOSE" && !(form.AllowReset && m.Status == "SETTLED") {
 			return fmt.Errorf("market status must be CLOSED (or SETTLED with allowReset), got=%s", m.Status)
 		}
 
@@ -347,6 +419,62 @@ func (c *PredictController) PostMarket_settle() *web.JsonResult {
 	services.OperateLogService.AddOperateLog(adminUser.Id, constants.OpTypeUpdate, "predictMarket", form.MarketId, desc, c.Ctx.Request())
 
 	return web.JsonData(updated)
+}
+
+func (c *PredictController) PostComment_rewardRun() *web.JsonResult {
+	marketId, _ := params.GetInt64(c.Ctx, "marketId")
+	log, err := services.PredictCommentRewardService.RunForMarket(marketId, false)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(log)
+}
+
+func (c *PredictController) PostComment_rewardRetry() *web.JsonResult {
+	rewardLogId, _ := params.GetInt64(c.Ctx, "rewardLogId")
+	log, err := services.PredictCommentRewardService.Retry(rewardLogId)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(log)
+}
+
+func (c *PredictController) GetComment_rewardLogs() *web.JsonResult {
+	query := params.NewQueryParams(c.Ctx).
+		EqByReq("market_id").
+		EqByReq("status").
+		PageByReq().
+		Desc("id")
+	var list []models.PredictCommentRewardLog
+	query.Cnd.Find(sqls.DB(), &list)
+	count := query.Cnd.Count(sqls.DB(), &models.PredictCommentRewardLog{})
+	logIds := make([]int64, 0, len(list))
+	for _, row := range list {
+		logIds = append(logIds, row.Id)
+	}
+	itemsByLogId := map[int64][]models.PredictCommentRewardItem{}
+	if len(logIds) > 0 {
+		var items []models.PredictCommentRewardItem
+		_ = sqls.DB().Where("reward_log_id IN ?", logIds).Order("id asc").Find(&items).Error
+		for _, item := range items {
+			itemsByLogId[item.RewardLogId] = append(itemsByLogId[item.RewardLogId], item)
+		}
+	}
+	results := make([]map[string]any, 0, len(list))
+	for _, row := range list {
+		results = append(results, map[string]any{
+			"log":   row,
+			"items": itemsByLogId[row.Id],
+		})
+	}
+	return web.JsonData(&web.PageResult{
+		Results: results,
+		Page: &sqls.Paging{
+			Page:  query.Cnd.Paging.Page,
+			Limit: query.Cnd.Paging.Limit,
+			Total: count,
+		},
+	})
 }
 
 // 避免 iris 未使用（预留后续可能返回 map）

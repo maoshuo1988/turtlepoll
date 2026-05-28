@@ -16,8 +16,18 @@ scp -i /opt/pem/bbs.pem ubuntu@52.77.212.173:/srv/project/turtlepoll/bbs-go.yaml
 ## 上传
 ``` bash
 scp -i /opt/pem/bbs.pem bbs-go-linux ubuntu@<SERVER_IP>:/tmp/
+# 原始环境
 scp -i /opt/pem/bbs.pem bbs-go-linux ubuntu@52.77.212.173:/tmp/
+scp -i /opt/pem/bbs.pem -r owner-users-export-20260520-093511 ubuntu@13.250.108.70:/tmp/
 ```
+## 配置文件
+``` bash
+scp -i /opt/pem/bbs.pem ./bbs-go.yaml ubuntu@52.77.212.173:/tmp/
+sudo mv /tmp/bbs-go.yaml /srv/project/turtlepoll/
+sudo chmod +x /srv/project/turtlepoll/bbs-go.yaml
+chown root:root bbs-go.yaml
+```
+
 ## 移动文件
 ``` bash
 sudo mv /tmp/bbs-go-linux /srv/project/turtlepoll/
@@ -87,4 +97,14 @@ ps aux | grep go | grep -v grep
 ```
 sudo BBSGO_ENV=prod nohup ./bbs-go-linux
 BBSGO_ENV=prod go run ./main.go -c ./bbs-go.yaml
+```
+
+ssm日志
+``` bash
+sudo tail -f /var/log/amazon/ssm/amazon-ssm-agent.log
+```
+
+tmp磁盘
+```bash
+df -h /tmp
 ```

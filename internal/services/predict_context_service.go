@@ -77,6 +77,11 @@ func (s *predictContextService) UpsertByMarketId(ctx *models.PredictContext) (*m
 	// 只允许更新业务展示字段；主键/marketId 不允许改
 	exists.EventName = ctx.EventName
 	exists.ImageUrl = ctx.ImageUrl
+	exists.ListImage = ctx.ListImage
+	exists.SideABgImage = ctx.SideABgImage
+	exists.SideBBgImage = ctx.SideBBgImage
+	exists.SideABgColor = normalizePredictSideColor(ctx.SideABgColor, "#E23D3D")
+	exists.SideBBgColor = normalizePredictSideColor(ctx.SideBBgColor, "#276EF1")
 	exists.ParticipantCount = ctx.ParticipantCount
 	exists.ProText = ctx.ProText
 	exists.ProVoteCount = ctx.ProVoteCount
@@ -91,4 +96,12 @@ func (s *predictContextService) UpsertByMarketId(ctx *models.PredictContext) (*m
 		return nil, err
 	}
 	return exists, nil
+}
+
+func normalizePredictSideColor(v, fallback string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return fallback
+	}
+	return v
 }

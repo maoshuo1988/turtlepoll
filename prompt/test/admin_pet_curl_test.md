@@ -188,6 +188,38 @@ curl -sS -X DELETE "${BASE_URL}/api/admin/pet/features/${FEATURE_KEY}" \
 
 ---
 
+## 3.5 AbilityOption（运营能力列表）
+
+### 3.5.1 列表：GET /api/admin/pet/ability-options
+
+```bash
+curl -sS "${BASE_URL}/api/admin/pet/ability-options" \
+  -H "${ADMIN_AUTH_HEADER}" | jq
+```
+
+按 featureKey 过滤：
+
+```bash
+curl -sS "${BASE_URL}/api/admin/pet/ability-options?featureKey=signin_bonus" \
+  -H "${ADMIN_AUTH_HEADER}" | jq
+```
+
+按旧宠物来源稀有度过滤：
+
+```bash
+curl -sS "${BASE_URL}/api/admin/pet/ability-options?rarity=S" \
+  -H "${ADMIN_AUTH_HEADER}" | jq
+```
+
+包含不可选预设：
+
+```bash
+curl -sS "${BASE_URL}/api/admin/pet/ability-options?selectableOnly=false" \
+  -H "${ADMIN_AUTH_HEADER}" | jq
+```
+
+---
+
 ## 4) abilities（给龟种配置特性）
 
 ### 4.1 整体替换：PUT /api/admin/pet/defs/:petId/abilities

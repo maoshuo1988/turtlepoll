@@ -74,7 +74,12 @@
   "sideBName": "C罗",
   "status": "enabled",
   "sort": 100,
-  "cover": ""
+  "cover": "",
+  "listImage": "",
+  "sideABgImage": "",
+  "sideBBgImage": "",
+  "sideABgColor": "#E23D3D",
+  "sideBBgColor": "#276EF1"
 }
 ```
 

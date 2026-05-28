@@ -1,0 +1,28 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - go version
+  build:
+    commands:
+      # 生成 EC2 上运行的 Linux 二进制，输出文件为 bbs-go-linux。
+      - make buildlinux
+      # 打印产物，便于在 CodeBuild 日志中确认二进制已生成。
+      - ls -lh bbs-go-linux deployspec.yml scripts/before_deploy.sh scripts/after_deploy.sh
+
+artifacts:
+  files:
+    # EC2 Deploy 动作需要在 artifact 根目录读取 deployspec.yml。
+    - deployspec.yml
+    # DeploySpec 引用的生命周期脚本必须进入 artifact。
+    - scripts/**/*
+    # make buildlinux 生成的服务二进制。
+    - bbs-go-linux
+    # 首次部署时用于生成 bbs-go.yaml，不覆盖已有生产配置。
+    - bbs-go.example.yaml
+    # 运行时静态资源和多语言配置。
+    - admin/**/*
+    - site/**/*
+    - locales/**/*
+    - res/**/*

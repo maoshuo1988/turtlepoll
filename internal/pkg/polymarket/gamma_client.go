@@ -56,6 +56,9 @@ type Market struct {
 	ResolvedAt string `json:"resolvedAt"`
 	Resolution string `json:"resolution"` // 有些市场直接给出赢家文本/Key
 
+	ClobTokenIds  StringArray `json:"clobTokenIds"`
+	OutcomePrices StringArray `json:"outcomePrices"`
+
 	// outcomes 在 Gamma 返回里可能是：
 	// 1) 数组：[{id,name,slug}, ...]
 	// 2) 字符串："[\"Yes\", \"No\"]"（历史/部分接口）
@@ -67,6 +70,35 @@ type Market struct {
 }
 
 type Outcomes []Outcome
+
+type StringArray []string
+
+func (a *StringArray) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 || string(b) == "null" {
+		*a = nil
+		return nil
+	}
+	var arr []string
+	if err := json.Unmarshal(b, &arr); err == nil {
+		*a = arr
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	s = strings.TrimSpace(s)
+	if s == "" || s == "null" {
+		*a = nil
+		return nil
+	}
+	if err := json.Unmarshal([]byte(s), &arr); err == nil {
+		*a = arr
+		return nil
+	}
+	*a = []string{s}
+	return nil
+}
 
 func (o *Outcomes) UnmarshalJSON(b []byte) error {
 	// null
@@ -120,15 +152,21 @@ func (o *Outcomes) UnmarshalJSON(b []byte) error {
 }
 
 type Outcome struct {
-	ID   any    `json:"id"` // 同样可能 number/string
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	ID     any    `json:"id"` // 同样可能 number/string
+	Name   string `json:"name"`
+	Slug   string `json:"slug"`
+	Winner bool   `json:"winner"`
 }
 
 type Event struct {
 	ID    any    `json:"id"`
 	Title string `json:"title"`
 	Slug  string `json:"slug"`
+}
+
+type MarketsKeysetPage struct {
+	Markets    []Market `json:"markets"`
+	NextCursor string   `json:"next_cursor"`
 }
 
 func (c *GammaClient) ListTags(ctx context.Context) ([]Tag, error) {
@@ -145,6 +183,34 @@ func (c *GammaClient) ListTags(ctx context.Context) ([]Tag, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// ListMarketsKeyset 拉取 markets/keyset（Gamma 推荐的 cursor/keyset 分页）。
+func (c *GammaClient) ListMarketsKeyset(ctx context.Context, limit int, afterCursor string, params map[string]string) ([]Market, string, error) {
+	u, err := url.Parse(c.baseURL() + "/markets/keyset")
+	if err != nil {
+		return nil, "", err
+	}
+	q := u.Query()
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if afterCursor != "" {
+		q.Set("after_cursor", afterCursor)
+	}
+	for k, v := range params {
+		if v == "" {
+			continue
+		}
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+
+	var page MarketsKeysetPage
+	if err := c.getJSON(ctx, u.String(), &page); err != nil {
+		return nil, "", err
+	}
+	return page.Markets, page.NextCursor, nil
 }
 
 // ListMarkets 拉取 markets（Gamma 支持 limit/offset）。
@@ -174,6 +240,22 @@ func (c *GammaClient) ListMarkets(ctx context.Context, limit, offset int, params
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *GammaClient) GetMarketByID(ctx context.Context, id string) (*Market, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, errors.New("market id is required")
+	}
+	u, err := url.Parse(c.baseURL() + "/markets/" + url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	var out Market
+	if err := c.getJSON(ctx, u.String(), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 func (c *GammaClient) getJSON(ctx context.Context, urlStr string, out any) error {

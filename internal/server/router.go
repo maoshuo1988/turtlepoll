@@ -149,6 +149,7 @@ func NewServer() {
 		m.Party("/vote-record").Handle(new(admin.VoteRecordController))
 		m.Party("/dashboard").Handle(new(admin.DashboardController))
 		m.Party("/predict").Handle(new(admin.PredictController))
+		m.Party("/polymarket").Handle(new(admin.PolymarketController))
 
 		m.Party("/task-config").Handle(new(admin.TaskConfigController))
 		m.Party("/user-task-event").Handle(new(admin.UserTaskEventController))

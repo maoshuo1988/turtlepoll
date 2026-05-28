@@ -61,6 +61,15 @@ curl -sS "${BASE_URL}/api/pet/equip" \
   -H "${USER_AUTH_HEADER}" | jq
 ```
 
+输出检查点：
+
+- `data.pet.id` 或 `data.pet.petId` 有值。
+- `data.pet.name` 返回宠物名字。
+- `data.pet.rarity` 返回稀有度数值，`data.pet.rarityKey` 可选返回稀有度文案 key。
+- `data.pet.image` 或 `data.pet.icon` 返回宠物图片。
+- `data.pet.abilities` 返回宠物能力 JSON。
+- 兼容字段 `data.petId/data.petKey/data.petName/data.rarity` 仍存在。
+
 ---
 
 ## 3) 切换龟种（写）
@@ -81,6 +90,7 @@ curl -sS "${BASE_URL}/api/pet/equip" \
 输出检查点：
 
 - `ok==true`
+- `pet` 存在，且包含 `id/name/rarity/image/abilities`。
 - `nextEffectiveAt` 为“北京时间次日 0 点”
 
 常见错误码（示例，具体以服务端 message/code 为准）：
@@ -99,6 +109,17 @@ curl -sS "${BASE_URL}/api/pet/equip" \
 curl -sS "${BASE_URL}/api/pet/owned" \
   -H "${USER_AUTH_HEADER}" | jq
 ```
+
+输出检查点：
+
+- `data.equippedPetId` 有值或为 0。
+- `data.list[].pet` 存在。
+- `data.list[].pet.id` 或 `data.list[].pet.petId` 有值。
+- `data.list[].pet.name` 返回宠物名字。
+- `data.list[].pet.rarity` 返回稀有度。
+- `data.list[].pet.image` 或 `data.list[].pet.icon` 返回宠物图片。
+- `data.list[].pet.abilities` 返回宠物能力 JSON。
+- 兼容字段 `data.list[].petId/petKey/petName/rarity` 仍存在。
 
 ---
 

@@ -3,8 +3,8 @@ package services
 import (
 	"bbs-go/internal/pkg/footballdata"
 	"context"
-	"strings"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -52,6 +52,18 @@ func TestFootballSyncService_TitleAndStatusRules(t *testing.T) {
 	}
 	if isTeamsReady(" ", "B") {
 		t.Fatalf("blank home should NOT be ready")
+	}
+}
+
+func TestTranslateKnownFootballTeamName(t *testing.T) {
+	if got, ok := translateKnownFootballTeamName(0, "United States"); !ok || got != "美国" {
+		t.Fatalf("expected United States translated to 美国, got=%q ok=%v", got, ok)
+	}
+	if got, ok := translateKnownFootballTeamName(0, "Bosnia-Herzegovina"); !ok || got != "波黑" {
+		t.Fatalf("expected Bosnia-Herzegovina translated to 波黑, got=%q ok=%v", got, ok)
+	}
+	if got, ok := translateKnownFootballTeamName(0, "阿根廷"); ok || got != "阿根廷" {
+		t.Fatalf("known translator should not rewrite custom/unknown names, got=%q ok=%v", got, ok)
 	}
 }
 

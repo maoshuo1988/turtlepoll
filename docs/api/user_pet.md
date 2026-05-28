@@ -14,6 +14,62 @@
 - 金额/数量：统一整数（龟币/体力/XP）。
 - 日切：北京时间（UTC+8 0 点）。
 
+### 宠物展示信息统一结构
+
+`GET /api/pet/equip`、`POST /api/pet/equip`、`GET /api/pet/owned` 中涉及宠物详情时，统一返回 `pet` 对象。为兼容现有前端，短期内保留旧的扁平字段，如 `petId/petKey/petName/rarity`。
+
+`pet` 字段：
+
+- `id`：number，`PetDefinition.Id`，用于当前后端装备、拥有关系查询。
+- `petId`：number，兼容旧字段，值等同于 `id`。
+- `petKey`：string，宠物业务 key。
+- `petCode`：string，`PetDefinition.pet_id` 自然键；如果历史数据为空，返回 `petKey`。
+- `name`：string，宠物展示名，优先取中文名，其次取兼容字段 `name_plain`。
+- `rarity`：number，当前后端稀有度数值。
+- `rarityKey`：string，可选，将数值映射为 `C/B/A/S/SS/SSS`，便于前端展示。
+- `image`：string，宠物主图。取值优先级：`display.icon` -> `display.thumbnail` -> `display.cover` -> `icon`。
+- `icon`：string，兼容字段，值同 `image`。
+- `abilities`：object，宠物能力 JSON，来自 `PetDefinition.abilities`。
+- `abilityDescriptions`：array，能力中文说明列表，由 `abilities` 参数和 `FeatureCatalog` 中文名生成，供前端直接展示。
+
+`abilityDescriptions[]` 字段：
+
+- `featureKey`：string，能力 key，例如 `signin_bonus`。
+- `name`：string，中文能力名，优先取 `FeatureCatalog.name.zh-CN`，没有则回退到 featureKey。
+- `description`：string，基于当前能力参数生成的中文说明。
+- `enabled`：bool，当前能力参数是否启用；未配置时默认 `true`。
+
+示例：
+
+```json
+{
+  "id": 12,
+  "petId": 12,
+  "petKey": "phoenix",
+  "petCode": "phoenix",
+  "name": "凤凰龟",
+  "rarity": 4,
+  "rarityKey": "S",
+  "image": "/res/pets/phoenix.png",
+  "icon": "/res/pets/phoenix.png",
+  "abilities": {
+    "signin_bonus": {
+      "enabled": true,
+      "bonusCoins": 100,
+      "capPerDay": 500
+    }
+  },
+  "abilityDescriptions": [
+    {
+      "featureKey": "signin_bonus",
+      "name": "每日登录加成",
+      "description": "每日登录额外获得100龟币，每日上限500龟币。",
+      "enabled": true
+    }
+  ]
+}
+```
+
 ### 错误码（建议）
 
 - `ALREADY_SETTLED`：今日已结算
@@ -64,12 +120,73 @@
 
 响应：
 
-- `petId` / `petKey`
-- `petName`
-- `rarity`
+- `pet`：宠物展示信息统一结构，包含宠物能力、宠物名字、稀有度、ID、图片。
+- `petId` / `petKey`：兼容旧字段。
+- `petName`：兼容旧字段，值同 `pet.name`。
+- `rarity`：兼容旧字段，值同 `pet.rarity`。
+- `abilities`：兼容旧字段，值同 `pet.abilities`。
+- `abilityDescriptions`：兼容旧字段，值同 `pet.abilityDescriptions`。
+- `image` / `icon`：兼容旧字段，值同 `pet.image`。
 - `level`
 - `equippedAt`：时间戳
 - `equipDayName`：int（北京 dayName，用于每日切龟限制展示）
+
+响应示例：
+
+```json
+{
+  "petId": 12,
+  "petKey": "phoenix",
+  "petName": "凤凰龟",
+  "rarity": 4,
+  "abilities": {
+    "signin_bonus": {
+      "enabled": true,
+      "bonusCoins": 100,
+      "capPerDay": 500
+    }
+  },
+  "abilityDescriptions": [
+    {
+      "featureKey": "signin_bonus",
+      "name": "每日登录加成",
+      "description": "每日登录额外获得100龟币，每日上限500龟币。",
+      "enabled": true
+    }
+  ],
+  "image": "/res/pets/phoenix.png",
+  "icon": "/res/pets/phoenix.png",
+  "level": 3,
+  "equippedAt": 1760000000,
+  "equipDayName": 20260527,
+  "pet": {
+    "id": 12,
+    "petId": 12,
+    "petKey": "phoenix",
+    "petCode": "phoenix",
+    "name": "凤凰龟",
+    "rarity": 4,
+    "rarityKey": "S",
+    "image": "/res/pets/phoenix.png",
+    "icon": "/res/pets/phoenix.png",
+    "abilities": {
+      "signin_bonus": {
+        "enabled": true,
+        "bonusCoins": 100,
+        "capPerDay": 500
+      }
+    },
+    "abilityDescriptions": [
+      {
+        "featureKey": "signin_bonus",
+        "name": "每日登录加成",
+        "description": "每日登录额外获得100龟币，每日上限500龟币。",
+        "enabled": true
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -84,7 +201,9 @@
 响应：
 
 - `ok`: bool
-- `pet`：同 `GET /api/pet/equip`
+- `pet`：宠物展示信息统一结构，包含宠物能力、宠物名字、稀有度、ID、图片。
+- `petId` / `petKey` / `petName` / `rarity`：兼容旧字段。
+- `abilities` / `abilityDescriptions` / `image` / `icon`：兼容旧字段。
 - `nextEffectiveAt`：北京时间次日 0 点
 
 校验：
@@ -103,10 +222,75 @@
 
 - `equippedPetId`
 - `list[]`
-  - `petId` / `petKey` / `petName` / `rarity`
+  - `pet`：宠物展示信息统一结构，包含宠物能力、宠物名字、稀有度、ID、图片。
+  - `petId` / `petKey` / `petName` / `rarity`：兼容旧字段。
+  - `abilities` / `abilityDescriptions` / `image` / `icon`：兼容旧字段。
   - `level` / `xp`
   - `isEquipped`：bool
   - `obtainedAt`：时间戳
+
+响应示例：
+
+```json
+{
+  "equippedPetId": 12,
+  "list": [
+    {
+      "petId": 12,
+      "petKey": "phoenix",
+      "petName": "凤凰龟",
+      "rarity": 4,
+      "abilities": {
+        "signin_bonus": {
+          "enabled": true,
+          "bonusCoins": 100,
+          "capPerDay": 500
+        }
+      },
+      "abilityDescriptions": [
+        {
+          "featureKey": "signin_bonus",
+          "name": "每日登录加成",
+          "description": "每日登录额外获得100龟币，每日上限500龟币。",
+          "enabled": true
+        }
+      ],
+      "image": "/res/pets/phoenix.png",
+      "icon": "/res/pets/phoenix.png",
+      "level": 3,
+      "xp": 120,
+      "isEquipped": true,
+      "obtainedAt": 1760000000,
+      "pet": {
+        "id": 12,
+        "petId": 12,
+        "petKey": "phoenix",
+        "petCode": "phoenix",
+        "name": "凤凰龟",
+        "rarity": 4,
+        "rarityKey": "S",
+        "image": "/res/pets/phoenix.png",
+        "icon": "/res/pets/phoenix.png",
+        "abilities": {
+          "signin_bonus": {
+            "enabled": true,
+            "bonusCoins": 100,
+            "capPerDay": 500
+          }
+        },
+        "abilityDescriptions": [
+          {
+            "featureKey": "signin_bonus",
+            "name": "每日登录加成",
+            "description": "每日登录额外获得100龟币，每日上限500龟币。",
+            "enabled": true
+          }
+        ]
+      }
+    }
+  ]
+}
+```
 
 ---
 

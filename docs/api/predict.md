@@ -21,9 +21,14 @@
 - `sourceModel`: string（例如 `MatchSchedule`）
 - `sourceModelId`: int64（例如 `MatchSchedule.Id`）
 - `title`: string
-- `marketType`: string（例如 `1x2`）
+- `marketType`: string（世界杯小组赛目标为 `1x2`，淘汰赛目标为 `binary`）
 - `status`: string（`OPEN/CLOSED/SETTLED`）
 - `closeTime`: int64（下注截止时间，秒级时间戳）
+- `result`: string（结算胜方选项；`binary` 市场允许 `A/B`，`1x2` 市场允许 `A/B/DRAW`）
+- `resolved/resolvedOutcomeId/resolvedOutcomeName/resolvedAt`: 外部市场结算字段；不等同于站内 A/B 派奖结果
+
+> 当前 football-data 世界杯轮询会同步 `MatchSchedule`、市场展示/开关盘信息、比赛阶段与全场比分；当比赛 `FINISHED` 且比分能明确映射时，会写入 `PredictMarket.result` 并置为 `SETTLED`。
+> 世界杯同步需区分小组赛/淘汰赛：小组赛为三元 `A/B/DRAW`，平局写 `result=DRAW` 并按平局选项正常结算；淘汰赛为二元 `A/B`，若发现平局比分则记录错误日志并交运营处理，不自动退款、不自动派奖。主客队一旦确定不再被同步覆盖；`PredictContext.detail/imageUrl/heat/participantCount` 只允许运营接口修改；队伍名称按中文写入展示字段。
 
 ### PredictContext（预测市场上下文）
 代码定义：`internal/models/models.go` -> `type PredictContext`
@@ -33,6 +38,9 @@
 - `marketId`: int64（与 PredictMarket 一对一）
 - `eventName`: string（必填）
 - `imageUrl`: string
+- `listImage`: string
+- `sideABgImage` / `sideBBgImage`: string
+- `sideABgColor` / `sideBBgColor`: string（默认 `#E23D3D` / `#276EF1`）
 - `participantCount`: int64
 - `proText` / `conText`: string
 - `proVoteCount` / `conVoteCount`: int64
@@ -89,6 +97,11 @@
         "marketId": 1,
         "eventName": "世界杯决赛",
         "imageUrl": "https://example.com/banner.png",
+        "listImage": "",
+        "sideABgImage": "",
+        "sideBBgImage": "",
+        "sideABgColor": "#E23D3D",
+        "sideBBgColor": "#276EF1",
         "participantCount": 123,
         "proText": "支持阿根廷",
         "proVoteCount": 80,
@@ -181,6 +194,11 @@
 - `marketId`：int64，必填
 - `eventName`：string，必填
 - `imageUrl`：string，可选
+- `listImage`：string，可选
+- `sideABgImage`：string，可选
+- `sideBBgImage`：string，可选
+- `sideABgColor`：string，可选，默认 `#E23D3D`
+- `sideBBgColor`：string，可选，默认 `#276EF1`
 - `participantCount`：int64，可选
 - `proText`：string，可选
 - `proVoteCount`：int64，可选
@@ -197,6 +215,11 @@
   "marketId": 1,
   "eventName": "世界杯决赛",
   "imageUrl": "https://example.com/banner.png",
+  "listImage": "",
+  "sideABgImage": "",
+  "sideBBgImage": "",
+  "sideABgColor": "#E23D3D",
+  "sideBBgColor": "#276EF1",
   "participantCount": 123,
   "proText": "支持阿根廷",
   "proVoteCount": 80,
@@ -210,6 +233,21 @@
 
 #### 返回值（data）
 - PredictContext（更新后的记录）
+
+### 3.1) 管理员修改/创建 PredictContext（按 marketId upsert）
+
+- **接口**：`POST /api/admin/predict/context_update`
+- **功能**：管理端按 `marketId` upsert PredictContext，支持编辑展示图、阵营背景图、阵营背景色等字段。
+- **认证**：需要管理员权限（`AdminMiddleware`）
+- **请求格式**：表单，与 `POST /api/football/predict_context/update` 字段一致。
+
+常用新增字段：
+
+- `listImage`
+- `sideABgImage`
+- `sideBBgImage`
+- `sideABgColor`
+- `sideBBgColor`
 
 #### 可能错误
 - 未登录：`errs.NotLogin()`

@@ -25,6 +25,59 @@ type FootballController struct {
 	Ctx iris.Context
 }
 
+func scheduleMetaByMarketIds(marketIds []int64) map[int64]models.MatchSchedule {
+	ret := make(map[int64]models.MatchSchedule, len(marketIds))
+	if len(marketIds) == 0 {
+		return ret
+	}
+	var markets []models.PredictMarket
+	if err := sqls.DB().
+		Where("id in (?) AND source_model = ?", marketIds, "MatchSchedule").
+		Find(&markets).Error; err != nil {
+		return ret
+	}
+	scheduleIds := make([]int64, 0, len(markets))
+	marketToSchedule := make(map[int64]int64, len(markets))
+	for _, m := range markets {
+		if m.SourceModelId <= 0 {
+			continue
+		}
+		scheduleIds = append(scheduleIds, m.SourceModelId)
+		marketToSchedule[m.Id] = m.SourceModelId
+	}
+	if len(scheduleIds) == 0 {
+		return ret
+	}
+	var schedules []models.MatchSchedule
+	if err := sqls.DB().Where("id in (?)", scheduleIds).Find(&schedules).Error; err != nil {
+		return ret
+	}
+	scheduleById := make(map[int64]models.MatchSchedule, len(schedules))
+	for _, s := range schedules {
+		scheduleById[s.Id] = s
+	}
+	for marketId, scheduleId := range marketToSchedule {
+		if s, ok := scheduleById[scheduleId]; ok {
+			ret[marketId] = s
+		}
+	}
+	return ret
+}
+
+func matchPhaseFromSchedule(s models.MatchSchedule) string {
+	if s.MatchPhase != "" {
+		return s.MatchPhase
+	}
+	stage := strings.ToUpper(strings.TrimSpace(s.Stage))
+	if stage == "GROUP_STAGE" || strings.TrimSpace(s.GroupName) != "" {
+		return services.MatchPhaseGroup
+	}
+	if stage == "" {
+		return services.MatchPhaseUnknown
+	}
+	return services.MatchPhaseKnockout
+}
+
 // 热度榜：GET /api/football/predict_context/hot?limit=10
 // 返回 heat 倒序的 PredictContext 列表。
 // 说明：当前挂在 /api 下，默认需要登录（AuthMiddleware）。
@@ -39,13 +92,13 @@ func (c *FootballController) GetPredict_contextHot() *web.JsonResult {
 	}
 
 	var list []models.PredictContext
-	// 热度榜按“状态优先级”排序：OPEN -> CLOSE -> (已结算/其他)
+	// 热度榜按“状态优先级”排序：OPEN -> CLOSED/CLOSE -> (已结算/其他)
 	// 同状态下：heat desc, id desc
 	// 关联关系：PredictContext.market_id = PredictMarket.id
 	if err := sqls.DB().
 		Model(&models.PredictContext{}).
 		Joins("JOIN t_predict_market pm ON pm.id = t_predict_context.market_id").
-		Order("CASE pm.status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, t_predict_context.heat desc, t_predict_context.id desc").
+		Order("CASE pm.status WHEN 'OPEN' THEN 0 WHEN 'CLOSED' THEN 1 WHEN 'CLOSE' THEN 1 ELSE 2 END, t_predict_context.heat desc, t_predict_context.id desc").
 		Limit(limit).
 		Find(&list).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
@@ -148,7 +201,7 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 	// 排序优先级：
 	// 0) 标签命中强度（避免 tag=wc 时把 football,wc 排到后面）
 	// 1) 非 TBD（主客队已确定）优先
-	// 2) 状态优先级：OPEN -> CLOSE -> (已结算/其他)
+	// 2) 状态优先级：OPEN -> CLOSED/CLOSE -> (已结算/其他)
 	// 3) 同状态下：closeTime asc，再按 marketId desc（稳定）
 	// 4) 再按 heat desc, contextId desc（稳定）
 	orderBy := "CASE " +
@@ -157,7 +210,7 @@ func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
 		"WHEN lower(t_predict_context.tags) LIKE '%," + tag + "' THEN 2 " +
 		"ELSE 3 END, " +
 		"CASE WHEN pm.title = 'TBD vs TBD' THEN 1 ELSE 0 END, " +
-		"CASE pm.status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, " +
+		"CASE pm.status WHEN 'OPEN' THEN 0 WHEN 'CLOSED' THEN 1 WHEN 'CLOSE' THEN 1 ELSE 2 END, " +
 		"pm.close_time asc, pm.id desc, t_predict_context.heat desc, t_predict_context.id desc"
 
 	// 只 select context 字段；market 单独再查一次避免字段冲突
@@ -394,10 +447,10 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 	}
 
 	var list []models.PredictMarket
-	// 优先级排序：OPEN -> CLOSE -> (已结算/其他)
+	// 优先级排序：OPEN -> CLOSED/CLOSE -> (已结算/其他)
 	// 同状态下：closeTime asc（更接近封盘/比分揭晓的优先），再按 id desc 保证稳定顺序
 	query := p.Cnd.Build(sqls.DB().Model(&models.PredictMarket{}))
-	query.Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").Find(&list)
+	query.Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSED' THEN 1 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").Find(&list)
 
 	count := p.Cnd.Count(sqls.DB(), &models.PredictMarket{})
 
@@ -416,6 +469,7 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 			ctxMap[mc.MarketId] = mc
 		}
 	}
+	scheduleMap := scheduleMetaByMarketIds(marketIds)
 
 	// 当前用户在各市场的下注结算结果（SettleResult）。
 	// - 若该用户在该 market 没有任何下注单，则返回空字符串
@@ -485,9 +539,12 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 
 	respList := make([]map[string]any, 0, len(list))
 	for _, m := range list {
+		schedule := scheduleMap[m.Id]
 		item := map[string]any{
 			"market":          m,
 			"context":         ctxMap[m.Id],
+			"schedule":        schedule,
+			"matchPhase":      matchPhaseFromSchedule(schedule),
 			"betSettleResult": betSettleResultMap[m.Id],
 			"hasBet":          hasBetMap[m.Id],
 		}
@@ -524,7 +581,7 @@ func (c *FootballController) GetMarketsBy_name() *web.JsonResult {
 
 	var list []models.PredictMarket
 	query := p.Cnd.Build(sqls.DB().Model(&models.PredictMarket{}))
-	query.Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").Find(&list)
+	query.Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSED' THEN 1 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").Find(&list)
 	count := p.Cnd.Count(sqls.DB(), &models.PredictMarket{})
 
 	marketIds := make([]int64, 0, len(list))
@@ -542,6 +599,7 @@ func (c *FootballController) GetMarketsBy_name() *web.JsonResult {
 			ctxMap[mc.MarketId] = mc
 		}
 	}
+	scheduleMap := scheduleMetaByMarketIds(marketIds)
 
 	betSettleResultMap := make(map[int64]string, len(marketIds))
 	hasBetMap := make(map[int64]bool, len(marketIds))
@@ -600,9 +658,12 @@ func (c *FootballController) GetMarketsBy_name() *web.JsonResult {
 
 	respList := make([]map[string]any, 0, len(list))
 	for _, m := range list {
+		schedule := scheduleMap[m.Id]
 		respList = append(respList, map[string]any{
 			"market":          m,
 			"context":         ctxMap[m.Id],
+			"schedule":        schedule,
+			"matchPhase":      matchPhaseFromSchedule(schedule),
 			"betSettleResult": betSettleResultMap[m.Id],
 			"hasBet":          hasBetMap[m.Id],
 		})

@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: "bbs-go",
-      script: "./bbs-go",
+      script: "./bbs-go-linux",
       env: {
         BBSGO_ENV: "prod",
       },

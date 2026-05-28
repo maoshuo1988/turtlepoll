@@ -71,6 +71,7 @@ type CreateArticleForm struct {
 type CreateCommentForm struct {
 	EntityType string     `form:"entityType"`
 	EntityId   int64      `form:"entityId"`
+	Option     string     `form:"option"`
 	Content    string     `form:"content"`
 	ImageList  []ImageDTO `form:"imageList"`
 	QuoteId    int64      `form:"quoteId"`
@@ -117,6 +118,7 @@ func GetCreateCommentForm(ctx iris.Context) CreateCommentForm {
 	form := CreateCommentForm{
 		EntityType: params.FormValue(ctx, "entityType"),
 		EntityId:   common.GetID(ctx, "entityId"),
+		Option:     params.FormValue(ctx, "option"),
 		Content:    strings.TrimSpace(params.FormValue(ctx, "content")),
 		ImageList:  GetImageList(ctx, "imageList"),
 		QuoteId:    params.FormValueInt64Default(ctx, "quoteId", 0),

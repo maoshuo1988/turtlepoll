@@ -32,7 +32,7 @@ type PlaceBetResult struct {
 // - 校验市场状态/截止时间
 // - 基于当前池计算赔率并锁定到订单
 // - 扣减用户金币
-// - 增加市场池（PoolA/PoolB）
+// - 增加市场池（PoolA/PoolB/PoolDraw）
 func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amount int64) (*PlaceBetResult, error) {
 	if userId <= 0 {
 		return nil, errors.New("userId is required")
@@ -41,9 +41,6 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 		return nil, errors.New("marketId is required")
 	}
 	option = strings.ToUpper(strings.TrimSpace(option))
-	if option != PredictOptionA && option != PredictOptionB {
-		return nil, errors.New("option must be A or B")
-	}
 	if amount <= 0 {
 		return nil, errors.New("amount must be positive")
 	}
@@ -72,6 +69,9 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 			)
 			return errors.New("market is not open")
 		}
+		if !IsValidPredictOption(market.MarketType, option) {
+			return errors.New(PredictOptionErrMsg(market.MarketType))
+		}
 		if market.CloseTime > 0 && nowSec >= market.CloseTime {
 			slog.Warn("predict bet rejected: market closed by closeTime",
 				"marketId", market.Id,
@@ -85,9 +85,23 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 		}
 
 		oddsA, oddsB, effA, effB, _ := CalcClampedOdds(market.BaseA, market.BaseB, market.PoolA, market.PoolB)
+		oddsDraw := float64(0)
+		effDraw := int64(0)
+		if NormalizePredictMarketType(market.MarketType) == PredictMarketType1x2 {
+			oddsA, oddsB, oddsDraw, effA, effB, effDraw, _ = CalcClampedOdds3(
+				market.BaseA,
+				market.BaseB,
+				normalizeBaseDraw(market.BaseDraw),
+				market.PoolA,
+				market.PoolB,
+				market.PoolDraw,
+			)
+		}
 		lockedOdds := oddsA
 		if option == PredictOptionB {
 			lockedOdds = oddsB
+		} else if option == PredictOptionDraw {
+			lockedOdds = oddsDraw
 		}
 
 		bet := &models.PredictBet{
@@ -98,6 +112,7 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 			Odds:       lockedOdds,
 			EffA:       effA,
 			EffB:       effB,
+			EffDraw:    effDraw,
 			Status:     "OPEN",
 			CreateTime: nowSec,
 		}
@@ -114,8 +129,10 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 		// 写入池
 		if option == PredictOptionA {
 			market.PoolA += amount
-		} else {
+		} else if option == PredictOptionB {
 			market.PoolB += amount
+		} else {
+			market.PoolDraw += amount
 		}
 		market.UpdateTime = nowSec
 		if err := tx.Save(market).Error; err != nil {

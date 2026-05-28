@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/mvc"
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
 	"github.com/mlogclub/simple/web/params"
@@ -104,6 +105,10 @@ func parseRarity(r string) int {
 
 type PetController struct {
 	Ctx iris.Context
+}
+
+func (c *PetController) BeforeActivation(b mvc.BeforeActivation) {
+	b.Handle("GET", "/ability-options", "GetAbility_options")
 }
 
 // GetDefs GET /api/admin/pet/defs
@@ -374,6 +379,30 @@ func (c *PetController) DeleteFeaturesBy(featureKey string) *web.JsonResult {
 		return web.JsonErrorMsg(err.Error())
 	}
 	return web.JsonSuccess()
+}
+
+// GetAbility_options GET /api/admin/pet/ability-options
+func (c *PetController) GetAbility_options() *web.JsonResult {
+	selectableOnly := true
+	if v, has := parseBoolQuery(c.Ctx.URLParam("selectableOnly")); has {
+		selectableOnly = v
+	}
+	if v, has := parseBoolQuery(c.Ctx.URLParam("selectable_only")); has {
+		selectableOnly = v
+	}
+	featureKey := c.Ctx.URLParam("featureKey")
+	if strings.TrimSpace(featureKey) == "" {
+		featureKey = c.Ctx.URLParam("feature_key")
+	}
+	list := services.PetAbilityOptionService.List(services.PetAbilityOptionFilter{
+		FeatureKey:     featureKey,
+		Rarity:         c.Ctx.URLParam("rarity"),
+		SelectableOnly: selectableOnly,
+	})
+	return web.JsonData(map[string]any{
+		"results": list,
+		"total":   len(list),
+	})
 }
 
 // --- abilities attach ---

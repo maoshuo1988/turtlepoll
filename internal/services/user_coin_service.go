@@ -83,6 +83,50 @@ func (s *userCoinService) SettleBet(tx *gorm.DB, userId, betId, payout int64, re
 	return uc, nil
 }
 
+// AddReward 奖励入账，并返回金币账户和流水。
+func (s *userCoinService) AddReward(tx *gorm.DB, userId int64, bizType string, bizId int64, amount int64, remark string) (*models.UserCoin, *models.UserCoinLog, error) {
+	if userId <= 0 {
+		return nil, nil, errors.New("userId is required")
+	}
+	if bizType == "" {
+		return nil, nil, errors.New("bizType is required")
+	}
+	if amount <= 0 {
+		return nil, nil, errors.New("amount must be positive")
+	}
+	if tx == nil {
+		return nil, nil, errors.New("tx is required")
+	}
+
+	now := dates.NowTimestamp()
+	uc, err := repositories.UserCoinRepository.GetOrCreate(tx, userId)
+	if err != nil {
+		return nil, nil, err
+	}
+	uc.Balance += amount
+	uc.UpdateTime = now
+	if uc.CreateTime == 0 {
+		uc.CreateTime = now
+	}
+	if err := repositories.UserCoinRepository.Update(tx, uc); err != nil {
+		return nil, nil, err
+	}
+
+	log := &models.UserCoinLog{
+		UserId:       userId,
+		BizType:      bizType,
+		BizId:        bizId,
+		Amount:       amount,
+		BalanceAfter: uc.Balance,
+		Remark:       remark,
+		CreateTime:   now,
+	}
+	if err := repositories.UserCoinLogRepository.Create(tx, log); err != nil {
+		return nil, nil, err
+	}
+	return uc, log, nil
+}
+
 // Mint 管理员铸币：给用户加金币，并记录流水。
 func (s *userCoinService) Mint(adminUserId, userId, amount int64, remark string) (*models.UserCoin, error) {
 	if userId <= 0 {
@@ -94,35 +138,39 @@ func (s *userCoinService) Mint(adminUserId, userId, amount int64, remark string)
 
 	now := dates.NowTimestamp()
 	return s.withTx(func(tx *gorm.DB) (*models.UserCoin, error) {
-		uc, err := repositories.UserCoinRepository.GetOrCreate(tx, userId)
-		if err != nil {
-			return nil, err
-		}
-		newBalance := uc.Balance + amount
-		uc.Balance = newBalance
-		uc.UpdateTime = now
-		if uc.CreateTime == 0 {
-			uc.CreateTime = now
-		}
-		if err := repositories.UserCoinRepository.Update(tx, uc); err != nil {
-			return nil, err
-		}
-
-		log := &models.UserCoinLog{
-			UserId:       userId,
-			BizType:      "MINT",
-			BizId:        adminUserId, // 记录操作者
-			Amount:       amount,
-			BalanceAfter: newBalance,
-			Remark:       remark,
-			CreateTime:   now,
-		}
-		if err := repositories.UserCoinLogRepository.Create(tx, log); err != nil {
-			return nil, err
-		}
-
-		return uc, nil
+		return s.mintWithTx(tx, adminUserId, userId, amount, remark, now)
 	})
+}
+
+func (s *userCoinService) mintWithTx(tx *gorm.DB, adminUserId, userId, amount int64, remark string, now int64) (*models.UserCoin, error) {
+	uc, err := repositories.UserCoinRepository.GetOrCreate(tx, userId)
+	if err != nil {
+		return nil, err
+	}
+	newBalance := uc.Balance + amount
+	uc.Balance = newBalance
+	uc.UpdateTime = now
+	if uc.CreateTime == 0 {
+		uc.CreateTime = now
+	}
+	if err := repositories.UserCoinRepository.Update(tx, uc); err != nil {
+		return nil, err
+	}
+
+	log := &models.UserCoinLog{
+		UserId:       userId,
+		BizType:      "MINT",
+		BizId:        adminUserId, // 记录操作者
+		Amount:       amount,
+		BalanceAfter: newBalance,
+		Remark:       remark,
+		CreateTime:   now,
+	}
+	if err := repositories.UserCoinLogRepository.Create(tx, log); err != nil {
+		return nil, err
+	}
+
+	return uc, nil
 }
 
 // SpendBet 下单扣款（下注）。

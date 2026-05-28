@@ -1,5 +1,3 @@
-.gomodcache/
-
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -61,3 +59,5 @@ frontTest/.vite/
 frontTest/dist/
 frontTest/.cache/
 
+owner-user-export-*/
+owner-users-export-*/
