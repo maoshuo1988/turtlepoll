@@ -30,6 +30,14 @@
 - `image`：string，宠物主图。取值优先级：`display.icon` -> `display.thumbnail` -> `display.cover` -> `icon`。
 - `icon`：string，兼容字段，值同 `image`。
 - `abilities`：object，宠物能力 JSON，来自 `PetDefinition.abilities`。
+- `abilityDescriptions`：array，能力中文说明列表，由 `abilities` 参数和 `FeatureCatalog` 中文名生成，供前端直接展示。
+
+`abilityDescriptions[]` 字段：
+
+- `featureKey`：string，能力 key，例如 `signin_bonus`。
+- `name`：string，中文能力名，优先取 `FeatureCatalog.name.zh-CN`，没有则回退到 featureKey。
+- `description`：string，基于当前能力参数生成的中文说明。
+- `enabled`：bool，当前能力参数是否启用；未配置时默认 `true`。
 
 示例：
 
@@ -50,7 +58,15 @@
       "bonusCoins": 100,
       "capPerDay": 500
     }
-  }
+  },
+  "abilityDescriptions": [
+    {
+      "featureKey": "signin_bonus",
+      "name": "每日登录加成",
+      "description": "每日登录额外获得100龟币，每日上限500龟币。",
+      "enabled": true
+    }
+  ]
 }
 ```
 
@@ -109,6 +125,7 @@
 - `petName`：兼容旧字段，值同 `pet.name`。
 - `rarity`：兼容旧字段，值同 `pet.rarity`。
 - `abilities`：兼容旧字段，值同 `pet.abilities`。
+- `abilityDescriptions`：兼容旧字段，值同 `pet.abilityDescriptions`。
 - `image` / `icon`：兼容旧字段，值同 `pet.image`。
 - `level`
 - `equippedAt`：时间戳
@@ -129,6 +146,14 @@
       "capPerDay": 500
     }
   },
+  "abilityDescriptions": [
+    {
+      "featureKey": "signin_bonus",
+      "name": "每日登录加成",
+      "description": "每日登录额外获得100龟币，每日上限500龟币。",
+      "enabled": true
+    }
+  ],
   "image": "/res/pets/phoenix.png",
   "icon": "/res/pets/phoenix.png",
   "level": 3,
@@ -150,7 +175,15 @@
         "bonusCoins": 100,
         "capPerDay": 500
       }
-    }
+    },
+    "abilityDescriptions": [
+      {
+        "featureKey": "signin_bonus",
+        "name": "每日登录加成",
+        "description": "每日登录额外获得100龟币，每日上限500龟币。",
+        "enabled": true
+      }
+    ]
   }
 }
 ```
@@ -170,7 +203,7 @@
 - `ok`: bool
 - `pet`：宠物展示信息统一结构，包含宠物能力、宠物名字、稀有度、ID、图片。
 - `petId` / `petKey` / `petName` / `rarity`：兼容旧字段。
-- `abilities` / `image` / `icon`：兼容旧字段。
+- `abilities` / `abilityDescriptions` / `image` / `icon`：兼容旧字段。
 - `nextEffectiveAt`：北京时间次日 0 点
 
 校验：
@@ -191,7 +224,7 @@
 - `list[]`
   - `pet`：宠物展示信息统一结构，包含宠物能力、宠物名字、稀有度、ID、图片。
   - `petId` / `petKey` / `petName` / `rarity`：兼容旧字段。
-  - `abilities` / `image` / `icon`：兼容旧字段。
+  - `abilities` / `abilityDescriptions` / `image` / `icon`：兼容旧字段。
   - `level` / `xp`
   - `isEquipped`：bool
   - `obtainedAt`：时间戳
@@ -214,6 +247,14 @@
           "capPerDay": 500
         }
       },
+      "abilityDescriptions": [
+        {
+          "featureKey": "signin_bonus",
+          "name": "每日登录加成",
+          "description": "每日登录额外获得100龟币，每日上限500龟币。",
+          "enabled": true
+        }
+      ],
       "image": "/res/pets/phoenix.png",
       "icon": "/res/pets/phoenix.png",
       "level": 3,
@@ -236,7 +277,15 @@
             "bonusCoins": 100,
             "capPerDay": 500
           }
-        }
+        },
+        "abilityDescriptions": [
+          {
+            "featureKey": "signin_bonus",
+            "name": "每日登录加成",
+            "description": "每日登录额外获得100龟币，每日上限500龟币。",
+            "enabled": true
+          }
+        ]
       }
     }
   ]

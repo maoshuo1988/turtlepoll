@@ -5,6 +5,10 @@ import (
 	"bbs-go/internal/pkg/biztime"
 	"bbs-go/internal/pkg/common"
 	"bbs-go/internal/services"
+	"encoding/json"
+	"fmt"
+	"math"
+	"sort"
 	"strings"
 
 	"github.com/kataras/iris/v12"
@@ -33,18 +37,19 @@ func (c *PetController) GetEquip() *web.JsonResult {
 	}
 	petInfo := buildUserPetInfo(pet)
 	resp := map[string]any{
-		"petId":        state.EquippedPetId,
-		"petKey":       "",
-		"petName":      "",
-		"rarity":       0,
-		"rarityKey":    "",
-		"abilities":    map[string]any{},
-		"image":        "",
-		"icon":         "",
-		"level":        1,
-		"equippedAt":   state.UpdateTime,
-		"equipDayName": state.EquipDayName,
-		"pet":          petInfo,
+		"petId":               state.EquippedPetId,
+		"petKey":              "",
+		"petName":             "",
+		"rarity":              0,
+		"rarityKey":           "",
+		"abilities":           map[string]any{},
+		"abilityDescriptions": []map[string]any{},
+		"image":               "",
+		"icon":                "",
+		"level":               1,
+		"equippedAt":          state.UpdateTime,
+		"equipDayName":        state.EquipDayName,
+		"pet":                 petInfo,
 	}
 	if pet != nil {
 		resp["petKey"] = pet.PetKey
@@ -52,6 +57,7 @@ func (c *PetController) GetEquip() *web.JsonResult {
 		resp["rarity"] = pet.Rarity
 		resp["rarityKey"] = petInfo["rarityKey"]
 		resp["abilities"] = petInfo["abilities"]
+		resp["abilityDescriptions"] = petInfo["abilityDescriptions"]
 		resp["image"] = petInfo["image"]
 		resp["icon"] = petInfo["icon"]
 	}
@@ -91,18 +97,19 @@ func (c *PetController) PostEquip() *web.JsonResult {
 	pet := services.PetDefinitionService.Get(state.EquippedPetId)
 	petInfo := buildUserPetInfo(pet)
 	return web.JsonData(map[string]any{
-		"ok":              true,
-		"petId":           state.EquippedPetId,
-		"petKey":          petInfo["petKey"],
-		"petName":         petInfo["name"],
-		"rarity":          petInfo["rarity"],
-		"rarityKey":       petInfo["rarityKey"],
-		"abilities":       petInfo["abilities"],
-		"image":           petInfo["image"],
-		"icon":            petInfo["icon"],
-		"pet":             petInfo,
-		"equipDayName":    state.EquipDayName,
-		"nextEffectiveAt": next,
+		"ok":                  true,
+		"petId":               state.EquippedPetId,
+		"petKey":              petInfo["petKey"],
+		"petName":             petInfo["name"],
+		"rarity":              petInfo["rarity"],
+		"rarityKey":           petInfo["rarityKey"],
+		"abilities":           petInfo["abilities"],
+		"abilityDescriptions": petInfo["abilityDescriptions"],
+		"image":               petInfo["image"],
+		"icon":                petInfo["icon"],
+		"pet":                 petInfo,
+		"equipDayName":        state.EquipDayName,
+		"nextEffectiveAt":     next,
 	})
 }
 
@@ -122,19 +129,20 @@ func (c *PetController) GetOwned() *web.JsonResult {
 		pet := services.PetDefinitionService.Get(it.PetId)
 		petInfo := buildUserPetInfo(pet)
 		m := map[string]any{
-			"petId":      it.PetId,
-			"petKey":     "",
-			"petName":    "",
-			"rarity":     0,
-			"rarityKey":  "",
-			"abilities":  map[string]any{},
-			"image":      "",
-			"icon":       "",
-			"level":      it.Level,
-			"xp":         it.XP,
-			"isEquipped": state != nil && state.EquippedPetId == it.PetId,
-			"obtainedAt": it.ObtainedAt,
-			"pet":        petInfo,
+			"petId":               it.PetId,
+			"petKey":              "",
+			"petName":             "",
+			"rarity":              0,
+			"rarityKey":           "",
+			"abilities":           map[string]any{},
+			"abilityDescriptions": []map[string]any{},
+			"image":               "",
+			"icon":                "",
+			"level":               it.Level,
+			"xp":                  it.XP,
+			"isEquipped":          state != nil && state.EquippedPetId == it.PetId,
+			"obtainedAt":          it.ObtainedAt,
+			"pet":                 petInfo,
 		}
 		if pet != nil {
 			m["petKey"] = pet.PetKey
@@ -142,6 +150,7 @@ func (c *PetController) GetOwned() *web.JsonResult {
 			m["rarity"] = pet.Rarity
 			m["rarityKey"] = petInfo["rarityKey"]
 			m["abilities"] = petInfo["abilities"]
+			m["abilityDescriptions"] = petInfo["abilityDescriptions"]
 			m["image"] = petInfo["image"]
 			m["icon"] = petInfo["icon"]
 		}
@@ -209,16 +218,17 @@ func (c *PetController) GetStatus() *web.JsonResult {
 
 func buildUserPetInfo(pet *models.PetDefinition) map[string]any {
 	ret := map[string]any{
-		"id":        int64(0),
-		"petId":     int64(0),
-		"petKey":    "",
-		"petCode":   "",
-		"name":      "",
-		"rarity":    0,
-		"rarityKey": "",
-		"image":     "",
-		"icon":      "",
-		"abilities": map[string]any{},
+		"id":                  int64(0),
+		"petId":               int64(0),
+		"petKey":              "",
+		"petCode":             "",
+		"name":                "",
+		"rarity":              0,
+		"rarityKey":           "",
+		"image":               "",
+		"icon":                "",
+		"abilities":           map[string]any{},
+		"abilityDescriptions": []map[string]any{},
 	}
 	if pet == nil {
 		return ret
@@ -240,7 +250,211 @@ func buildUserPetInfo(pet *models.PetDefinition) map[string]any {
 	ret["image"] = image
 	ret["icon"] = image
 	ret["abilities"] = abilities
+	ret["abilityDescriptions"] = buildAbilityDescriptions(abilities)
 	return ret
+}
+
+func buildAbilityDescriptions(abilities map[string]any) []map[string]any {
+	ret := make([]map[string]any, 0, len(abilities))
+	keys := make([]string, 0, len(abilities))
+	for featureKey := range abilities {
+		featureKey = strings.TrimSpace(featureKey)
+		if featureKey == "" {
+			continue
+		}
+		keys = append(keys, featureKey)
+	}
+	sort.Strings(keys)
+	for _, featureKey := range keys {
+		params := anyMap(abilities[featureKey])
+		name := featureKey
+		if fc := services.FeatureCatalogService.GetByFeatureKey(featureKey); fc != nil {
+			if v := pickI18nText(fc.NameJSON); v != "" {
+				name = v
+			} else if v := strings.TrimSpace(fc.Name); v != "" {
+				name = v
+			}
+		}
+		ret = append(ret, map[string]any{
+			"featureKey":  featureKey,
+			"name":        name,
+			"description": describeAbility(featureKey, params),
+			"enabled":     boolParam(params, "enabled", true),
+		})
+	}
+	return ret
+}
+
+func pickI18nText(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	var m map[string]string
+	if err := jsons.Parse(raw, &m); err != nil {
+		return ""
+	}
+	if v := strings.TrimSpace(m["zh-CN"]); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(m["en-US"]); v != "" {
+		return v
+	}
+	for _, v := range m {
+		if v = strings.TrimSpace(v); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func anyMap(v any) map[string]any {
+	if m, ok := v.(map[string]any); ok {
+		return m
+	}
+	ret := map[string]any{}
+	if bs, err := json.Marshal(v); err == nil {
+		_ = json.Unmarshal(bs, &ret)
+	}
+	if ret == nil {
+		return map[string]any{}
+	}
+	return ret
+}
+
+func boolParam(params map[string]any, key string, fallback bool) bool {
+	v, ok := params[key]
+	if !ok {
+		return fallback
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		switch strings.ToLower(strings.TrimSpace(t)) {
+		case "true", "1", "yes", "y":
+			return true
+		case "false", "0", "no", "n":
+			return false
+		}
+	}
+	return fallback
+}
+
+func int64Param(params map[string]any, key string, fallback int64) int64 {
+	v, ok := params[key]
+	if !ok {
+		return fallback
+	}
+	switch t := v.(type) {
+	case int:
+		return int64(t)
+	case int64:
+		return t
+	case int32:
+		return int64(t)
+	case float64:
+		return int64(t)
+	case float32:
+		return int64(t)
+	case string:
+		var out int64
+		if _, err := fmt.Sscanf(strings.TrimSpace(t), "%d", &out); err == nil {
+			return out
+		}
+	}
+	return fallback
+}
+
+func floatParam(params map[string]any, key string, fallback float64) float64 {
+	v, ok := params[key]
+	if !ok {
+		return fallback
+	}
+	switch t := v.(type) {
+	case float64:
+		return t
+	case float32:
+		return float64(t)
+	case int:
+		return float64(t)
+	case int64:
+		return float64(t)
+	case int32:
+		return float64(t)
+	case string:
+		var out float64
+		if _, err := fmt.Sscanf(strings.TrimSpace(t), "%f", &out); err == nil {
+			return out
+		}
+	}
+	return fallback
+}
+
+func formatInt64(v int64) string {
+	return fmt.Sprintf("%d", v)
+}
+
+func formatFloat(v float64) string {
+	if math.Abs(v-math.Round(v)) < 0.0000001 {
+		return fmt.Sprintf("%.0f", v)
+	}
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", v), "0"), ".")
+}
+
+func formatPercent(v float64) string {
+	return formatFloat(v*100) + "%"
+}
+
+func describeAbility(featureKey string, params map[string]any) string {
+	switch featureKey {
+	case "signin_bonus":
+		amount := int64Param(params, "bonusCoins", int64Param(params, "base_amount", 0))
+		capPerDay := int64Param(params, "capPerDay", int64Param(params, "daily_cap", 0))
+		if capPerDay > 0 {
+			return "每日登录额外获得" + formatInt64(amount) + "龟币，每日上限" + formatInt64(capPerDay) + "龟币。"
+		}
+		return "每日登录额外获得" + formatInt64(amount) + "龟币。"
+	case "spark_multiplier":
+		base := floatParam(params, "base", 0)
+		perLevel := floatParam(params, "per_level", 0)
+		capPerDay := int64Param(params, "cap", 0)
+		desc := "每日火花奖励按" + formatFloat(base) + "倍基础倍率加成"
+		if perLevel > 0 {
+			desc += "，每级额外增加" + formatPercent(perLevel)
+		}
+		if capPerDay > 0 {
+			desc += "，每日额外奖励上限" + formatInt64(capPerDay) + "龟币"
+		}
+		return desc + "。"
+	case "debt":
+		floor := int64Param(params, "debtFloor", 0)
+		desc := "允许龟币余额最低欠至" + formatInt64(floor) + "。"
+		if boolParam(params, "forbidEquipWhenDebt", false) {
+			desc += "欠款未还清时禁止切换龟种。"
+		}
+		return desc
+	case "debt_subsidy":
+		rate := floatParam(params, "subsidyRate", 0)
+		capPerDay := int64Param(params, "capPerDay", 0)
+		desc := "每日登录结算时按欠款金额的" + formatPercent(rate) + "补贴。"
+		if capPerDay > 0 {
+			desc += "每日上限" + formatInt64(capPerDay) + "龟币。"
+		}
+		return desc
+	case "deposit_interest":
+		rate := floatParam(params, "interestRate", 0)
+		capPerDay := int64Param(params, "capPerDay", 0)
+		desc := "每日登录结算时按正余额的" + formatPercent(rate) + "发放利息。"
+		if capPerDay > 0 {
+			desc += "每日上限" + formatInt64(capPerDay) + "龟币。"
+		}
+		return desc
+	case "first_bet_bonus":
+		amount := int64Param(params, "amount", 0)
+		return "每日首次下注额外获得" + formatInt64(amount) + "龟币。"
+	default:
+		return "已启用该能力。"
+	}
 }
 
 func pickPetName(pet *models.PetDefinition) string {
