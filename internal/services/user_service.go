@@ -202,6 +202,10 @@ func (s *userService) SignUp(username, email, nickname, password, rePassword str
 	email = strings.TrimSpace(email)
 	nickname = strings.TrimSpace(nickname)
 
+	if len(nickname) == 0 {
+		nickname = username
+	}
+
 	// 验证昵称
 	if len(nickname) == 0 {
 		return nil, errors.New("昵称不能为空")
@@ -221,8 +225,6 @@ func (s *userService) SignUp(username, email, nickname, password, rePassword str
 		if s.GetByEmail(email) != nil {
 			return nil, errors.New("邮箱：" + email + " 已被占用")
 		}
-	} else {
-		return nil, errors.New("请输入邮箱")
 	}
 
 	// 验证用户名（注册时必填）

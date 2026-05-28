@@ -21,34 +21,26 @@
 - **接口**：`POST /api/login/signup`
 - **功能**：新用户注册
 - **参数（form）**（来自 `LoginController.PostSignup`）：
-  - `captchaId`: string
-  - `captchaCode`: string
-  - `captchaProtocol`: int（常见为 2）
-  - `email`: string
   - `username`: string
   - `password`: string
   - `rePassword`: string
-  - `nickname`: string
+  - `captchaProtocol`: int（注册场景固定传 `4`，表示跳过图片验证码校验）
   - `redirect`: string（可选）
 - **返回**：`web.JsonResult`（登录成功信息，见 `render.BuildLoginSuccess`）
 - **可能错误**：
-  - `errs.CaptchaError()` 验证码错误
   - `auth.password_login_disabled`（配置禁用密码登录时）
-  - `UserService.SignUp` 的业务错误（如用户名/邮箱重复、密码不一致等）
+  - `UserService.SignUp` 的业务错误（如用户名重复、密码不一致等）
 
 ### 2) 用户名密码登录
 - **接口**：`POST /api/login/signin`
 - **功能**：用户名/密码登录
 - **参数（form）**：
-  - `captchaId`: string
-  - `captchaCode`: string
-  - `captchaProtocol`: int
   - `username`: string
   - `password`: string
+  - `captchaProtocol`: int（登录场景固定传 `4`，表示跳过图片验证码校验）
   - `redirect`: string（可选）
 - **返回**：`web.JsonResult`（登录成功信息，见 `render.BuildLoginSuccess`）
 - **可能错误**：
-  - `errs.CaptchaError()`
   - `auth.password_login_disabled`
   - `UserService.SignIn` 的业务错误
 
