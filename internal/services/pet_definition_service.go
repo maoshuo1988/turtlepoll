@@ -30,6 +30,9 @@ func (s *petDefinitionService) EnsureDefaultSeeds() {
 			continue
 		}
 		exists := s.GetByPetId(seed.PetId)
+		if exists == nil && strings.TrimSpace(seed.PetKey) != "" {
+			exists = s.GetByPetKey(seed.PetKey)
+		}
 		if exists == nil {
 			if err := s.Create(&seed); err != nil {
 				slog.Error("seed pet_definition create failed", slog.Any("err", err), slog.String("petId", seed.PetId))
@@ -38,7 +41,15 @@ func (s *petDefinitionService) EnsureDefaultSeeds() {
 		}
 
 		updated := false
+		if strings.TrimSpace(seed.PetId) != "" && exists.PetId != seed.PetId && s.GetByPetId(seed.PetId) == nil {
+			exists.PetId = seed.PetId
+			updated = true
+		}
 		if strings.TrimSpace(exists.PetKey) == "" {
+			exists.PetKey = seed.PetKey
+			updated = true
+		}
+		if strings.TrimSpace(seed.PetKey) != "" && exists.PetKey != seed.PetKey {
 			exists.PetKey = seed.PetKey
 			updated = true
 		}
@@ -62,12 +73,12 @@ func (s *petDefinitionService) EnsureDefaultSeeds() {
 			exists.Rarity = seed.Rarity
 			updated = true
 		}
-		if !exists.ObtainableByEgg {
-			exists.ObtainableByEgg = seed.ObtainableByEgg
-			updated = true
-		}
 		if strings.TrimSpace(exists.AbilitiesJSON) == "" {
 			exists.AbilitiesJSON = seed.AbilitiesJSON
+			updated = true
+		}
+		if strings.TrimSpace(exists.DisplayJSON) == "" {
+			exists.DisplayJSON = seed.DisplayJSON
 			updated = true
 		}
 		if exists.Status != constants.StatusOk {
@@ -120,90 +131,22 @@ func (s *petDefinitionService) GrantDefaultPetsToAdmins() {
 
 func DefaultPetDefinitionSeeds() []models.PetDefinition {
 	seeds := []struct {
-		petID     string
-		petKey    string
-		nameZh    string
-		nameEn    string
-		descZh    string
-		descEn    string
-		rarity    int
-		abilities map[string]any
+		petID           string
+		petKey          string
+		nameZh          string
+		nameEn          string
+		display         map[string]any
+		rarity          int
+		obtainableByEgg bool
+		abilities       map[string]any
 	}{
 		{
-			petID:  "signin_bonus_turtle",
-			petKey: "signin_bonus_turtle",
-			nameZh: "signin_bonus乌龟",
-			nameEn: "signin_bonus turtle",
-			descZh: "默认内置的每日登录加成测试宠物。",
-			descEn: "Built-in pet for signin bonus.",
-			rarity: 1,
-			abilities: map[string]any{
-				"signin_bonus": map[string]any{
-					"enabled":    true,
-					"bonusCoins": 100,
-					"capPerDay":  500,
-				},
-			},
-		},
-		{
-			petID:  "spark_multiplier_turtle",
-			petKey: "spark_multiplier_turtle",
-			nameZh: "spark_multiplier乌龟",
-			nameEn: "spark_multiplier turtle",
-			descZh: "默认内置的火花倍率测试宠物。",
-			descEn: "Built-in pet for spark multiplier.",
-			rarity: 2,
-			abilities: map[string]any{
-				"spark_multiplier": map[string]any{
-					"enabled":   true,
-					"base":      1.3,
-					"per_level": 0.03,
-					"cap":       400,
-				},
-			},
-		},
-		{
-			petID:  "debt_300_turtle",
-			petKey: "debt_300_turtle",
-			nameZh: "欠账300额度乌龟",
-			nameEn: "debt 300 turtle",
-			descZh: "默认内置的欠账300额度测试宠物。",
-			descEn: "Built-in pet for debt floor -300.",
-			rarity: 3,
-			abilities: map[string]any{
-				"debt": map[string]any{
-					"enabled":             true,
-					"debtFloor":           -300,
-					"forbidEquipWhenDebt": true,
-					"errorCode":           "DEBT_UNPAID",
-				},
-			},
-		},
-		{
-			petID:  "debt_1000_turtle",
-			petKey: "debt_1000_turtle",
-			nameZh: "欠账1000额度乌龟",
-			nameEn: "debt 1000 turtle",
-			descZh: "默认内置的欠账1000额度测试宠物。",
-			descEn: "Built-in pet for debt floor -1000.",
-			rarity: 4,
-			abilities: map[string]any{
-				"debt": map[string]any{
-					"enabled":             true,
-					"debtFloor":           -1000,
-					"forbidEquipWhenDebt": true,
-					"errorCode":           "DEBT_UNPAID",
-				},
-			},
-		},
-		{
-			petID:  "debt_subsidy_300_turtle",
-			petKey: "debt_subsidy_300_turtle",
-			nameZh: "欠账补贴300额度乌龟",
-			nameEn: "debt subsidy 300 turtle",
-			descZh: "默认内置的欠款补贴300额度测试宠物。",
-			descEn: "Built-in pet for debt subsidy with debt floor -300.",
-			rarity: 4,
+			petID:   "15",
+			petKey:  "lightning",
+			nameZh:  "闪电龟",
+			nameEn:  "LightningTurtle",
+			display: petThumbnailDisplay("LightningTurtle.png"),
+			rarity:  3,
 			abilities: map[string]any{
 				"debt": map[string]any{
 					"enabled":             true,
@@ -218,13 +161,77 @@ func DefaultPetDefinitionSeeds() []models.PetDefinition {
 			},
 		},
 		{
-			petID:  "debt_subsidy_1000_turtle",
-			petKey: "debt_subsidy_1000_turtle",
-			nameZh: "欠账补贴1000额度乌龟",
-			nameEn: "debt subsidy 1000 turtle",
-			descZh: "默认内置的欠款补贴1000额度测试宠物。",
-			descEn: "Built-in pet for debt subsidy with debt floor -1000.",
-			rarity: 5,
+			petID:   "10",
+			petKey:  "bamboo",
+			nameZh:  "竹叶龟",
+			nameEn:  "BambooTurtle",
+			display: petThumbnailDisplay("BambooTurtle.png"),
+			rarity:  1,
+			abilities: map[string]any{
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 25,
+					"capPerDay":  500,
+				},
+			},
+		},
+		{
+			petID:   "12",
+			petKey:  "ice",
+			nameZh:  "寒冰龟",
+			nameEn:  "IceTurtle",
+			display: petThumbnailDisplay("IceTurtle.png"),
+			rarity:  2,
+			abilities: map[string]any{
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 40,
+					"capPerDay":  500,
+				},
+			},
+		},
+		{
+			petID:   "13",
+			petKey:  "fortune",
+			nameZh:  "财神龟",
+			nameEn:  "GodofWealthTurtle",
+			display: petThumbnailDisplay("GodofWealthTurtle.png"),
+			rarity:  2,
+			abilities: map[string]any{
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 40,
+					"capPerDay":  500,
+				},
+			},
+		},
+		{
+			petID:   "17",
+			petKey:  "lava",
+			nameZh:  "熔岩龟",
+			nameEn:  "Lavaturtle",
+			display: petThumbnailDisplay("Lavaturtle.png"),
+			rarity:  4,
+			abilities: map[string]any{
+				"deposit_interest": map[string]any{
+					"enabled":      true,
+					"interestRate": 0.03,
+					"capPerDay":    1000,
+				},
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 100,
+					"capPerDay":  500,
+				},
+			},
+		},
+		{
+			petID:   "18",
+			petKey:  "shell",
+			nameZh:  "龟壳",
+			nameEn:  "turtleShell",
+			display: petThumbnailDisplay("turtleShell.png"),
+			rarity:  6,
 			abilities: map[string]any{
 				"debt": map[string]any{
 					"enabled":             true,
@@ -236,21 +243,85 @@ func DefaultPetDefinitionSeeds() []models.PetDefinition {
 					"enabled":     true,
 					"subsidyRate": 0.22,
 				},
+				"deposit_interest": map[string]any{
+					"enabled":      true,
+					"interestRate": 0.05,
+					"capPerDay":    1000,
+				},
 			},
 		},
 		{
-			petID:  "deposit_interest_turtle",
-			petKey: "deposit_interest_turtle",
-			nameZh: "deposit_interest乌龟",
-			nameEn: "deposit_interest turtle",
-			descZh: "默认内置的存款生息测试宠物。",
-			descEn: "Built-in pet for deposit interest.",
-			rarity: 5,
+			petID:   "9",
+			petKey:  "stone",
+			nameZh:  "石头龟",
+			nameEn:  "StoneTurtle",
+			display: petThumbnailDisplay("StoneTurtle.png"),
+			rarity:  1,
 			abilities: map[string]any{
-				"deposit_interest": map[string]any{
-					"enabled":      true,
-					"interestRate": 0.03,
-					"capPerDay":    1000,
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 25,
+					"capPerDay":  500,
+				},
+			},
+		},
+		{
+			petID:   "11",
+			petKey:  "angel",
+			nameZh:  "天使龟",
+			nameEn:  "AngelTurtle",
+			display: petThumbnailDisplay("AngelTurtle.png"),
+			rarity:  2,
+			abilities: map[string]any{
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 40,
+					"capPerDay":  500,
+				},
+			},
+		},
+		{
+			petID:           "8",
+			petKey:          "basic",
+			nameZh:          "小龟",
+			nameEn:          "turtlet",
+			display:         basicPetDisplay(),
+			rarity:          1,
+			obtainableByEgg: true,
+			abilities: map[string]any{
+				"signup_bonus": map[string]any{
+					"enabled": true,
+					"coins":   500,
+				},
+			},
+		},
+		{
+			petID:   "14",
+			petKey:  "rainbow",
+			nameZh:  "彩虹龟",
+			nameEn:  "RainbowTurtle",
+			display: petThumbnailDisplay("RainbowTurtle.png"),
+			rarity:  3,
+			abilities: map[string]any{
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 60,
+					"capPerDay":  500,
+				},
+			},
+		},
+		{
+			petID:   "16",
+			petKey:  "phoenix",
+			nameZh:  "凤凰龟",
+			nameEn:  "PhoenixTurtle",
+			display: petThumbnailDisplay("PhoenixTurtle.png"),
+			rarity:  4,
+			abilities: map[string]any{
+				"signin_bonus": map[string]any{
+					"enabled":    true,
+					"bonusCoins": 100,
+					"capPerDay":  500,
 				},
 			},
 		},
@@ -262,16 +333,30 @@ func DefaultPetDefinitionSeeds() []models.PetDefinition {
 			PetId:           seed.petID,
 			PetKey:          seed.petKey,
 			NameJSON:        jsons.ToJsonStr(map[string]string{"zh-CN": seed.nameZh, "en-US": seed.nameEn}),
-			DescriptionJSON: jsons.ToJsonStr(map[string]string{"zh-CN": seed.descZh, "en-US": seed.descEn}),
+			DescriptionJSON: jsons.ToJsonStr(map[string]string{}),
+			DisplayJSON:     jsons.ToJsonStr(seed.display),
 			Name:            seed.nameZh,
-			Description:     seed.descZh,
+			Description:     "",
 			Rarity:          seed.rarity,
-			ObtainableByEgg: true,
+			ObtainableByEgg: seed.obtainableByEgg,
 			AbilitiesJSON:   jsons.ToJsonStr(seed.abilities),
 			Status:          constants.StatusOk,
 		})
 	}
 	return ret
+}
+
+func petThumbnailDisplay(filename string) map[string]any {
+	return map[string]any{
+		"thumbnail": "https://turtlepicture20260525-bucket.oss-cn-beijing.aliyuncs.com/turtleImg/" + filename,
+	}
+}
+
+func basicPetDisplay() map[string]any {
+	return map[string]any{
+		"icon":      "https://turtlepicture20260525-bucket.oss-cn-beijing.aliyuncs.com/spine/wugui/wugui.json",
+		"thumbnail": "https://turtlepicture20260525-bucket.oss-cn-beijing.aliyuncs.com/turtleImg/turtlet.png",
+	}
 }
 
 func (s *petDefinitionService) Get(id int64) *models.PetDefinition {

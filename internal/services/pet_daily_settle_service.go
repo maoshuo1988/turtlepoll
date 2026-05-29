@@ -140,6 +140,36 @@ func (s *petDailySettleService) SettleOnLogin(userId int64) *DailySettleResult {
 			pet := PetDefinitionService.Get(state.EquippedPetId)
 			if pet != nil {
 				abilities := PetDefinitionService.GetAbilities(pet)
+				if rawAbility, ok := abilities["signin_bonus"]; ok && rawAbility != nil {
+					fc := FeatureCatalogService.GetByFeatureKey("signin_bonus")
+					if fc != nil && fc.Enabled {
+						params, err := DecodeSigninBonusParams(rawAbility)
+						if err != nil {
+							return err
+						}
+						amount := params.BonusCoins
+						if params.CapPerDay > 0 && amount > params.CapPerDay {
+							amount = params.CapPerDay
+						}
+						if amount > 0 {
+							items = append(items, DailySettleItem{
+								Type:   "pet_signin_bonus",
+								Amount: amount,
+								Desc:   "龟种每日登录加成",
+								Meta: map[string]any{
+									"petId":      state.EquippedPetId,
+									"level":      petLevel,
+									"featureKey": "signin_bonus",
+									"cap":        params.CapPerDay,
+								},
+							})
+							balanceAfter += amount
+							if _, err := UserCoinService.Mint(0, userId, amount, fmt.Sprintf("daily settle | pet_signin_bonus | petId=%d | level=%d", state.EquippedPetId, petLevel)); err != nil {
+								return err
+							}
+						}
+					}
+				}
 				if balanceBefore < 0 {
 					if rawAbility, ok := abilities["debt_subsidy"]; ok && rawAbility != nil {
 						fc := FeatureCatalogService.GetByFeatureKey("debt_subsidy")

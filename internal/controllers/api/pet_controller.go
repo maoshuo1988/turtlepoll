@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bbs-go/internal/models/constants"
 	"bbs-go/internal/models/models"
 	"bbs-go/internal/pkg/biztime"
 	"bbs-go/internal/pkg/common"
@@ -13,12 +14,41 @@ import (
 
 	"github.com/kataras/iris/v12"
 	"github.com/mlogclub/simple/common/jsons"
+	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
 )
 
 // PetController 用户侧宠物接口：/api/pet/*
 type PetController struct {
 	Ctx iris.Context
+}
+
+// GetDefs GET /api/pet/defs
+func (c *PetController) GetDefs() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonErrorMsg("unauthorized")
+	}
+	page, size := parsePetDefsPageSize(c.Ctx)
+	cnd := sqls.NewCnd().Desc("id").Page(page, size)
+	cnd.Eq("status", constants.StatusOk)
+	if ok, has := parsePetDefsBoolQuery(c.Ctx.URLParam("enabled")); has {
+		cnd.Eq("obtainable_by_egg", ok)
+	}
+	if rarity := strings.TrimSpace(c.Ctx.URLParam("rarity")); rarity != "" {
+		if r := parsePetDefsRarity(rarity); r > 0 {
+			cnd.Eq("rarity", r)
+		}
+	}
+	list, paging := services.PetDefinitionService.FindPageByCnd(cnd)
+	items := make([]map[string]any, 0, len(list))
+	for i := range list {
+		items = append(items, buildUserPetInfo(&list[i]))
+	}
+	return web.JsonData(map[string]any{
+		"items": items,
+		"total": paging.Total,
+	})
 }
 
 // GetEquip GET /api/pet/equip
@@ -62,6 +92,68 @@ func (c *PetController) GetEquip() *web.JsonResult {
 		resp["icon"] = petInfo["icon"]
 	}
 	return web.JsonData(resp)
+}
+
+func parsePetDefsBoolQuery(v string) (bool, bool) {
+	v = strings.TrimSpace(strings.ToLower(v))
+	if v == "" {
+		return false, false
+	}
+	if v == "1" || v == "true" {
+		return true, true
+	}
+	if v == "0" || v == "false" {
+		return false, true
+	}
+	return false, false
+}
+
+func parsePetDefsPageSize(ctx iris.Context) (int, int) {
+	page := atoiDefault(ctx.URLParamDefault("page", "1"), 1)
+	size := atoiDefault(ctx.URLParamDefault("size", "20"), 20)
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
+	if size > 200 {
+		size = 200
+	}
+	return page, size
+}
+
+func atoiDefault(v string, def int) int {
+	n := 0
+	for _, ch := range strings.TrimSpace(v) {
+		if ch < '0' || ch > '9' {
+			return def
+		}
+		n = n*10 + int(ch-'0')
+	}
+	if n == 0 {
+		return def
+	}
+	return n
+}
+
+func parsePetDefsRarity(r string) int {
+	switch strings.ToUpper(strings.TrimSpace(r)) {
+	case "C":
+		return 1
+	case "B":
+		return 2
+	case "A":
+		return 3
+	case "S":
+		return 4
+	case "SS":
+		return 5
+	case "SSS":
+		return 6
+	default:
+		return 0
+	}
 }
 
 // PostEquip POST /api/pet/equip
@@ -174,6 +266,19 @@ func (c *PetController) GetStamina() *web.JsonResult {
 		"cap":          100,
 		"regenPerHour": 5,
 	})
+}
+
+// GetGachaConfig GET /api/pet/gacha/config
+func (c *PetController) GetGachaConfig() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonErrorMsg("unauthorized")
+	}
+	cfg, err := services.PetGachaService.GetConfig()
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(cfg)
 }
 
 // PostEggHatch POST /api/pet/egg/hatch

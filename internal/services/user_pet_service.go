@@ -5,8 +5,11 @@ import (
 	"bbs-go/internal/pkg/biztime"
 	"bbs-go/internal/repositories"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
+	"github.com/mlogclub/simple/common/jsons"
 	"github.com/mlogclub/simple/sqls"
 	"gorm.io/gorm"
 )
@@ -19,6 +22,11 @@ func newUserPetService() *userPetService {
 }
 
 type userPetService struct{}
+
+type signupBonusParams struct {
+	Enabled bool  `json:"enabled"`
+	Coins   int64 `json:"coins"`
+}
 
 func (s *userPetService) GetOrCreateState(userId int64) (*models.UserPetState, error) {
 	if userId <= 0 {
@@ -54,6 +62,128 @@ func (s *userPetService) HasPet(userId int64, petId int64) bool {
 		return false
 	}
 	return repositories.UserPetRepository.Get(sqls.DB(), userId, petId) != nil
+}
+
+func (s *userPetService) GrantAndEquipBasicOnSignup(tx *gorm.DB, userId int64, now int64) error {
+	if userId <= 0 {
+		return errors.New("userId is required")
+	}
+	if now <= 0 {
+		now = dates.NowTimestamp()
+	}
+
+	pet := repositories.PetDefinitionRepository.GetByPetKey(tx, "basic")
+	if pet == nil {
+		seed := findDefaultPetDefinitionSeed("basic")
+		if seed == nil {
+			return errors.New("basic pet definition seed not found")
+		}
+		seed.CreateTime = now
+		seed.UpdateTime = now
+		if err := repositories.PetDefinitionRepository.Create(tx, seed); err != nil {
+			return err
+		}
+		pet = seed
+	}
+
+	if repositories.UserPetRepository.Get(tx, userId, pet.Id) == nil {
+		if err := repositories.UserPetRepository.Create(tx, &models.UserPet{
+			UserId:     userId,
+			PetId:      pet.Id,
+			Level:      1,
+			XP:         0,
+			ObtainedAt: now,
+			CreateTime: now,
+			UpdateTime: now,
+		}); err != nil {
+			return err
+		}
+	}
+
+	state := repositories.UserPetStateRepository.GetByUserId(tx, userId)
+	if state == nil {
+		state = &models.UserPetState{
+			UserId:        userId,
+			EquippedPetId: pet.Id,
+			EquipDayName:  0,
+			CreateTime:    now,
+			UpdateTime:    now,
+		}
+		if err := repositories.UserPetStateRepository.Create(tx, state); err != nil {
+			return err
+		}
+	} else if state.EquippedPetId <= 0 {
+		state.EquippedPetId = pet.Id
+		state.UpdateTime = now
+		if err := repositories.UserPetStateRepository.Update(tx, state); err != nil {
+			return err
+		}
+	}
+
+	return s.grantSignupBonusByPet(tx, userId, pet, now)
+}
+
+func findDefaultPetDefinitionSeed(petId string) *models.PetDefinition {
+	for _, seed := range DefaultPetDefinitionSeeds() {
+		if seed.PetId == petId || seed.PetKey == petId {
+			seed := seed
+			return &seed
+		}
+	}
+	return nil
+}
+
+func (s *userPetService) grantSignupBonusByPet(tx *gorm.DB, userId int64, pet *models.PetDefinition, now int64) error {
+	if pet == nil {
+		return nil
+	}
+	fc := FeatureCatalogService.GetByFeatureKey("signup_bonus")
+	if fc == nil || !fc.Enabled {
+		return nil
+	}
+	abilities := PetDefinitionService.GetAbilities(pet)
+	raw, ok := abilities["signup_bonus"]
+	if !ok || raw == nil {
+		return nil
+	}
+	params, err := decodeSignupBonusParams(raw)
+	if err != nil {
+		return err
+	}
+	if !params.Enabled || params.Coins <= 0 {
+		return nil
+	}
+	remark := fmt.Sprintf("pet signup bonus | petId=%d | petKey=%s", pet.Id, pet.PetKey)
+	return s.mintIfNoSignupBonusLog(tx, userId, params.Coins, remark, now)
+}
+
+func decodeSignupBonusParams(v any) (*signupBonusParams, error) {
+	b := jsons.ToJsonStr(v)
+	if strings.TrimSpace(b) == "" {
+		return nil, errors.New("empty signup_bonus params")
+	}
+	var p signupBonusParams
+	if err := jsons.Parse(b, &p); err != nil {
+		return nil, err
+	}
+	if p.Coins < 0 {
+		return nil, errors.New("signup_bonus coins must be non-negative")
+	}
+	return &p, nil
+}
+
+func (s *userPetService) mintIfNoSignupBonusLog(tx *gorm.DB, userId int64, amount int64, remark string, now int64) error {
+	var count int64
+	if err := tx.Model(&models.UserCoinLog{}).
+		Where("user_id = ? AND biz_type = ? AND remark LIKE ?", userId, "MINT", "pet signup bonus%").
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := UserCoinService.mintWithTx(tx, 0, userId, amount, remark, now)
+	return err
 }
 
 func (s *userPetService) EquipPet(userId int64, petId int64) (*models.UserPetState, error) {

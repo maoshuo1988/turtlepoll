@@ -103,6 +103,10 @@ type signinBonusParams struct {
 	CapPerDay  int64 `json:"capPerDay"`
 }
 
+func DecodeSigninBonusParams(v any) (*signinBonusParams, error) {
+	return decodeSigninBonusParams(v)
+}
+
 func decodeSigninBonusParams(v any) (*signinBonusParams, error) {
 	// 兼容两种写法：
 	// 1) 直接 {bonusCoins: 100, capPerDay: 500}

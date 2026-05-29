@@ -578,8 +578,8 @@ Success response (200):
 >
 > 相关文档：
 >
-> - 运营侧流程与口径：`prompt/project/宠物-运营侧宠物维护.md`
-> - 用户侧开蛋流程：`prompt/project/宠物-用户侧宠物使用.md`（「开蛋流程」）
+> - 运营侧流程与口径：`prompt/project/宠物/05-配置与数据模型.md`
+> - 用户侧开蛋流程：`prompt/project/宠物/01-流程图.md`（「开蛋」）
 
 ---
 

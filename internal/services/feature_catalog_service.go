@@ -52,6 +52,15 @@ func (s *featureCatalogService) EnsureDefaultSeeds() {
 func DefaultFeatureCatalogSeeds() []models.FeatureCatalogItem {
 	return []models.FeatureCatalogItem{
 		{
+			FeatureKey:       "signup_bonus",
+			NameJSON:         `{"zh-CN":"注册赠送","en-US":"Signup Bonus"}`,
+			Scope:            "PET_DEF",
+			EffectiveEvent:   "SIGNUP",
+			ParamsSchemaJSON: `{"type":"object","required":["enabled","coins"],"properties":{"enabled":{"type":"boolean"},"coins":{"type":"integer","minimum":0}}}`,
+			Enabled:          true,
+			MetadataJSON:     `{}`,
+		},
+		{
 			FeatureKey:       "signin_bonus",
 			NameJSON:         `{"zh-CN":"每日登录加成","en-US":"Signin Bonus"}`,
 			Scope:            "PET_DEF",

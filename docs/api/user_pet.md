@@ -3,7 +3,7 @@
 > 目标：承载“用户侧宠物系统”的接口契约，避免在规则文档里出现接口设计内讧。
 >
 > 本文档只描述：接口、请求响应、错误码、幂等。
-> 规则与玩法口径请以 `prompt/project/宠物-用户侧宠物使用.md` 为单一事实来源。
+> 规则与玩法口径请以 `prompt/project/宠物/` 为单一事实来源。
 
 ---
 
@@ -16,7 +16,7 @@
 
 ### 宠物展示信息统一结构
 
-`GET /api/pet/equip`、`POST /api/pet/equip`、`GET /api/pet/owned` 中涉及宠物详情时，统一返回 `pet` 对象。为兼容现有前端，短期内保留旧的扁平字段，如 `petId/petKey/petName/rarity`。
+`GET /api/pet/defs`、`GET /api/pet/equip`、`POST /api/pet/equip`、`GET /api/pet/owned` 中涉及宠物详情时，统一返回 `pet` 对象。为兼容现有前端，短期内保留旧的扁平字段，如 `petId/petKey/petName/rarity`。
 
 `pet` 字段：
 
@@ -114,7 +114,26 @@
 ---
 
 
-## 2) 当前装备龟种（读）
+## 2) 龟种定义列表（普通用户）
+
+- `GET /api/pet/defs`
+
+说明：普通用户可访问的龟种定义列表接口，参考管理端 `GET /api/admin/pet/defs` 的查询能力，但不需要管理员权限。
+
+查询参数：
+
+- `enabled`：可选，`true/false/1/0`，按 `obtainable_by_egg` 过滤。
+- `rarity`：可选，`C/B/A/S/SS/SSS`。
+- `page` / `size`：分页参数，`size` 最大 200。
+
+响应：
+
+- `items[]`：统一 `pet` 展示对象。
+- `total`：总数。
+
+---
+
+## 3) 当前装备龟种（读）
 
 - `GET /api/pet/equip`
 
@@ -190,7 +209,7 @@
 
 ---
 
-## 3) 切换龟种（写）
+## 4) 切换龟种（写）
 
 - `POST /api/pet/equip`
 
@@ -214,7 +233,21 @@
 
 ---
 
-## 4) 用户龟种资产（列表）
+## 5) 开蛋池配置（普通用户）
+
+- `GET /api/pet/gacha/config`
+
+说明：普通用户可访问的开蛋池配置只读接口，参考管理端 `GET /api/admin/pet/gacha/config`，但不需要管理员权限。
+
+响应：
+
+- `enabled`：开蛋池是否启用。
+- `base_cost`：开蛋基础费用。
+- `rarity_weights`：稀有度概率配置。
+
+---
+
+## 6) 用户龟种资产（列表）
 
 - `GET /api/pet/owned`
 

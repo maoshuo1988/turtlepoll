@@ -2,7 +2,7 @@
 
 本文档基于 `docs/api/user_pet.md`，提供一套可复制的 curl 命令，用于对用户侧宠物系统接口做手工冒烟/回归。
 
-> 说明：本文档只负责“怎么打接口”。玩法/规则口径以 `prompt/project/宠物-用户侧宠物使用.md` 为准。
+> 说明：本文档只负责“怎么打接口”。玩法/规则口径以 `prompt/project/宠物/` 为准。
 
 ## 0. 测试前准备
 
@@ -160,7 +160,7 @@ curl -sS "${BASE_URL}/api/pet/stamina/feed" \
 
 ### 6.1 POST /api/pet/egg/hatch
 
-> 说明：本接口的“抽取概率”来自运营侧开蛋池配置：`/api/admin/pet/gacha/config`。
+> 说明：本接口的“抽取概率”来自开蛋池配置。普通用户可读：`/api/pet/gacha/config`；管理端维护：`/api/admin/pet/gacha/config`。
 > 
 > 抽取口径：先按 `rarity_weights` 抽稀有度，再在该稀有度且 `obtainable_by_egg=true` 的龟种中均匀随机抽取。
 
