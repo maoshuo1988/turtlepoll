@@ -59,7 +59,10 @@ func register(version int64, remark string, fn func() error) {
 func runMigration(version int64) error {
 	migration, found := migrations[version]
 	if found && migration.Success {
-		return nil
+		if !shouldRerunSuccessfulMigration(version) {
+			return nil
+		}
+		slog.Warn("rerun successful migration due empty critical seed table", "version", version)
 	}
 
 	f, ok := migrationFuncs[version]
@@ -100,6 +103,22 @@ func runMigration(version int64) error {
 	return err
 }
 
+func shouldRerunSuccessfulMigration(version int64) bool {
+	switch version {
+	case 22:
+		// Self-heal: v22 seeds t_polymarket_discovery_tag. If the table is empty
+		// but migration record is marked success, rerun seed on startup.
+		var count int64
+		if err := sqls.DB().Table("t_polymarket_discovery_tag").Count(&count).Error; err != nil {
+			slog.Warn("check seed table failed, skip rerun", "version", version, "error", err)
+			return false
+		}
+		return count == 0
+	default:
+		return false
+	}
+}
+
 func init() {
 	register(1, "init migration", migrate_init)
 	register(2, "init task data", migrate_init_task_data)
@@ -122,4 +141,5 @@ func init() {
 	register(19, "worldcup predict market fields", migrate_worldcup_predict_market_fields)
 	register(20, "predict context display fields", migrate_predict_context_display_fields)
 	register(21, "polymarket tracking and outcome tables", migrate_polymarket_tracking_tables)
+	register(22, "polymarket discovery tags table and seed data", migrate_polymarket_discovery_tags)
 }

@@ -49,7 +49,7 @@ curl -X POST "http://localhost:8082/api/football/sync_worldcup" --cookie "token=
 # 同步 Polymarket（只读）
 
 说明：
-- 只同步配置指定范围（tags / marketSlugs）
+- 只同步配置的标签范围（数据库表驱动）
 - 不同步价格盘口
 - 同步市场状态与最终结算结果（resolved outcome）
 

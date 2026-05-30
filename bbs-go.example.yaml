@@ -57,18 +57,11 @@ polymarket:
   cronSpec: ""                                  # 兼容旧配置；discoveryCron 为空时作为 Discovery cron
   discoveryCron: "*/30 * * * *"                 # 发现新市场；5字段 cron
   trackingCron: "*/5 * * * *"                   # 跟踪已发现市场状态；5字段 cron
-  discoveryPageSize: 50                         # 每个 Gamma 标签每次拉取数量，默认 50，最大 100；tags 为空时全量拉一页
-  trackingBatchSize: 50                         # 每次 Tracking 批量处理数量，默认 50
+  trackingBatchSize: 5                         # 每个标签每次 Discovery 拉取数量 + 每次 Tracking 批量处理数量
   maxRetry: 5                                   # Tracking 连续失败阈值，默认 5
   retryBaseSeconds: 60                          # 失败退避基数；第 N 次失败延后 60*N 秒
   autoSettleEnabled: true                       # 是否允许自动写入站内 SETTLED/result，默认 true
   dryRun: false                                 # true 时只同步/记录问题，不真正自动结算
-  matchTags: true                               # 兼容旧配置；当前只要 tags 非空就会按 Gamma 标签库解析并过滤
-  tags:
-    - politics                                  # Gamma tag slug/name/id 均可；以 /tags 返回为准
-    - sports
-  marketSlugs: []                               # 额外指定 Polymarket market slug 白名单
-  marketIds: []                                 # 指定 Polymarket market id 精确登记/跟踪
 
 # DeepSeek API（服务端调用；生产环境建议通过 DEEPSEEK_API_KEY 注入密钥）
 deepseek:

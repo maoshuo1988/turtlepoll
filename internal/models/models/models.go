@@ -30,6 +30,7 @@ var Models = []interface{}{
 	&PredictContext{},
 	&PredictTag{},
 	&PredictTagStat{},
+	&PolymarketDiscoveryTag{},
 	&PredictMarketTracking{},
 	&PredictMarketOutcome{},
 	&PredictMarketSettleIssue{},

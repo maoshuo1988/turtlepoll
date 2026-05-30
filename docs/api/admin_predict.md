@@ -254,7 +254,7 @@ result = DRAW
 - **方法**：POST
 - **路径**：`/api/admin/polymarket/discovery_sync`
 - **认证**：需要管理员
-- **说明**：按配置 `polymarket.tags/marketSlugs/marketIds` 发现市场，创建/更新站内市场并登记 Tracking。
+- **说明**：按数据库标签配置发现市场，创建/更新站内市场并登记 Tracking。
 
 ### 手动触发 Tracking
 

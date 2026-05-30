@@ -106,25 +106,20 @@ type FootballData struct {
 }
 
 // Polymarket 同步配置（只读）
-// - 可按 tags / market slugs / market ids 控制同步范围
+// - 标签来源：数据库表 t_polymarket_discovery_tag（由 migration 预置）
 // - 不同步价格盘口（不接 CLOB），只同步市场目录与最终结算结果（resolved outcome）
 type Polymarket struct {
-	Enabled           bool     `yaml:"enabled"`
-	BaseURL           string   `yaml:"baseURL"`       // Gamma API base url，留空用默认：https://gamma-api.polymarket.com
-	CronSpec          string   `yaml:"cronSpec"`      // 兼容旧配置：Discovery 定时同步 cron
-	DiscoveryCron     string   `yaml:"discoveryCron"` // Discovery cron，默认：*/30 * * * *
-	TrackingCron      string   `yaml:"trackingCron"`  // Tracking cron，默认：*/5 * * * *
-	MatchTags         bool     `yaml:"matchTags"`     // 兼容旧配置；当前 tags 非空时总是按 Gamma 标签库解析并过滤
-	Tags              []string `yaml:"tags"`          // Gamma tag slug/name/id；每个标签各拉 discoveryPageSize 条
-	MarketSlugs       []string `yaml:"marketSlugs"`   // 额外同步指定 market slug 白名单
-	MarketIds         []string `yaml:"marketIds"`     // 指定 Polymarket market id 精确跟踪
-	PageSize          int      `yaml:"pageSize"`      // 兼容旧配置：Discovery 分页 size，默认 50
-	DiscoveryPageSize int      `yaml:"discoveryPageSize"`
-	TrackingBatchSize int      `yaml:"trackingBatchSize"`
-	MaxRetry          int      `yaml:"maxRetry"`
-	RetryBaseSeconds  int      `yaml:"retryBaseSeconds"`
-	AutoSettleEnabled *bool    `yaml:"autoSettleEnabled"`
-	DryRun            bool     `yaml:"dryRun"`
+	Enabled           bool   `yaml:"enabled"`
+	BaseURL           string `yaml:"baseURL"`       // Gamma API base url，留空用默认：https://gamma-api.polymarket.com
+	CronSpec          string `yaml:"cronSpec"`      // 兼容旧配置：Discovery 定时同步 cron
+	DiscoveryCron     string `yaml:"discoveryCron"` // Discovery cron，默认：*/30 * * * *
+	TrackingCron      string `yaml:"trackingCron"`  // Tracking cron，默认：*/5 * * * *
+	PageSize          int    `yaml:"pageSize"`      // 兼容旧配置：Discovery 分页 size，默认 50
+	TrackingBatchSize int    `yaml:"trackingBatchSize"`
+	MaxRetry          int    `yaml:"maxRetry"`
+	RetryBaseSeconds  int    `yaml:"retryBaseSeconds"`
+	AutoSettleEnabled *bool  `yaml:"autoSettleEnabled"`
+	DryRun            bool   `yaml:"dryRun"`
 }
 
 type DeepSeek struct {

@@ -61,3 +61,5 @@ frontTest/.cache/
 
 owner-user-export-*/
 owner-users-export-*/
+
+commit-and-push.sh

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -26,12 +27,36 @@ func NewGammaClient(baseURL string) *GammaClient {
 	if baseURL == "" {
 		baseURL = DefaultGammaBaseURL
 	}
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 8 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   20,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   12 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 	return &GammaClient{
 		BaseURL: baseURL,
 		HTTPClient: &http.Client{
-			Timeout: 25 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: transport,
 		},
 	}
+}
+
+type gammaHTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *gammaHTTPError) Error() string {
+	if e == nil {
+		return "polymarket gamma api unknown error"
+	}
+	return fmt.Sprintf("polymarket gamma api status=%d body=%s", e.StatusCode, e.Body)
 }
 
 type Tag struct {
@@ -259,16 +284,35 @@ func (c *GammaClient) GetMarketByID(ctx context.Context, id string) (*Market, er
 }
 
 func (c *GammaClient) getJSON(ctx context.Context, urlStr string, out any) error {
+	hc := c.HTTPClient
+	if hc == nil {
+		hc = http.DefaultClient
+	}
+
+	const maxAttempts = 4
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastErr = c.getJSONOnce(ctx, hc, urlStr, out)
+		if lastErr == nil {
+			return nil
+		}
+		if attempt == maxAttempts || !shouldRetryGammaError(ctx, lastErr) {
+			return lastErr
+		}
+		if err := waitRetryBackoff(ctx, attempt); err != nil {
+			return lastErr
+		}
+	}
+	return lastErr
+}
+
+func (c *GammaClient) getJSONOnce(ctx context.Context, hc *http.Client, urlStr string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/json")
 
-	hc := c.HTTPClient
-	if hc == nil {
-		hc = http.DefaultClient
-	}
 	resp, err := hc.Do(req)
 	if err != nil {
 		return err
@@ -280,7 +324,7 @@ func (c *GammaClient) getJSON(ctx context.Context, urlStr string, out any) error
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("polymarket gamma api status=%d body=%s", resp.StatusCode, string(b))
+		return &gammaHTTPError{StatusCode: resp.StatusCode, Body: string(b)}
 	}
 	if len(b) == 0 {
 		return errors.New("polymarket gamma api empty body")
@@ -289,6 +333,59 @@ func (c *GammaClient) getJSON(ctx context.Context, urlStr string, out any) error
 		return err
 	}
 	return nil
+}
+
+func shouldRetryGammaError(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+
+	var httpErr *gammaHTTPError
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode == 429 || httpErr.StatusCode >= 500
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "tls handshake timeout") ||
+		strings.Contains(lower, "timeout") ||
+		strings.Contains(lower, "connection reset by peer") ||
+		strings.Contains(lower, "broken pipe") ||
+		strings.Contains(lower, "eof") {
+		return true
+	}
+
+	return false
+}
+
+func waitRetryBackoff(ctx context.Context, attempt int) error {
+	backoff := 300 * time.Millisecond
+	for i := 1; i < attempt; i++ {
+		backoff *= 2
+		if backoff >= 2*time.Second {
+			backoff = 2 * time.Second
+			break
+		}
+	}
+	jitterMs := time.Now().UnixNano()%200 + 1
+	wait := backoff + time.Duration(jitterMs)*time.Millisecond
+
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (c *GammaClient) baseURL() string {

@@ -120,6 +120,8 @@ type PredictTag struct {
 	Slug string `gorm:"size:128;not null;uniqueIndex" json:"slug" form:"slug"`
 	// Name 可选：若没有独立中文名体系，可先等于 Slug。
 	Name string `gorm:"size:256;not null" json:"name" form:"name"`
+	// CnName 中文名/中文含义，用于后台展示。
+	CnName string `gorm:"size:256" json:"cnName" form:"cnName"`
 	// LastSeenAt 最近一次在任意 PredictContext.Tags 中出现的时间（秒级时间戳）。
 	LastSeenAt int64 `gorm:"not null;default:0;index" json:"lastSeenAt" form:"lastSeenAt"`
 
@@ -136,6 +138,21 @@ type PredictTagStat struct {
 	MarketCount int64 `gorm:"not null;default:0;index" json:"marketCount" form:"marketCount"`
 	// RefreshedAt 最近一次刷新时间（秒级时间戳）。
 	RefreshedAt int64 `gorm:"not null;default:0;index" json:"refreshedAt" form:"refreshedAt"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// PolymarketDiscoveryTag Polymarket Discovery 标签配置（来自数据库，不走 yml）。
+type PolymarketDiscoveryTag struct {
+	Model
+
+	Rank          int    `gorm:"not null;default:0;index" json:"rank" form:"rank"`
+	Slug          string `gorm:"size:128;not null;uniqueIndex" json:"slug" form:"slug"`
+	Name          string `gorm:"size:256;not null" json:"name" form:"name"`
+	ExternalTagId int64  `gorm:"not null;default:0;index" json:"externalTagId" form:"externalTagId"`
+	Description   string `gorm:"size:512" json:"description" form:"description"`
+	Enabled       bool   `gorm:"not null;default:true;index" json:"enabled" form:"enabled"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
