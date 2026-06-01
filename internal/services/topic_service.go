@@ -229,6 +229,60 @@ func (s *topicService) GetTopics(user *models.User, nodeId, cursor int64) (topic
 	}
 }
 
+// GetTopicsByBusinessType 按业务类型获取帖子列表
+func (s *topicService) GetTopicsByBusinessType(user *models.User, nodeId, cursor, businessType int64) (topics []models.Topic, nextCursor int64, hasMore bool) {
+	if businessType == 0 {
+		return s.GetTopics(user, nodeId, cursor)
+	}
+	if user == nil {
+		return
+	}
+
+	var limit int = 20
+	q := sqls.DB().Table("t_topic AS t").Select("t.*")
+	if nodeId > 0 {
+		q = q.Where("t.node_id = ?", nodeId)
+	}
+	if nodeId == constants.NodeIdRecommend {
+		q = q.Where("t.recommend = ?", true)
+	}
+	if cursor > 0 {
+		q = q.Where("t.last_comment_time < ?", cursor)
+	}
+
+	q = q.Where("t.status = ?", constants.StatusOk)
+	switch businessType {
+	case 1:
+		q = q.Where("t.user_id = ?", user.Id)
+	case 2:
+		q = q.Joins("INNER JOIN t_favorite f ON f.entity_id = t.id AND f.user_id = ? AND f.entity_type = ?", user.Id, constants.EntityTopic).
+			Where("t.user_id <> ?", user.Id)
+	case 3:
+		q = q.Where("t.user_id = ? AND t.display_status = ?", user.Id, 1)
+	case 4:
+		q = q.Joins("INNER JOIN t_user_like ul ON ul.entity_id = t.id AND ul.user_id = ? AND ul.entity_type = ?", user.Id, constants.EntityTopic).
+			Where("t.user_id <> ?", user.Id)
+	case 5:
+		q = q.Joins("INNER JOIN t_user_dislike ud ON ud.entity_id = t.id AND ud.user_id = ? AND ud.entity_type = ? AND ud.status = ?",
+			user.Id, constants.EntityTopic, 1).
+			Where("t.user_id <> ?", user.Id)
+	default:
+		return s.GetTopics(user, nodeId, cursor)
+	}
+
+	q = q.Order("t.last_comment_time DESC").Limit(limit)
+	if err := q.Find(&topics).Error; err != nil {
+		return nil, cursor, false
+	}
+	if len(topics) > 0 {
+		nextCursor = topics[len(topics)-1].LastCommentTime
+		hasMore = len(topics) >= limit
+	} else {
+		nextCursor = cursor
+	}
+	return
+}
+
 // _GetNodeTopics 帖子列表（最新、推荐、节点）
 func (s *topicService) _GetNodeTopics(nodeId, cursor int64, limit int) (topics []models.Topic, nextCursor int64, hasMore bool) {
 	cnd := sqls.NewCnd()

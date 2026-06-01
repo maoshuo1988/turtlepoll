@@ -23,11 +23,13 @@ func BuildTopic(ctx iris.Context, topic *models.Topic) *resp.TopicResponse {
 		return nil
 	}
 
+	resp.FavoriteCount = services.FavoriteService.CountByEntityIds(constants.EntityTopic, []int64{topic.Id})[topic.Id]
 	resp.DislikeCount = services.UserDislikeService.CountDislike(constants.EntityTopic, topic.Id)
 
 	if currentUser := common.GetCurrentUser(ctx); currentUser != nil {
-		resp.Liked = services.UserLikeService.Exists(currentUser.Id, constants.EntityTopic, topic.Id)
 		resp.Favorited = services.FavoriteService.IsFavorited(currentUser.Id, constants.EntityTopic, topic.Id)
+		resp.DisLiked = len(services.UserDislikeService.IsDisliked(currentUser.Id, constants.EntityTopic, []int64{topic.Id})) > 0
+		resp.Liked = services.UserLikeService.Exists(currentUser.Id, constants.EntityTopic, topic.Id)
 	}
 
 	if vote := services.VoteService.Get(topic.VoteId); vote != nil {
@@ -52,9 +54,14 @@ func BuildSimpleTopics(ctx iris.Context, topics []models.Topic) []resp.TopicResp
 		topicIds = append(topicIds, topic.Id)
 	}
 
+	favoriteCountMap := services.FavoriteService.CountByEntityIds(constants.EntityTopic, topicIds)
 	var likedTopicIds []int64
+	var favoritedTopicIds []int64
+	var dislikedTopicIds []int64
 	if currentUser := common.GetCurrentUser(ctx); currentUser != nil {
 		likedTopicIds = services.UserLikeService.IsLiked(currentUser.Id, constants.EntityTopic, topicIds)
+		favoritedTopicIds = services.FavoriteService.IsFavoritedByEntityIds(currentUser.Id, constants.EntityTopic, topicIds)
+		dislikedTopicIds = services.UserDislikeService.IsDisliked(currentUser.Id, constants.EntityTopic, topicIds)
 	}
 
 	dislikeCountMap := services.UserDislikeService.CountDislikeByEntityIds(constants.EntityTopic, topicIds)
@@ -62,7 +69,10 @@ func BuildSimpleTopics(ctx iris.Context, topics []models.Topic) []resp.TopicResp
 	var responses []resp.TopicResponse
 	for _, topic := range topics {
 		item := BuildSimpleTopic(&topic)
+		item.FavoriteCount = favoriteCountMap[topic.Id]
 		item.Liked = arrays.Contains(topic.Id, likedTopicIds)
+		item.Favorited = arrays.Contains(topic.Id, favoritedTopicIds)
+		item.DisLiked = arrays.Contains(topic.Id, dislikedTopicIds)
 		item.DislikeCount = dislikeCountMap[topic.Id]
 		if vote := services.VoteService.Get(topic.VoteId); vote != nil {
 			item.Vote = BuildVote(ctx, vote)

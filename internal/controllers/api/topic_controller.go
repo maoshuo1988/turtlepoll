@@ -18,6 +18,7 @@ import (
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
 	"github.com/mlogclub/simple/web/params"
+	"github.com/sirupsen/logrus"
 
 	"bbs-go/internal/controllers/render"
 	"bbs-go/internal/models/models"
@@ -288,12 +289,19 @@ func (c *TopicController) GetUser_topics() *web.JsonResult {
 // 帖子列表
 func (c *TopicController) GetTopics() *web.JsonResult {
 	var (
-		cursor = params.FormValueInt64Default(c.Ctx, "cursor", 0)
-		nodeId = params.FormValueInt64Default(c.Ctx, "nodeId", 0)
-		user   = common.GetCurrentUser(c.Ctx)
+		cursor       = params.FormValueInt64Default(c.Ctx, "cursor", 0)
+		nodeId       = params.FormValueInt64Default(c.Ctx, "nodeId", 0)
+		businessType = params.FormValueInt64Default(c.Ctx, "business_type", 0)
+		user         = common.GetCurrentUser(c.Ctx)
 	)
-	if nodeId == constants.NodeIdFollow && user == nil {
+	logrus.Infof("[topic_topics_selfcheck_v1] cursor=%d nodeId=%d business_type=%d user_id=%d", cursor, nodeId, businessType, common.GetCurrentUserID(c.Ctx))
+	if (nodeId == constants.NodeIdFollow || (businessType >= 1 && businessType <= 5)) && user == nil {
 		return web.JsonError(errs.NotLogin())
+	}
+
+	if businessType >= 1 && businessType <= 5 {
+		topics, nextCursor, hasMore := services.TopicService.GetTopicsByBusinessType(user, nodeId, cursor, businessType)
+		return web.JsonCursorData(render.BuildSimpleTopics(c.Ctx, topics), strconv.FormatInt(nextCursor, 10), hasMore)
 	}
 
 	var temp []models.Topic
@@ -301,7 +309,7 @@ func (c *TopicController) GetTopics() *web.JsonResult {
 		stickyTopics := services.TopicService.GetStickyTopics(nodeId, 3)
 		temp = append(temp, stickyTopics...)
 	}
-	topics, cursor, hasMore := services.TopicService.GetTopics(user, nodeId, cursor)
+	topics, nextCursor, hasMore := services.TopicService.GetTopics(user, nodeId, cursor)
 	for _, topic := range topics {
 		topic.Sticky = false // 正常列表不要渲染置顶
 		temp = append(temp, topic)
@@ -309,7 +317,7 @@ func (c *TopicController) GetTopics() *web.JsonResult {
 	list := common.Distinct(temp, func(t models.Topic) any {
 		return t.Id
 	})
-	return web.JsonCursorData(render.BuildSimpleTopics(c.Ctx, list), strconv.FormatInt(cursor, 10), hasMore)
+	return web.JsonCursorData(render.BuildSimpleTopics(c.Ctx, list), strconv.FormatInt(nextCursor, 10), hasMore)
 }
 
 // 标签帖子列表
