@@ -24,6 +24,7 @@
 - `id`: int64
 - `slug`: string（唯一，建议小写）
 - `name`: string（可选，当前实现默认与 slug 一致）
+- `cnName`: string（中文名称/中文含义，可选）
 - `lastSeenAt`: int64（该标签最近一次在 `PredictContext.tags` 中出现的时间，秒级时间戳）
 
 ### PredictTagStat（标签统计表）
@@ -47,21 +48,21 @@
 
 #### 请求参数（query）
 - `page`：int，默认 1
-- `limit`：int，默认 20（建议最大 200）
-- `q`：string，可选，按 slug 模糊匹配
+- `pageSize`：int，默认 20（建议最大 200）
+- `q`：string，可选，按 `slug/name/cnName` 模糊匹配
 - `slugs`：string，可选，逗号分隔（仅查询指定 slugs）
 - `sort`：string，可选
-  - `lastSeenAt_desc`（默认）
-  - `slug_asc`
+  - `marketCount`（仅 includeCounts=1 有效）
+  - 其他值默认按 `update_time desc, id desc`
 - `includeCounts`：bool，可选，默认 false
   - true：LEFT JOIN `t_predict_tag_stat` 返回统计信息
 
 #### 返回值（data）
 - `list`：数组，每个元素包含：
-  - `tag`：PredictTag
-  - `stat`：PredictTagStat（当 includeCounts=false 时可能为空对象/零值）
-- `total`：总数
-- `page/limit`：分页信息
+  - `id` / `slug` / `name` / `cnName` / `lastSeenAt` / `createTime` / `updateTime`
+  - `marketCount`（仅 includeCounts=1 时为统计值，否则为 0）
+- `count`：总数
+- `page/pageSize`：分页信息
 
 返回示例（字段会随实际模型演进，这里仅展示结构）：
 
@@ -69,22 +70,19 @@
 {
   "list": [
     {
-      "tag": {
-        "id": 1,
-        "slug": "wc",
-        "name": "wc",
-        "lastSeenAt": 1734012345
-      },
-      "stat": {
-        "tagId": 1,
-        "marketCount": 128,
-        "refreshedAt": 1734019999
-      }
+      "id": 1,
+      "slug": "wc",
+      "name": "wc",
+      "cnName": "世界杯",
+      "lastSeenAt": 1734012345,
+      "createTime": 1734000000,
+      "updateTime": 1734019999,
+      "marketCount": 128
     }
   ],
-  "total": 1,
+  "count": 1,
   "page": 1,
-  "limit": 20
+  "pageSize": 20
 }
 ```
 

@@ -57,7 +57,7 @@ func (c *PredictTagController) GetList() *web.JsonResult {
 	query := db.Model(&models.PredictTag{})
 	if q != "" {
 		like := "%" + q + "%"
-		query = query.Where("slug ILIKE ? OR name ILIKE ?", like, like)
+		query = query.Where("slug ILIKE ? OR name ILIKE ? OR cn_name ILIKE ?", like, like, like)
 	}
 	if slugs != "" {
 		parts := []string{}
@@ -101,6 +101,7 @@ func (c *PredictTagController) GetList() *web.JsonResult {
 		Id         int64  `json:"id"`
 		Slug       string `json:"slug"`
 		Name       string `json:"name"`
+		CnName     string `json:"cnName"`
 		LastSeenAt int64  `json:"lastSeenAt"`
 		CreateTime int64  `json:"createTime"`
 		UpdateTime int64  `json:"updateTime"`
@@ -109,10 +110,10 @@ func (c *PredictTagController) GetList() *web.JsonResult {
 	}
 
 	// 基础 select：仅来自 t_predict_tag 的真实列
-	query = query.Select("t_predict_tag.id, t_predict_tag.slug, t_predict_tag.name, t_predict_tag.last_seen_at, t_predict_tag.create_time, t_predict_tag.update_time")
+	query = query.Select("t_predict_tag.id, t_predict_tag.slug, t_predict_tag.name, t_predict_tag.cn_name, t_predict_tag.last_seen_at, t_predict_tag.create_time, t_predict_tag.update_time")
 	if includeCounts == "1" {
 		// 叠加 join 的统计字段（别名 market_count -> struct 字段 MarketCount）
-		query = query.Select("t_predict_tag.id, t_predict_tag.slug, t_predict_tag.name, t_predict_tag.last_seen_at, t_predict_tag.create_time, t_predict_tag.update_time, COALESCE(s.market_count,0) as market_count")
+		query = query.Select("t_predict_tag.id, t_predict_tag.slug, t_predict_tag.name, t_predict_tag.cn_name, t_predict_tag.last_seen_at, t_predict_tag.create_time, t_predict_tag.update_time, COALESCE(s.market_count,0) as market_count")
 	}
 
 	var list []item
