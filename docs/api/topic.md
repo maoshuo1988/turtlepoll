@@ -1,4 +1,4 @@
-# Topic / 帖子系统 API
+﻿# Topic / 帖子系统 API
 
 > 说明：本文档基于实际代码实现整理（`internal/controllers/api/topic_controller.go`），路由挂载于 `/api/topic`。
 >
@@ -339,3 +339,61 @@
 - `exists`：是否存在隐藏内容
 - `show`：是否有权限查看（作者或已评论过该帖子）
 - `content`：当 `show=true` 时返回 HTML（服务端 markdown 渲染后的内容）
+
+## 帖子列表 business_type 扩展说明
+
+本节用于说明 `GET /api/topic/topics?nodeId=0&cursor=0` 在保持原有返回结构不变的前提下，新增 `business_type` 后的特殊查询场景。
+
+### Query/Form 参数
+
+- `nodeId` (int64, 可选，默认 0)：节点 id，支持内置节点（0/-1/-2）
+- `cursor` (int64, 可选，默认 0)
+- `business_type` (int64, 可选，默认 0)：业务类型。为 `0` 时保持原有帖子列表查询逻辑不变；只有在需要特殊列表时才启用关联表过滤。
+
+### business_type 说明
+
+- `1`：登录用户的帖子列表（自己创建的帖子）
+  - 必查：`t_topic`
+  - 通常还会查：`t_topic_tag`、`t_tag`、`t_user`、`t_topic_node`
+  - 通过登录用户拿到 `userId`，再在 `t_topic` 中按 `user_id` 过滤，找到自己创建的帖子
+- `2`：已收藏的帖子列表（收藏别人的帖子）
+  - 必查：`t_topic`
+  - 通常还会查：`t_topic_tag`、`t_tag`、`t_user`、`t_topic_node`、`t_favorite`
+  - 通过登录用户的 `userId` 关联 `t_favorite` 过滤收藏的帖子
+  - 结果不包含用户自己创建的帖子
+- `3`：已隐藏的帖子列表（隐藏自己的帖子）
+  - 必查：`t_topic`
+  - 通常还会查：`t_topic_tag`、`t_tag`、`t_user`、`t_topic_node`
+  - 通过 `t_topic.display_status = 1` 过滤
+- `4`：已点赞的帖子列表（用户点赞别人的帖子）
+  - 必查：`t_topic`
+  - 通常还会查：`t_topic_tag`、`t_tag`、`t_user`、`t_topic_node`、`t_user_like`
+  - 通过登录用户 `userId` 关联 `t_user_like` 过滤已点赞的帖子
+  - 结果不包含用户自己创建的帖子
+- `5`：已点踩列表（用户点踩别人的帖子）
+  - 必查：`t_topic`
+  - 通常还会查：`t_topic_tag`、`t_tag`、`t_user`、`t_topic_node`、`t_user_dislike`
+  - 通过登录用户 `userId` 关联 `t_user_dislike` 过滤已点踩的帖子
+  - 结果不包含用户自己创建的帖子
+
+### 返回说明
+
+- 返回数据结构保持与 `/api/topic/topics?nodeId=0&cursor=0` 一致，仍然是 `JsonCursorData([]SimpleTopic, cursor, hasMore)`
+- 当 `business_type` 不传或为 `0` 时，继续按原有帖子列表逻辑查询，不改变原有返回结构和分页行为
+
+## 帖子列表新增字段说明
+
+针对 `GET /api/topic/topics?nodeId=0&cursor=0` 返回的 `SimpleTopic`，新增以下字段：
+
+- `favoriteCount`：帖子收藏数量，按 `t_topic.id = t_favorite.entity_id` 且 `t_topic.type = t_favorite.entity_type` 统计
+- `favorited`：当前登录用户是否收藏了该帖子。若 `t_favorite` 中存在当前用户对应记录则返回 `true`，否则返回 `false`
+- `disLiked`：当前登录用户是否点踩了该帖子。若 `t_user_dislike` 中存在当前用户对应记录则返回 `true`，否则返回 `false`
+
+说明：
+
+- `favoriteCount` 为帖子总收藏数，与当前用户是否登录无关
+- `favorited` 和 `disLiked` 依赖当前登录用户；未登录时均返回 `false`
+- 这三个字段与点赞逻辑的区分方式一致：
+  - `likeCount` / `disLikeCount` / `favoriteCount` 表示全站统计数量
+  - `liked` / `disLiked` / `favorited` 表示当前登录用户自身的操作状态
+- 因此即使 `favoriteCount > 0` 或 `disLikeCount > 0`，只要当前登录用户本人没有收藏或点踩，对应的 `favorited` / `disLiked` 仍然是 `false`

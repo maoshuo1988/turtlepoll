@@ -76,6 +76,44 @@ func (s *favoriteService) IsFavorited(userId int64, entityType string, entityId 
 		userId, entityType, entityId) != nil
 }
 
+func (s *favoriteService) IsFavoritedByEntityIds(userId int64, entityType string, entityIds []int64) (favoritedEntityIds []int64) {
+	if len(entityIds) == 0 {
+		return nil
+	}
+	list := repositories.FavoriteRepository.Find(sqls.DB(), sqls.NewCnd().
+		Eq("user_id", userId).
+		In("entity_id", entityIds).
+		Eq("entity_type", entityType))
+	for _, favorite := range list {
+		favoritedEntityIds = append(favoritedEntityIds, favorite.EntityId)
+	}
+	return
+}
+
+func (s *favoriteService) CountByEntityIds(entityType string, entityIds []int64) map[int64]int64 {
+	if len(entityIds) == 0 {
+		return map[int64]int64{}
+	}
+
+	type row struct {
+		EntityId int64 `gorm:"column:entity_id"`
+		Cnt      int64 `gorm:"column:cnt"`
+	}
+	var rows []row
+	_ = sqls.DB().Model(&models.Favorite{}).
+		Select("entity_id, COUNT(*) AS cnt").
+		Where("entity_type = ?", entityType).
+		Where("entity_id IN ?", entityIds).
+		Group("entity_id").
+		Scan(&rows).Error
+
+	ret := make(map[int64]int64, len(rows))
+	for _, row := range rows {
+		ret[row.EntityId] = row.Cnt
+	}
+	return ret
+}
+
 func (s *favoriteService) GetBy(userId int64, entityType string, entityId int64) *models.Favorite {
 	return repositories.FavoriteRepository.Take(sqls.DB(), "user_id = ? and entity_type = ? and entity_id = ?",
 		userId, entityType, entityId)

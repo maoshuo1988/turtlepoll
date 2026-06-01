@@ -2,6 +2,7 @@ package services
 
 import (
 	"bbs-go/internal/models/constants"
+	"bbs-go/internal/models/models"
 	"bbs-go/internal/models/resp"
 	"errors"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web/params"
 
-	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 )
 
@@ -19,8 +19,7 @@ func newUserDislikeService() *userDislikeService {
 	return &userDislikeService{}
 }
 
-type userDislikeService struct {
-}
+type userDislikeService struct{}
 
 func (s *userDislikeService) Get(id int64) *models.UserDislike {
 	return repositories.UserDislikeRepository.Get(sqls.DB(), id)
@@ -74,6 +73,22 @@ func (s *userDislikeService) Exists(userId int64, entityType string, entityId in
 	return repositories.UserDislikeRepository.Exists(sqls.DB(), userId, entityType, entityId)
 }
 
+func (s *userDislikeService) IsDisliked(userId int64, entityType string, entityIds []int64) (dislikedEntityIds []int64) {
+	if len(entityIds) == 0 {
+		return nil
+	}
+
+	list := repositories.UserDislikeRepository.Find(sqls.DB(), sqls.NewCnd().
+		Eq("user_id", userId).
+		In("entity_id", entityIds).
+		Eq("entity_type", entityType).
+		Eq("status", 1))
+	for _, dislike := range list {
+		dislikedEntityIds = append(dislikedEntityIds, dislike.EntityId)
+	}
+	return
+}
+
 // CountDislikeByEntityIds 统计点踩数量（仅统计 status=1）
 func (s *userDislikeService) CountDislikeByEntityIds(entityType string, entityIds []int64) map[int64]int64 {
 	if len(entityIds) == 0 {
@@ -105,7 +120,7 @@ func (s *userDislikeService) CountDislike(entityType string, entityId int64) int
 	return m[entityId]
 }
 
-// TopicDislike 话题点踩（当前版本仅支持 topic）
+// TopicDislike 笔记/帖子点踩
 func (s *userDislikeService) TopicDislike(userId int64, topicId int64) error {
 	topic := repositories.TopicRepository.Get(sqls.DB(), topicId)
 	if topic == nil || topic.Status != constants.StatusOk {
@@ -135,7 +150,7 @@ func (s *userDislikeService) TopicDislike(userId int64, topicId int64) error {
 	})
 }
 
-// TopicCancelDislike 取消话题点踩
+// TopicCancelDislike 取消点踩
 func (s *userDislikeService) TopicCancelDislike(userId int64, topicId int64) error {
 	topic := repositories.TopicRepository.Get(sqls.DB(), topicId)
 	if topic == nil || topic.Status != constants.StatusOk {
