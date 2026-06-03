@@ -199,15 +199,17 @@ type TopicResponse struct {
 	ViewCount       int64               `json:"viewCount"`
 	CommentCount    int64               `json:"commentCount"`
 	LikeCount       int64               `json:"likeCount"`
+	FavoriteCount   int64               `json:"favoriteCount"`
 	DislikeCount    int64               `json:"disLikeCount"`
 	Liked           bool                `json:"liked"`
+	Favorited       bool                `json:"favorited"`
+	DisLiked        bool                `json:"disLiked"`
 	CreateTime      int64               `json:"createTime"`
 	Recommend       bool                `json:"recommend"`
 	RecommendTime   int64               `json:"recommendTime"`
 	Sticky          bool                `json:"sticky"`
 	StickyTime      int64               `json:"stickyTime"`
 	Status          int                 `json:"status"`
-	Favorited       bool                `json:"favorited"`
 	IpLocation      string              `json:"ipLocation"`
 	Vote            *VoteResponse       `json:"vote"`
 }
