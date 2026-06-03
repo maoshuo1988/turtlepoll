@@ -257,17 +257,27 @@
 
 - 方法：GET
 - 路径：`/api/topic/topics`
-- 认证：部分（当 `nodeId=-2` 关注节点时需要登录）
+- 认证：部分（当 `nodeId=-2` 关注节点时需要登录；当 `business_type` 为 `1~6` 时需要登录）
 
 ### Query/Form 参数
 
 - `nodeId` (int64, 可选，默认 0)：节点 id，支持内置节点（0/-1/-2）
 - `cursor` (int64, 可选，默认 0)
+- `business_type` (int64, 可选，默认 0)
+  - `0`：默认帖子列表，保持原有逻辑
+  - `1`：登录用户的帖子列表（自己创建的帖子）
+  - `2`：已收藏的帖子列表（收藏别人的帖子）
+  - `3`：已隐藏的帖子列表（隐藏自己的帖子）
+  - `4`：已点赞的帖子列表（用户点赞别人的帖子）
+  - `5`：已点踩列表（用户点踩别人的帖子）
+  - `6`：已评论列表（用户评论别人的帖子）
 
 ### 返回
 
 - 首页（cursor<=0）会拼接最多 3 条置顶帖（`GetStickyTopics(nodeId, 3)`）
 - 正常列表会把 `Sticky=false`，避免渲染置顶标记
+- `business_type=1~6` 时会按业务类型过滤，不再拼接置顶帖，返回结构保持 `JsonCursorData([]SimpleTopic, cursor, hasMore)` 不变
+- `business_type=6` 通过 `t_comment` 过滤当前用户评论过且不是自己创建的帖子
 
 返回：`JsonCursorData([]SimpleTopic, cursor, hasMore)`
 

@@ -96,6 +96,17 @@ func (r *favoriteRepository) FindUserCenterFavoritePage(db *gorm.DB, userId int6
 	return
 }
 
+func (r *favoriteRepository) CountUserCenterFavorite(db *gorm.DB, userId int64) (count int64) {
+	_ = db.Table("t_favorite AS f").
+		Joins("INNER JOIN t_topic t ON t.id = f.entity_id").
+		Where("f.user_id = ?", userId).
+		Where("f.entity_type = ?", constants.EntityTopic).
+		Where("f.user_id <> t.user_id").
+		Where("t.status = ?", constants.StatusOk).
+		Count(&count).Error
+	return
+}
+
 func (r *favoriteRepository) Create(db *gorm.DB, t *models.Favorite) (err error) {
 	err = db.Create(t).Error
 	return

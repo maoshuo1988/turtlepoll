@@ -51,6 +51,10 @@ func (s *favoriteService) FindUserCenterFavoritePage(userId int64, page, limit i
 	return repositories.FavoriteRepository.FindUserCenterFavoritePage(sqls.DB(), userId, page, limit)
 }
 
+func (s *favoriteService) CountUserCenterFavorite(userId int64) int64 {
+	return repositories.FavoriteRepository.CountUserCenterFavorite(sqls.DB(), userId)
+}
+
 func (s *favoriteService) Create(t *models.Favorite) error {
 	return repositories.FavoriteRepository.Create(sqls.DB(), t)
 }

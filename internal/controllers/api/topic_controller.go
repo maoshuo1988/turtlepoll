@@ -295,11 +295,11 @@ func (c *TopicController) GetTopics() *web.JsonResult {
 		user         = common.GetCurrentUser(c.Ctx)
 	)
 	logrus.Infof("[topic_topics_selfcheck_v1] cursor=%d nodeId=%d business_type=%d user_id=%d", cursor, nodeId, businessType, common.GetCurrentUserID(c.Ctx))
-	if (nodeId == constants.NodeIdFollow || (businessType >= 1 && businessType <= 5)) && user == nil {
+	if (nodeId == constants.NodeIdFollow || (businessType >= 1 && businessType <= 6)) && user == nil {
 		return web.JsonError(errs.NotLogin())
 	}
 
-	if businessType >= 1 && businessType <= 5 {
+	if businessType >= 1 && businessType <= 6 {
 		topics, nextCursor, hasMore := services.TopicService.GetTopicsByBusinessType(user, nodeId, cursor, businessType)
 		return web.JsonCursorData(render.BuildSimpleTopics(c.Ctx, topics), strconv.FormatInt(nextCursor, 10), hasMore)
 	}

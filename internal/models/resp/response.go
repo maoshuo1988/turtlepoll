@@ -137,6 +137,12 @@ type UserCenterDislikeResponse struct {
 	CreateTime  int64  `json:"create_time"`
 }
 
+type UserCenterOverviewResponse struct {
+	TopicCount    int64 `json:"topicCount"`
+	CommentCount  int64 `json:"commentCount"`
+	FavoriteCount int64 `json:"favoriteCount"`
+}
+
 type UserCenterHiddenTopicResponse struct {
 	Id            int64  `json:"id"`
 	UserId        int64  `json:"user_id"`

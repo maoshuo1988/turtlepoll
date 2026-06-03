@@ -60,6 +60,10 @@ func (s *commentService) FindUserCenterCommentPage(userId int64, page, limit int
 	return repositories.CommentRepository.FindUserCenterCommentPage(sqls.DB(), userId, page, limit)
 }
 
+func (s *commentService) CountUserCenterComment(userId int64) int64 {
+	return repositories.CommentRepository.CountUserCenterComment(sqls.DB(), userId)
+}
+
 func (s *commentService) Count(cnd *sqls.Cnd) int64 {
 	return repositories.CommentRepository.Count(sqls.DB(), cnd)
 }
