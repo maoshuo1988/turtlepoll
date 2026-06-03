@@ -4,6 +4,46 @@
 
 ---
 
+## 0. 用户概述
+
+- 方法：`GET`
+- 路径：`/api/user/center/overview`
+- 认证：是
+
+### 需求说明
+
+用于用户中心“概述”页展示当前登录用户的核心统计信息。
+
+统计口径说明：
+
+- `topicCount`：当前登录用户自己创建的帖子数量，统计 `t_topic` 且 `status = 0`
+- `commentCount`：当前登录用户评论别人的帖子数量，统计 `t_comment` + `t_topic`
+- `favoriteCount`：当前登录用户收藏别人的帖子数量，统计 `t_favorite` + `t_topic`
+
+### 返回字段
+
+- `topicCount`：用户自己创建的帖子数量
+- `commentCount`：用户评论别人的帖子数量
+- `favoriteCount`：用户收藏别人的帖子数量
+
+### 示例
+
+```bash
+curl.exe -i -k -H "Cookie: bbsgo_token=<YOUR_TOKEN>" "http://localhost:8082/api/user/center/overview"
+```
+
+### 返回示例
+
+```json
+{
+  "topicCount": 12,
+  "commentCount": 8,
+  "favoriteCount": 3
+}
+```
+
+---
+
 ## 1. 登录用户帖子列表
 
 - 方法：`GET`

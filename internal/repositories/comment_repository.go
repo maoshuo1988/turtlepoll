@@ -97,6 +97,18 @@ func (r *commentRepository) FindUserCenterCommentPage(db *gorm.DB, userId int64,
 	return
 }
 
+func (r *commentRepository) CountUserCenterComment(db *gorm.DB, userId int64) (count int64) {
+	_ = db.Table("t_comment AS c").
+		Joins("INNER JOIN t_topic t ON t.id = c.entity_id").
+		Where("c.user_id = ?", userId).
+		Where("c.entity_type = ?", constants.EntityTopic).
+		Where("c.status = ?", constants.StatusOk).
+		Where("t.status = ?", constants.StatusOk).
+		Where("c.user_id <> t.user_id").
+		Count(&count).Error
+	return
+}
+
 func (r *commentRepository) Count(db *gorm.DB, cnd *sqls.Cnd) int64 {
 	return cnd.Count(db, &models.Comment{})
 }

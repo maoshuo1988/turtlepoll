@@ -239,7 +239,7 @@ func (s *topicService) GetTopicsByBusinessType(user *models.User, nodeId, cursor
 	}
 
 	var limit int = 20
-	q := sqls.DB().Table("t_topic AS t").Select("t.*")
+	q := sqls.DB().Table("t_topic AS t").Distinct("t.*")
 	if nodeId > 0 {
 		q = q.Where("t.node_id = ?", nodeId)
 	}
@@ -265,6 +265,10 @@ func (s *topicService) GetTopicsByBusinessType(user *models.User, nodeId, cursor
 	case 5:
 		q = q.Joins("INNER JOIN t_user_dislike ud ON ud.entity_id = t.id AND ud.user_id = ? AND ud.entity_type = ? AND ud.status = ?",
 			user.Id, constants.EntityTopic, 1).
+			Where("t.user_id <> ?", user.Id)
+	case 6:
+		q = q.Joins("INNER JOIN t_comment c ON c.entity_id = t.id AND c.user_id = ? AND c.entity_type = ? AND c.status = ?",
+			user.Id, constants.EntityTopic, constants.StatusOk).
 			Where("t.user_id <> ?", user.Id)
 	default:
 		return s.GetTopics(user, nodeId, cursor)

@@ -33,6 +33,7 @@ type UserController struct {
 }
 
 func (c *UserController) BeforeActivation(b mvc.BeforeActivation) {
+	b.Handle("GET", "/center/overview", "GetCenterOverview")
 	b.Handle("GET", "/center/topics", "GetCenterTopics")
 	b.Handle("GET", "/center/comments", "GetCenterComments")
 	b.Handle("GET", "/center/favorites", "GetCenterFavorites")
@@ -398,6 +399,21 @@ func (c *UserController) GetCenterTopics() *web.JsonResult {
 
 	topics, paging := services.TopicService.FindPageByCnd(cnd)
 	return web.JsonPageData(buildUserCenterTopics(topics), paging)
+}
+
+func (c *UserController) GetCenterOverview() *web.JsonResult {
+	currentUser, err := common.CheckLogin(c.Ctx)
+	if err != nil {
+		return web.JsonError(err)
+	}
+
+	userId := currentUser.Id
+	overview := resp.UserCenterOverviewResponse{
+		TopicCount:    services.TopicService.Count(sqls.NewCnd().Eq("user_id", userId).Eq("status", constants.StatusOk)),
+		CommentCount:  services.CommentService.CountUserCenterComment(userId),
+		FavoriteCount: services.FavoriteService.CountUserCenterFavorite(userId),
+	}
+	return web.JsonData(overview)
 }
 
 func (c *UserController) PostTopicHideBy(topicIdStr string) *web.JsonResult {
