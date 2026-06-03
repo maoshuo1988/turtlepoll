@@ -317,7 +317,11 @@ func (s *newsCrawlerService) RunTask(taskId int64, limit int, withDetail bool) e
 		return errors.New("circuit_open")
 	}
 
-	html, retries, err := s.fetchWithRetry("https://www.hupu.com/")
+	bbsBase := config.Instance.News.BbsBaseURL
+	if bbsBase == "" {
+		bbsBase = "https://bbs.hupu.com"
+	}
+	html, retries, err := s.fetchWithRetry(strings.TrimRight(bbsBase, "/") + "/")
 	if err != nil {
 		_ = NewsService.MarkTaskRetry(taskId, retries, err.Error())
 		return err
