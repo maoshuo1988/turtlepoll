@@ -4,6 +4,8 @@
 
 ## 文档列表
 
+- [资讯系统（News）](./news.md)
+- [资讯采集管理（Admin News）](./admin_news.md)
 - [运营侧（Admin）接口索引（按页面视角）](./admin.md)
 - [运营总览看板（Admin Dashboard）](./admin_dashboard.md)
 - [预测市场（Admin Predict）](./admin_predict.md)
