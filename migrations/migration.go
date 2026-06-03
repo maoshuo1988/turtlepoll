@@ -142,4 +142,5 @@ func init() {
 	register(20, "predict context display fields", migrate_predict_context_display_fields)
 	register(21, "polymarket tracking and outcome tables", migrate_polymarket_tracking_tables)
 	register(22, "polymarket discovery tags table and seed data", migrate_polymarket_discovery_tags)
+	register(23, "news init tables and seed data", migrate_news_init_tables)
 }

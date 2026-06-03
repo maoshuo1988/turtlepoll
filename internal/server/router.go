@@ -97,6 +97,7 @@ func NewServer() {
 		m.Party("/predict-tag").Handle(new(api.PredictTagController))
 		m.Party("/coin").Handle(new(api.CoinController))
 		m.Party("/battle").Handle(new(api.BattleController))
+		m.Party("/news").Handle(new(api.NewsController))
 		m.Party("/pk").Handle(new(api.PKController))
 		m.Party("/ai").Handle(new(api.AIController))
 		m.Party("/fans").Handle(new(api.FansController))
@@ -150,6 +151,7 @@ func NewServer() {
 		m.Party("/dashboard").Handle(new(admin.DashboardController))
 		m.Party("/predict").Handle(new(admin.PredictController))
 		m.Party("/polymarket").Handle(new(admin.PolymarketController))
+		m.Party("/news").Handle(new(admin.NewsController))
 
 		m.Party("/task-config").Handle(new(admin.TaskConfigController))
 		m.Party("/user-task-event").Handle(new(admin.UserTaskEventController))

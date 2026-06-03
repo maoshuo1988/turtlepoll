@@ -16,6 +16,7 @@ var Models = []interface{}{
 
 	&User{}, &UserToken{}, &ThirdUser{}, &Tag{}, &Article{}, &ArticleTag{}, &Comment{}, &Favorite{}, &Topic{}, &TopicNode{},
 	&TopicTag{}, &UserLike{}, &UserDislike{}, &Message{}, &SysConfig{}, &Link{},
+	&NewsArticle{}, &NewsSource{}, &NewsCategory{}, &NewsTag{}, &NewsArticleCategory{}, &NewsArticleTag{}, &NewsCrawlTask{},
 	&TaskConfig{}, &UserTaskEvent{}, &UserTaskLog{},
 	&Badge{}, &UserBadge{},
 	&LevelConfig{},

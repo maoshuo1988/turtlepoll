@@ -50,6 +50,25 @@ footballData:
   season: 2026
   cronSpec: "0 */6 * * *"                       # 5字段 cron：分 时 日 月 周；留空默认 */30 * * * *
 
+# Hupu News Crawler
+news:
+  enabled: true
+  source: "hupu"
+  baseURL: "https://www.hupu.com"
+  bbsBaseURL: "https://bbs.hupu.com"
+  cronSpec: "*/10 * * * *"
+  batchSize: 50
+  requestTimeoutSeconds: 5
+  maxQPSPerWorker: 1
+  maxConcurrencyPerDomain: 2
+  maxRetry: 3
+  retryBaseSeconds: 60
+  retryMaxSeconds: 120
+  circuitBreakMinutes: 15
+  allowDetailRefresh: true
+  allowListHot: true
+  allowSearch: true
+
 # Polymarket Gamma API（只读同步；Discovery 发现 + Tracking 精确跟踪）
 polymarket:
   enabled: true

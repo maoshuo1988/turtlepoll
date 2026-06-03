@@ -79,6 +79,7 @@ type Config struct {
 	BaiduSEO       BaiduSEOConfig `yaml:"baiduSEO"`       // 百度SEO配置
 	SmSEO          SmSEOConfig    `yaml:"smSEO"`          // 神马搜索SEO配置
 	FootballData   FootballData   `yaml:"footballData"`   // football-data.org
+	News           NewsConfig     `yaml:"news"`           // 虎扑资讯采集
 	Polymarket     Polymarket     `yaml:"polymarket"`     // polymarket（只读同步）
 	DeepSeek       DeepSeek       `yaml:"deepseek"`       // DeepSeek API
 	AIChat         AIChat         `yaml:"aiChat"`         // AI 聊天
@@ -103,6 +104,25 @@ type FootballData struct {
 	CompetitionCode string `yaml:"competitionCode"` // e.g. WC
 	Season          int    `yaml:"season"`          // e.g. 2026
 	CronSpec        string `yaml:"cronSpec"`        // e.g. "0 */30 * * * *" (every 30 min)
+}
+
+type NewsConfig struct {
+	Enabled                 bool   `yaml:"enabled"`
+	Source                  string `yaml:"source"`
+	BaseURL                 string `yaml:"baseURL"`
+	BbsBaseURL              string `yaml:"bbsBaseURL"`
+	CronSpec                string `yaml:"cronSpec"`
+	BatchSize               int    `yaml:"batchSize"`
+	RequestTimeoutSeconds   int    `yaml:"requestTimeoutSeconds"`
+	MaxQPSPerWorker         int    `yaml:"maxQPSPerWorker"`
+	MaxConcurrencyPerDomain int    `yaml:"maxConcurrencyPerDomain"`
+	MaxRetry                int    `yaml:"maxRetry"`
+	RetryBaseSeconds        int    `yaml:"retryBaseSeconds"`
+	RetryMaxSeconds         int    `yaml:"retryMaxSeconds"`
+	CircuitBreakMinutes     int    `yaml:"circuitBreakMinutes"`
+	AllowDetailRefresh      bool   `yaml:"allowDetailRefresh"`
+	AllowListHot            bool   `yaml:"allowListHot"`
+	AllowSearch             bool   `yaml:"allowSearch"`
 }
 
 // Polymarket 同步配置（只读）
@@ -207,6 +227,7 @@ func ReadConfig() (cfg *Config, exists bool, err error) {
 		}
 		SetDbDefaults(&cfg.DB)
 		SetAIDefaults(cfg)
+		SetNewsDefaults(cfg)
 		SetPolymarketDefaults(cfg)
 	} else {
 		// default config
@@ -223,6 +244,7 @@ func ReadConfig() (cfg *Config, exists bool, err error) {
 			DB: defaultDbConfig(),
 		}
 		SetAIDefaults(cfg)
+		SetNewsDefaults(cfg)
 		SetPolymarketDefaults(cfg)
 	}
 
@@ -237,6 +259,56 @@ func SetPolymarketDefaults(cfg *Config) {
 	if cfg.Polymarket.AutoSettleEnabled == nil {
 		enabled := true
 		cfg.Polymarket.AutoSettleEnabled = &enabled
+	}
+}
+
+func SetNewsDefaults(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	hasNewsSection := cfg.News.Source != "" || cfg.News.BaseURL != "" || cfg.News.BbsBaseURL != "" || cfg.News.CronSpec != "" || cfg.News.BatchSize > 0
+	if cfg.News.Source == "" {
+		cfg.News.Source = "hupu"
+	}
+	if cfg.News.BaseURL == "" {
+		cfg.News.BaseURL = "https://www.hupu.com"
+	}
+	if cfg.News.BbsBaseURL == "" {
+		cfg.News.BbsBaseURL = "https://bbs.hupu.com"
+	}
+	if cfg.News.CronSpec == "" {
+		cfg.News.CronSpec = "*/10 * * * *"
+	}
+	if cfg.News.BatchSize <= 0 {
+		cfg.News.BatchSize = 50
+	}
+	if cfg.News.RequestTimeoutSeconds <= 0 {
+		cfg.News.RequestTimeoutSeconds = 5
+	}
+	if cfg.News.MaxQPSPerWorker <= 0 {
+		cfg.News.MaxQPSPerWorker = 1
+	}
+	if cfg.News.MaxConcurrencyPerDomain <= 0 {
+		cfg.News.MaxConcurrencyPerDomain = 2
+	}
+	if cfg.News.MaxRetry <= 0 {
+		cfg.News.MaxRetry = 3
+	}
+	if cfg.News.RetryBaseSeconds <= 0 {
+		cfg.News.RetryBaseSeconds = 60
+	}
+	if cfg.News.RetryMaxSeconds <= 0 {
+		cfg.News.RetryMaxSeconds = 120
+	}
+	if cfg.News.CircuitBreakMinutes <= 0 {
+		cfg.News.CircuitBreakMinutes = 15
+	}
+	if !hasNewsSection {
+		// 配置缺失时默认启用。
+		cfg.News.Enabled = true
+		cfg.News.AllowDetailRefresh = true
+		cfg.News.AllowListHot = true
+		cfg.News.AllowSearch = true
 	}
 }
 

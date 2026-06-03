@@ -84,6 +84,18 @@ func Start() {
 		}
 	})
 
+	// 虎扑资讯采集（默认每 10 分钟一次）
+	newsCfg := config.Instance.News
+	if newsCfg.Enabled {
+		newsSpec := newsCfg.CronSpec
+		if newsSpec == "" {
+			newsSpec = "*/10 * * * *"
+		}
+		addCronFunc(c, newsSpec, func() {
+			services.NewsCrawlerService.RunScheduledListCrawl()
+		})
+	}
+
 	// 预测市场获胜方评论奖励（每 1 分钟一次）
 	addCronFunc(c, "*/1 * * * *", func() {
 		if err := services.PredictCommentRewardService.RunDue(); err != nil {
