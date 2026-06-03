@@ -143,4 +143,5 @@ func init() {
 	register(21, "polymarket tracking and outcome tables", migrate_polymarket_tracking_tables)
 	register(22, "polymarket discovery tags table and seed data", migrate_polymarket_discovery_tags)
 	register(23, "news init tables and seed data", migrate_news_init_tables)
+	register(24, "news add content_images column", migrate_news_add_content_images)
 }

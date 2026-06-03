@@ -35,13 +35,18 @@ type newsCrawlItem struct {
 
 var (
 	reHupuAnchor   = regexp.MustCompile(`<a[^>]+href="(https://bbs\.hupu\.com/\d+\.html)"[^>]*>(.*?)</a>`)
+	reScriptStyle  = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>`)
 	reStripHTML    = regexp.MustCompile(`<[^>]+>`)
 	reMultiSpace   = regexp.MustCompile(`\s+`)
 	reSourceID     = regexp.MustCompile(`https://bbs\.hupu\.com/(\d+)\.html`)
 	reTitleTag     = regexp.MustCompile(`(?is)<title>(.*?)</title>`)
 	reDescription  = regexp.MustCompile(`(?is)<meta\s+name="description"\s+content="(.*?)"`)
 	reOgImage      = regexp.MustCompile(`(?is)<meta\s+property="og:image"\s+content="(.*?)"`)
+	reImgSrc       = regexp.MustCompile(`(?is)<img[^>]+src=["']([^"']+)["'][^>]*>`)
 	reChannelLabel = regexp.MustCompile(`(?is)<a[^>]+href="https://bbs\.hupu\.com/(\d+|[a-zA-Z0-9\-]+)"[^>]*>([^<]{2,20})</a>`)
+	reBodyTag      = regexp.MustCompile(`(?is)<body[^>]*>(.*?)</body>`)
+	reArticleTag   = regexp.MustCompile(`(?is)<article[^>]*>(.*?)</article>`)
+	reContentBlock = regexp.MustCompile(`(?is)<div[^>]+class="[^"]*(?:post-content|detail-content|article-content|thread-content|content-main|bbs-detail-wrap|bbs-post-content)[^"]*"[^>]*>(.*?)</div>`)
 )
 
 func (s *newsCrawlerService) buildHTTPClient() *http.Client {
@@ -96,11 +101,65 @@ func (s *newsCrawlerService) fetchWithRetry(url string) (string, int, error) {
 }
 
 func cleanHTMLText(in string) string {
+	in = reScriptStyle.ReplaceAllString(in, " ")
 	in = reStripHTML.ReplaceAllString(in, " ")
 	in = strings.ReplaceAll(in, "&nbsp;", " ")
 	in = strings.ReplaceAll(in, "&amp;", "&")
+	in = strings.ReplaceAll(in, "&quot;", `"`)
+	in = strings.ReplaceAll(in, "&#39;", "'")
+	in = strings.ReplaceAll(in, "&lt;", "<")
+	in = strings.ReplaceAll(in, "&gt;", ">")
 	in = reMultiSpace.ReplaceAllString(in, " ")
 	return strings.TrimSpace(in)
+}
+
+func clipRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	rs := []rune(strings.TrimSpace(s))
+	if len(rs) <= max {
+		return string(rs)
+	}
+	return string(rs[:max])
+}
+
+func normalizeImageURL(url string) string {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return ""
+	}
+	if strings.HasPrefix(url, "//") {
+		return "https:" + url
+	}
+	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+		return url
+	}
+	return ""
+}
+
+func extractImageURLs(rawHTML string) []string {
+	matches := reImgSrc.FindAllStringSubmatch(rawHTML, -1)
+	if len(matches) == 0 {
+		return []string{}
+	}
+	ret := make([]string, 0, len(matches))
+	seen := make(map[string]struct{})
+	for _, m := range matches {
+		if len(m) < 2 {
+			continue
+		}
+		u := normalizeImageURL(m[1])
+		if u == "" {
+			continue
+		}
+		if _, ok := seen[u]; ok {
+			continue
+		}
+		seen[u] = struct{}{}
+		ret = append(ret, u)
+	}
+	return ret
 }
 
 func sourceIDFromURL(url string) string {
@@ -140,15 +199,31 @@ func (s *newsCrawlerService) parseList(html string) []newsCrawlItem {
 	return items
 }
 
-func (s *newsCrawlerService) parseDetail(html string) (title, summary, cover string) {
+func (s *newsCrawlerService) parseDetail(html string) (title, summary, content, cover string, contentImages []string) {
 	if m := reTitleTag.FindStringSubmatch(html); len(m) >= 2 {
 		title = cleanHTMLText(m[1])
 	}
 	if m := reDescription.FindStringSubmatch(html); len(m) >= 2 {
 		summary = cleanHTMLText(m[1])
 	}
+	rawContent := ""
+	if m := reContentBlock.FindStringSubmatch(html); len(m) >= 2 {
+		rawContent = m[1]
+	} else if m := reArticleTag.FindStringSubmatch(html); len(m) >= 2 {
+		rawContent = m[1]
+	} else if m := reBodyTag.FindStringSubmatch(html); len(m) >= 2 {
+		rawContent = m[1]
+	}
+	contentImages = extractImageURLs(rawContent)
+	content = cleanHTMLText(rawContent)
+	if summary == "" {
+		summary = clipRunes(content, 200)
+	}
 	if m := reOgImage.FindStringSubmatch(html); len(m) >= 2 {
 		cover = strings.TrimSpace(m[1])
+	}
+	if cover == "" && len(contentImages) > 0 {
+		cover = contentImages[0]
 	}
 	return
 }
@@ -175,37 +250,41 @@ func (s *newsCrawlerService) upsertItem(item newsCrawlItem, withDetail bool) err
 	}
 
 	article := &models.NewsArticle{
-		Source:       "hupu",
-		SourceId:     sourceId,
-		SourceUrl:    item.URL,
-		Slug:         "",
-		Title:        item.Title,
-		Summary:      item.Summary,
-		Content:      "",
-		CoverUrl:     item.Cover,
-		Channel:      item.Channel,
-		Category:     inferCategoryByChannel(item.Channel),
-		Tags:         EncodeNewsTags([]string{}),
-		PublishedAt:  now,
-		FetchedAt:    now,
-		HotScore:     50,
-		DetailStatus: "pending",
-		Status:       "normal",
-		CreateTime:   now,
-		UpdateTime:   now,
+		Source:        "hupu",
+		SourceId:      sourceId,
+		SourceUrl:     item.URL,
+		Slug:          "",
+		Title:         item.Title,
+		Summary:       item.Summary,
+		Content:       "",
+		ContentImages: EncodeNewsImages([]string{}),
+		CoverUrl:      item.Cover,
+		Channel:       item.Channel,
+		Category:      inferCategoryByChannel(item.Channel),
+		Tags:          EncodeNewsTags([]string{}),
+		PublishedAt:   now,
+		FetchedAt:     now,
+		HotScore:      50,
+		DetailStatus:  "pending",
+		Status:        "normal",
+		CreateTime:    now,
+		UpdateTime:    now,
 	}
 
 	if withDetail {
 		html, _, err := s.fetchWithRetry(item.URL)
 		if err == nil {
-			detailTitle, detailSummary, detailCover := s.parseDetail(html)
+			detailTitle, detailSummary, detailContent, detailCover, detailImages := s.parseDetail(html)
 			if detailTitle != "" {
 				article.Title = detailTitle
 			}
 			if detailSummary != "" {
 				article.Summary = detailSummary
-				article.Content = detailSummary
 			}
+			if detailContent != "" {
+				article.Content = detailContent
+			}
+			article.ContentImages = EncodeNewsImages(detailImages)
 			if detailCover != "" {
 				article.CoverUrl = detailCover
 			}
@@ -298,14 +377,17 @@ func (s *newsCrawlerService) RefreshDetails(articleIds []int64) error {
 			_ = sqls.DB().Save(&a).Error
 			continue
 		}
-		title, summary, cover := s.parseDetail(html)
+		title, summary, content, cover, images := s.parseDetail(html)
 		if title != "" {
 			a.Title = title
 		}
 		if summary != "" {
 			a.Summary = summary
-			a.Content = summary
 		}
+		if content != "" {
+			a.Content = content
+		}
+		a.ContentImages = EncodeNewsImages(images)
 		if cover != "" {
 			a.CoverUrl = cover
 		}

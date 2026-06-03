@@ -50,6 +50,7 @@ func (r *newsRepository) UpsertArticle(db *gorm.DB, article *models.NewsArticle)
 			"title",
 			"summary",
 			"content",
+			"content_images",
 			"cover_url",
 			"channel",
 			"category",

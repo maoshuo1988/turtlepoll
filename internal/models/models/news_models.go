@@ -3,24 +3,25 @@ package models
 // NewsArticle 站内资讯主表
 type NewsArticle struct {
 	Model
-	Source       string `gorm:"size:16;not null;default:'hupu';uniqueIndex:idx_news_source_source_id" json:"source" form:"source"`
-	SourceId     string `gorm:"size:64;not null;uniqueIndex:idx_news_source_source_id" json:"sourceId" form:"sourceId"`
-	SourceUrl    string `gorm:"size:512;not null;index:idx_news_source_url" json:"sourceUrl" form:"sourceUrl"`
-	Slug         string `gorm:"size:128;uniqueIndex:idx_news_slug" json:"slug" form:"slug"`
-	Title        string `gorm:"size:255;not null" json:"title" form:"title"`
-	Summary      string `gorm:"type:text" json:"summary" form:"summary"`
-	Content      string `gorm:"type:text" json:"content" form:"content"`
-	CoverUrl     string `gorm:"size:512" json:"coverUrl" form:"coverUrl"`
-	Channel      string `gorm:"size:64" json:"channel" form:"channel"`
-	Category     string `gorm:"size:64;not null;default:'general';index:idx_news_category_published,priority:1" json:"category" form:"category"`
-	Tags         string `gorm:"type:jsonb;not null;default:'[]'" json:"tags" form:"tags"`
-	PublishedAt  int64  `gorm:"not null;default:0;index:idx_news_category_published,priority:2;index:idx_news_status_published,priority:2" json:"publishedAt" form:"publishedAt"`
-	FetchedAt    int64  `gorm:"not null;default:0" json:"fetchedAt" form:"fetchedAt"`
-	HotScore     int    `gorm:"not null;default:0" json:"hotScore" form:"hotScore"`
-	DetailStatus string `gorm:"size:16;not null;default:'pending'" json:"detailStatus" form:"detailStatus"`
-	Status       string `gorm:"size:16;not null;default:'normal';index:idx_news_status_published,priority:1" json:"status" form:"status"`
-	CreateTime   int64  `gorm:"not null;default:0" json:"createTime" form:"createTime"`
-	UpdateTime   int64  `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+	Source        string `gorm:"size:16;not null;default:'hupu';uniqueIndex:idx_news_source_source_id" json:"source" form:"source"`
+	SourceId      string `gorm:"size:64;not null;uniqueIndex:idx_news_source_source_id" json:"sourceId" form:"sourceId"`
+	SourceUrl     string `gorm:"size:512;not null;index:idx_news_source_url" json:"sourceUrl" form:"sourceUrl"`
+	Slug          string `gorm:"size:128;uniqueIndex:idx_news_slug" json:"slug" form:"slug"`
+	Title         string `gorm:"size:255;not null" json:"title" form:"title"`
+	Summary       string `gorm:"type:text" json:"summary" form:"summary"`
+	Content       string `gorm:"type:text" json:"content" form:"content"`
+	ContentImages string `gorm:"type:jsonb;not null;default:'[]'" json:"contentImages" form:"contentImages"`
+	CoverUrl      string `gorm:"size:512" json:"coverUrl" form:"coverUrl"`
+	Channel       string `gorm:"size:64" json:"channel" form:"channel"`
+	Category      string `gorm:"size:64;not null;default:'general';index:idx_news_category_published,priority:1" json:"category" form:"category"`
+	Tags          string `gorm:"type:jsonb;not null;default:'[]'" json:"tags" form:"tags"`
+	PublishedAt   int64  `gorm:"not null;default:0;index:idx_news_category_published,priority:2;index:idx_news_status_published,priority:2" json:"publishedAt" form:"publishedAt"`
+	FetchedAt     int64  `gorm:"not null;default:0" json:"fetchedAt" form:"fetchedAt"`
+	HotScore      int    `gorm:"not null;default:0" json:"hotScore" form:"hotScore"`
+	DetailStatus  string `gorm:"size:16;not null;default:'pending'" json:"detailStatus" form:"detailStatus"`
+	Status        string `gorm:"size:16;not null;default:'normal';index:idx_news_status_published,priority:1" json:"status" form:"status"`
+	CreateTime    int64  `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime    int64  `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
 }
 
 // NewsSource 数据来源维表

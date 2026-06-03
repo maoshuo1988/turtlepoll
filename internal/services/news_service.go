@@ -405,3 +405,25 @@ func EncodeNewsTags(tags []string) string {
 	}
 	return string(b)
 }
+
+func ParseNewsImages(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{}
+	}
+	var images []string
+	if err := json.Unmarshal([]byte(raw), &images); err != nil {
+		return []string{}
+	}
+	return images
+}
+
+func EncodeNewsImages(images []string) string {
+	if images == nil {
+		images = []string{}
+	}
+	b, err := json.Marshal(images)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
