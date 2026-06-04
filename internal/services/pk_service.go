@@ -36,10 +36,10 @@ const (
 	PKSideDraw = "draw"
 
 	PKBetAmount        int64 = 100
-	pkRoundBettingSec        = 48 * 3600
-	pkRoundLockedSec         = 24 * 3600
-	pkRoundCooldownSec       = 10 * 60
-	pkSeasonSec              = 30 * 24 * 3600
+	pkRoundBettingSec        = 48 * 3600 * 1000
+	pkRoundLockedSec         = 24 * 3600 * 1000
+	pkRoundCooldownSec       = 10 * 60 * 1000
+	pkSeasonSec              = 30 * 24 * 3600 * 1000
 )
 
 type pkService struct{}
