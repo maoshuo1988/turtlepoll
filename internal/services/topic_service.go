@@ -240,7 +240,6 @@ func (s *topicService) GetTopicsByBusinessType(user *models.User, nodeId, cursor
 
 	var limit int = 20
 	q := sqls.DB().Table("t_topic AS t").Distinct("t.*")
-	topicEntityTypeExpr := "CAST(t.type AS TEXT)"
 	if nodeId > 0 {
 		q = q.Where("t.node_id = ?", nodeId)
 	}
@@ -256,20 +255,20 @@ func (s *topicService) GetTopicsByBusinessType(user *models.User, nodeId, cursor
 	case 1:
 		q = q.Where("t.user_id = ?", user.Id)
 	case 2:
-		q = q.Joins("INNER JOIN t_favorite f ON f.entity_id = t.id AND f.user_id = ? AND f.entity_type = "+topicEntityTypeExpr, user.Id).
+		q = q.Joins("INNER JOIN t_favorite f ON f.entity_id = t.id AND f.user_id = ? AND f.entity_type = ?", user.Id, constants.EntityTopic).
 			Where("t.user_id <> ?", user.Id)
 	case 3:
 		q = q.Where("t.user_id = ? AND t.display_status = ?", user.Id, 1)
 	case 4:
-		q = q.Joins("INNER JOIN t_user_like ul ON ul.entity_id = t.id AND ul.user_id = ? AND ul.entity_type = "+topicEntityTypeExpr, user.Id).
+		q = q.Joins("INNER JOIN t_user_like ul ON ul.entity_id = t.id AND ul.user_id = ? AND ul.entity_type = ?", user.Id, constants.EntityTopic).
 			Where("t.user_id <> ?", user.Id)
 	case 5:
-		q = q.Joins("INNER JOIN t_user_dislike ud ON ud.entity_id = t.id AND ud.user_id = ? AND ud.entity_type = "+topicEntityTypeExpr+" AND ud.status = ?",
-			user.Id, 1).
+		q = q.Joins("INNER JOIN t_user_dislike ud ON ud.entity_id = t.id AND ud.user_id = ? AND ud.entity_type = ? AND ud.status = ?",
+			user.Id, constants.EntityTopic, 1).
 			Where("t.user_id <> ?", user.Id)
 	case 6:
-		q = q.Joins("INNER JOIN t_comment c ON c.entity_id = t.id AND c.user_id = ? AND c.entity_type = "+topicEntityTypeExpr+" AND c.status = ?",
-			user.Id, constants.StatusOk).
+		q = q.Joins("INNER JOIN t_comment c ON c.entity_id = t.id AND c.user_id = ? AND c.entity_type = ? AND c.status = ?",
+			user.Id, constants.EntityTopic, constants.StatusOk).
 			Where("t.user_id <> ?", user.Id)
 	default:
 		return s.GetTopics(user, nodeId, cursor)
