@@ -11,6 +11,7 @@ import (
 	"bbs-go/internal/pkg/text"
 	"bbs-go/internal/services"
 	"html"
+	"strconv"
 
 	"github.com/kataras/iris/v12"
 	"github.com/mlogclub/simple/common/arrays"
@@ -23,13 +24,14 @@ func BuildTopic(ctx iris.Context, topic *models.Topic) *resp.TopicResponse {
 		return nil
 	}
 
-	resp.FavoriteCount = services.FavoriteService.CountByEntityIds(constants.EntityTopic, []int64{topic.Id})[topic.Id]
-	resp.DislikeCount = services.UserDislikeService.CountDislike(constants.EntityTopic, topic.Id)
+	entityType := topicEntityType(topic.Type)
+	resp.FavoriteCount = services.FavoriteService.CountByEntityIds(entityType, []int64{topic.Id})[topic.Id]
+	resp.DislikeCount = services.UserDislikeService.CountDislike(entityType, topic.Id)
 
 	if currentUser := common.GetCurrentUser(ctx); currentUser != nil {
-		resp.Favorited = services.FavoriteService.IsFavorited(currentUser.Id, constants.EntityTopic, topic.Id)
-		resp.DisLiked = len(services.UserDislikeService.IsDisliked(currentUser.Id, constants.EntityTopic, []int64{topic.Id})) > 0
-		resp.Liked = services.UserLikeService.Exists(currentUser.Id, constants.EntityTopic, topic.Id)
+		resp.Favorited = services.FavoriteService.IsFavorited(currentUser.Id, entityType, topic.Id)
+		resp.DisLiked = len(services.UserDislikeService.IsDisliked(currentUser.Id, entityType, []int64{topic.Id})) > 0
+		resp.Liked = services.UserLikeService.Exists(currentUser.Id, entityType, topic.Id)
 	}
 
 	if vote := services.VoteService.Get(topic.VoteId); vote != nil {
@@ -49,22 +51,35 @@ func BuildSimpleTopics(ctx iris.Context, topics []models.Topic) []resp.TopicResp
 		return nil
 	}
 
-	var topicIds []int64
+	var (
+		topicIds          []int64
+		topicIdsByType    = map[string][]int64{}
+		favoriteCountMap  = map[int64]int64{}
+		dislikeCountMap   = map[int64]int64{}
+		likedTopicIds     []int64
+		favoritedTopicIds []int64
+		dislikedTopicIds  []int64
+		currentUser       = common.GetCurrentUser(ctx)
+	)
 	for _, topic := range topics {
 		topicIds = append(topicIds, topic.Id)
+		entityType := topicEntityType(topic.Type)
+		topicIdsByType[entityType] = append(topicIdsByType[entityType], topic.Id)
 	}
 
-	favoriteCountMap := services.FavoriteService.CountByEntityIds(constants.EntityTopic, topicIds)
-	var likedTopicIds []int64
-	var favoritedTopicIds []int64
-	var dislikedTopicIds []int64
-	if currentUser := common.GetCurrentUser(ctx); currentUser != nil {
-		likedTopicIds = services.UserLikeService.IsLiked(currentUser.Id, constants.EntityTopic, topicIds)
-		favoritedTopicIds = services.FavoriteService.IsFavoritedByEntityIds(currentUser.Id, constants.EntityTopic, topicIds)
-		dislikedTopicIds = services.UserDislikeService.IsDisliked(currentUser.Id, constants.EntityTopic, topicIds)
+	for entityType, ids := range topicIdsByType {
+		for topicId, count := range services.FavoriteService.CountByEntityIds(entityType, ids) {
+			favoriteCountMap[topicId] += count
+		}
+		for topicId, count := range services.UserDislikeService.CountDislikeByEntityIds(entityType, ids) {
+			dislikeCountMap[topicId] += count
+		}
+		if currentUser != nil {
+			likedTopicIds = append(likedTopicIds, services.UserLikeService.IsLiked(currentUser.Id, entityType, ids)...)
+			favoritedTopicIds = append(favoritedTopicIds, services.FavoriteService.IsFavoritedByEntityIds(currentUser.Id, entityType, ids)...)
+			dislikedTopicIds = append(dislikedTopicIds, services.UserDislikeService.IsDisliked(currentUser.Id, entityType, ids)...)
+		}
 	}
-
-	dislikeCountMap := services.UserDislikeService.CountDislikeByEntityIds(constants.EntityTopic, topicIds)
 
 	var responses []resp.TopicResponse
 	for _, topic := range topics {
@@ -146,4 +161,8 @@ func _buildTopic(topic *models.Topic, buildContent bool) *resp.TopicResponse {
 	rsp.Tags = BuildTags(tags)
 
 	return rsp
+}
+
+func topicEntityType(topicType constants.TopicType) string {
+	return strconv.Itoa(int(topicType))
 }

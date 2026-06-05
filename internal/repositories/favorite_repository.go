@@ -69,7 +69,7 @@ func (r *favoriteRepository) FindUserCenterFavoritePage(db *gorm.DB, userId int6
 	baseQuery := db.Table("t_favorite AS f").
 		Joins("INNER JOIN t_topic t ON t.id = f.entity_id").
 		Where("f.user_id = ?", userId).
-		Where("f.entity_type = ?", constants.EntityTopic).
+		Where("f.entity_type = CAST(t.type AS TEXT)").
 		Where("f.user_id <> t.user_id").
 		Where("t.status = ?", constants.StatusOk)
 
@@ -100,7 +100,7 @@ func (r *favoriteRepository) CountUserCenterFavorite(db *gorm.DB, userId int64) 
 	_ = db.Table("t_favorite AS f").
 		Joins("INNER JOIN t_topic t ON t.id = f.entity_id").
 		Where("f.user_id = ?", userId).
-		Where("f.entity_type = ?", constants.EntityTopic).
+		Where("f.entity_type = CAST(t.type AS TEXT)").
 		Where("f.user_id <> t.user_id").
 		Where("t.status = ?", constants.StatusOk).
 		Count(&count).Error
