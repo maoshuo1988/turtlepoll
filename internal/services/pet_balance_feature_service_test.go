@@ -3,18 +3,18 @@ package services
 import "testing"
 
 func TestPetBalanceFeatureServiceComputeDebtSubsidy(t *testing.T) {
-	params := DebtSubsidyParams{Enabled: true, SubsidyRate: 0.22}
+	params := DebtSubsidyParams{Enabled: true, SubsidyRate: 0.18}
 	got := PetBalanceFeatureService.ComputeDebtSubsidy(-500, params)
-	if got != 110 {
-		t.Fatalf("ComputeDebtSubsidy(-500) = %d, want 110", got)
+	if got != 90 {
+		t.Fatalf("ComputeDebtSubsidy(-500) = %d, want 90", got)
 	}
 }
 
 func TestPetBalanceFeatureServiceComputeDebtSubsidyLightning(t *testing.T) {
-	params := DebtSubsidyParams{Enabled: true, SubsidyRate: 0.25}
+	params := DebtSubsidyParams{Enabled: true, SubsidyRate: 0.20}
 	got := PetBalanceFeatureService.ComputeDebtSubsidy(-200, params)
-	if got != 50 {
-		t.Fatalf("ComputeDebtSubsidy(-200) = %d, want 50", got)
+	if got != 40 {
+		t.Fatalf("ComputeDebtSubsidy(-200) = %d, want 40", got)
 	}
 }
 

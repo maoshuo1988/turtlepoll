@@ -49,6 +49,19 @@ func (s *petAbilityOptionService) defaultOptions() []PetAbilityOption {
 		signinBonusOption("signin_bonus_60", "每日登录额外奖励60", "rainbow", "彩虹龟", "A", 60),
 		signinBonusOption("signin_bonus_100", "每日登录额外奖励100", "phoenix", "凤凰龟", "S", 100),
 		{
+			OptionKey:   "first_bet_bonus_50",
+			Name:        "每日首次下注奖励50",
+			Description: "来自财神龟的每日首次下注奖励能力",
+			SourcePet:   PetAbilityOptionSourcePet{PetKey: "fortune", Name: "财神龟", Rarity: "B"},
+			FeatureKeys: []string{"first_bet_bonus"},
+			Abilities: map[string]any{
+				"first_bet_bonus": map[string]any{
+					"enabled": true,
+					"amount":  50,
+				},
+			},
+		},
+		{
 			OptionKey:   "spark_multiplier_lava",
 			Name:        "火花倍率1.3加等级成长",
 			Description: "来自熔岩龟的火花倍率能力",
@@ -108,7 +121,7 @@ func (s *petAbilityOptionService) defaultOptions() []PetAbilityOption {
 				},
 				"debt_subsidy": map[string]any{
 					"enabled":     true,
-					"subsidyRate": 0.25,
+					"subsidyRate": 0.20,
 				},
 			},
 		},
@@ -127,7 +140,7 @@ func (s *petAbilityOptionService) defaultOptions() []PetAbilityOption {
 				},
 				"debt_subsidy": map[string]any{
 					"enabled":     true,
-					"subsidyRate": 0.22,
+					"subsidyRate": 0.18,
 				},
 			},
 		},

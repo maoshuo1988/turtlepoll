@@ -109,6 +109,7 @@ type PetController struct {
 
 func (c *PetController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("GET", "/ability-options", "GetAbility_options")
+	b.Handle("POST", "/backfill-default-abilities", "PostBackfill_default_abilities")
 }
 
 // GetDefs GET /api/admin/pet/defs
@@ -403,6 +404,29 @@ func (c *PetController) GetAbility_options() *web.JsonResult {
 		"results": list,
 		"total":   len(list),
 	})
+}
+
+// PostBackfill_default_abilities POST /api/admin/pet/backfill-default-abilities
+// body(optional): {"petKeys":["fortune","lava"],"dryRun":true}
+func (c *PetController) PostBackfill_default_abilities() *web.JsonResult {
+	var req struct {
+		PetKeys []string `json:"petKeys"`
+		DryRun  bool     `json:"dryRun"`
+	}
+	body, err := c.Ctx.GetBody()
+	if err != nil {
+		return web.JsonErrorMsg("invalid request body")
+	}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			return web.JsonErrorMsg("invalid json")
+		}
+	}
+	summary, err := services.PetDefinitionService.BackfillDefaultAbilitySeeds(req.PetKeys, req.DryRun)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	return web.JsonData(summary)
 }
 
 // --- abilities attach ---

@@ -22,10 +22,11 @@ func newPredictBetService() *predictBetService {
 type predictBetService struct{}
 
 type PlaceBetResult struct {
-	Bet        *models.PredictBet    `json:"bet"`
-	Market     *models.PredictMarket `json:"market"`
-	UserCoin   *models.UserCoin      `json:"userCoin"`
-	LockedOdds float64               `json:"lockedOdds"`
+	Bet           *models.PredictBet    `json:"bet"`
+	Market        *models.PredictMarket `json:"market"`
+	UserCoin      *models.UserCoin      `json:"userCoin"`
+	LockedOdds    float64               `json:"lockedOdds"`
+	FirstBetBonus *FirstBetBonusResult  `json:"firstBetBonus,omitempty"`
 }
 
 // PlaceBet 用户对预测市场下注。
@@ -139,10 +140,22 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 			return err
 		}
 
+		bonusRes, bonusErr := PetFirstBetBonusService.GrantOnBetPlaced(tx, userId, marketId, bet.Id, amount)
+		if bonusErr != nil {
+			slog.Error("grant first bet bonus failed",
+				slog.Any("err", bonusErr),
+				slog.Int64("userId", userId),
+				slog.Int64("marketId", marketId),
+				slog.Int64("betId", bet.Id),
+			)
+			bonusRes = &FirstBetBonusResult{Granted: false, Amount: 0, Reason: "ERROR"}
+		}
+
 		ret.Bet = bet
 		ret.Market = market
 		ret.UserCoin = uc
 		ret.LockedOdds = lockedOdds
+		ret.FirstBetBonus = bonusRes
 		return nil
 	})
 	if err != nil {

@@ -68,6 +68,7 @@ var Models = []interface{}{
 	&UserPetState{},
 	&UserPet{},
 	&PetDailySettleLog{},
+	&PetBetRewardLog{},
 
 	// TurtlePoll: AI Chat
 	&AIMessage{},

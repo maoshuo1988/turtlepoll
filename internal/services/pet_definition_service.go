@@ -6,6 +6,7 @@ import (
 	"bbs-go/internal/repositories"
 	"errors"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
@@ -21,6 +22,20 @@ func newPetDefinitionService() *petDefinitionService {
 }
 
 type petDefinitionService struct{}
+
+type PetAbilitySeedBackfillDetail struct {
+	PetId  string `json:"petId"`
+	PetKey string `json:"petKey"`
+	Status string `json:"status"`
+}
+
+type PetAbilitySeedBackfillSummary struct {
+	DryRun  bool                           `json:"dryRun"`
+	Checked int                            `json:"checked"`
+	Updated int                            `json:"updated"`
+	Missing int                            `json:"missing"`
+	Details []PetAbilitySeedBackfillDetail `json:"details"`
+}
 
 // EnsureDefaultSeeds 会在服务启动时调用，确保已实现的 P0 特性都有可直接使用的默认宠物定义。
 func (s *petDefinitionService) EnsureDefaultSeeds() {
@@ -76,6 +91,10 @@ func (s *petDefinitionService) EnsureDefaultSeeds() {
 		if strings.TrimSpace(exists.AbilitiesJSON) == "" {
 			exists.AbilitiesJSON = seed.AbilitiesJSON
 			updated = true
+		} else if shouldSyncDefaultAbilitySeed(seed.PetKey) && strings.TrimSpace(seed.AbilitiesJSON) != "" && exists.AbilitiesJSON != seed.AbilitiesJSON {
+			// 对核心默认龟种做口径同步，避免老环境保留历史错误参数。
+			exists.AbilitiesJSON = seed.AbilitiesJSON
+			updated = true
 		}
 		if strings.TrimSpace(exists.DisplayJSON) == "" {
 			exists.DisplayJSON = seed.DisplayJSON
@@ -91,6 +110,75 @@ func (s *petDefinitionService) EnsureDefaultSeeds() {
 			}
 		}
 	}
+}
+
+func shouldSyncDefaultAbilitySeed(petKey string) bool {
+	switch strings.TrimSpace(petKey) {
+	case "lightning", "shell", "lava", "fortune":
+		return true
+	default:
+		return false
+	}
+}
+
+// BackfillDefaultAbilitySeeds 一次性回填默认龟种 abilities 到当前口径。
+//
+// - 默认回填：lightning/shell/lava/fortune
+// - petKeys 非空时仅回填指定 key（大小写不敏感）
+// - dryRun=true 时只返回统计，不落库
+func (s *petDefinitionService) BackfillDefaultAbilitySeeds(petKeys []string, dryRun bool) (*PetAbilitySeedBackfillSummary, error) {
+	allowAll := len(petKeys) == 0
+	allowSet := map[string]bool{}
+	for _, key := range petKeys {
+		k := strings.ToLower(strings.TrimSpace(key))
+		if k != "" {
+			allowSet[k] = true
+		}
+	}
+
+	summary := &PetAbilitySeedBackfillSummary{DryRun: dryRun, Details: make([]PetAbilitySeedBackfillDetail, 0, 8)}
+
+	for _, seed := range DefaultPetDefinitionSeeds() {
+		if !shouldSyncDefaultAbilitySeed(seed.PetKey) {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(seed.PetKey))
+		if !allowAll && !allowSet[key] {
+			continue
+		}
+
+		summary.Checked++
+
+		exists := s.GetByPetId(seed.PetId)
+		if exists == nil {
+			exists = s.GetByPetKey(seed.PetKey)
+		}
+		if exists == nil {
+			summary.Missing++
+			summary.Details = append(summary.Details, PetAbilitySeedBackfillDetail{PetId: seed.PetId, PetKey: seed.PetKey, Status: "missing"})
+			continue
+		}
+
+		if strings.TrimSpace(exists.AbilitiesJSON) == strings.TrimSpace(seed.AbilitiesJSON) {
+			summary.Details = append(summary.Details, PetAbilitySeedBackfillDetail{PetId: exists.PetId, PetKey: exists.PetKey, Status: "unchanged"})
+			continue
+		}
+
+		if !dryRun {
+			exists.AbilitiesJSON = seed.AbilitiesJSON
+			if err := s.Update(exists); err != nil {
+				return nil, err
+			}
+		}
+		summary.Updated++
+		summary.Details = append(summary.Details, PetAbilitySeedBackfillDetail{PetId: exists.PetId, PetKey: exists.PetKey, Status: "updated"})
+	}
+
+	sort.Slice(summary.Details, func(i, j int) bool {
+		return summary.Details[i].PetKey < summary.Details[j].PetKey
+	})
+
+	return summary, nil
 }
 
 func (s *petDefinitionService) GrantDefaultPetsToAdmins() {
@@ -156,7 +244,7 @@ func DefaultPetDefinitionSeeds() []models.PetDefinition {
 				},
 				"debt_subsidy": map[string]any{
 					"enabled":     true,
-					"subsidyRate": 0.25,
+					"subsidyRate": 0.20,
 				},
 			},
 		},
@@ -198,10 +286,9 @@ func DefaultPetDefinitionSeeds() []models.PetDefinition {
 			display: petThumbnailDisplay("GodofWealthTurtle.png"),
 			rarity:  2,
 			abilities: map[string]any{
-				"signin_bonus": map[string]any{
-					"enabled":    true,
-					"bonusCoins": 40,
-					"capPerDay":  500,
+				"first_bet_bonus": map[string]any{
+					"enabled": true,
+					"amount":  50,
 				},
 			},
 		},
@@ -213,15 +300,11 @@ func DefaultPetDefinitionSeeds() []models.PetDefinition {
 			display: petThumbnailDisplay("Lavaturtle.png"),
 			rarity:  4,
 			abilities: map[string]any{
-				"deposit_interest": map[string]any{
-					"enabled":      true,
-					"interestRate": 0.03,
-					"capPerDay":    1000,
-				},
-				"signin_bonus": map[string]any{
-					"enabled":    true,
-					"bonusCoins": 100,
-					"capPerDay":  500,
+				"spark_multiplier": map[string]any{
+					"enabled":   true,
+					"base":      1.3,
+					"per_level": 0.03,
+					"cap":       400,
 				},
 			},
 		},
@@ -241,7 +324,7 @@ func DefaultPetDefinitionSeeds() []models.PetDefinition {
 				},
 				"debt_subsidy": map[string]any{
 					"enabled":     true,
-					"subsidyRate": 0.22,
+					"subsidyRate": 0.18,
 				},
 				"deposit_interest": map[string]any{
 					"enabled":      true,

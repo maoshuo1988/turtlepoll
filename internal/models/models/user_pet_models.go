@@ -46,3 +46,24 @@ type PetDailySettleLog struct {
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 }
+
+// PetBetRewardLog 下注类宠物奖励幂等日志。
+//
+// 幂等键：user_id + day_name + reward_type（例如 first_bet_bonus）。
+type PetBetRewardLog struct {
+	Model
+	UserId     int64  `gorm:"not null;index;uniqueIndex:idx_pet_bet_reward_daily" json:"userId" form:"userId"`
+	DayName    int    `gorm:"type:int;not null;index;uniqueIndex:idx_pet_bet_reward_daily" json:"dayName" form:"dayName"`
+	RewardType string `gorm:"size:32;not null;uniqueIndex:idx_pet_bet_reward_daily" json:"rewardType" form:"rewardType"`
+
+	MarketId int64 `gorm:"not null;default:0;index" json:"marketId" form:"marketId"`
+	BetId    int64 `gorm:"not null;default:0;index" json:"betId" form:"betId"`
+	PetId    int64 `gorm:"not null;default:0" json:"petId" form:"petId"`
+	Amount   int64 `gorm:"not null;default:0" json:"amount" form:"amount"`
+
+	Status     string `gorm:"size:32;not null;default:'SUCCESS'" json:"status" form:"status"`
+	DetailJSON string `gorm:"type:text" json:"detail" form:"detail"`
+
+	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}

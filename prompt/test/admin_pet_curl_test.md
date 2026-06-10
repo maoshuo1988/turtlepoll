@@ -220,6 +220,39 @@ curl -sS "${BASE_URL}/api/admin/pet/ability-options?selectableOnly=false" \
 
 ---
 
+## 3.6 默认能力回填（历史环境一次性修正）
+
+### 3.6.1 dry-run 预览：POST /api/admin/pet/backfill-default-abilities
+
+默认会检查并回填四只龟：`fortune`、`lava`、`lightning`、`shell`。
+
+```bash
+curl -sS -X POST "${BASE_URL}/api/admin/pet/backfill-default-abilities" \
+  -H "${ADMIN_AUTH_HEADER}" \
+  -H "Content-Type: application/json" \
+  -d '{"dryRun":true}' | jq
+```
+
+### 3.6.2 仅回填财神龟：POST /api/admin/pet/backfill-default-abilities
+
+```bash
+curl -sS -X POST "${BASE_URL}/api/admin/pet/backfill-default-abilities" \
+  -H "${ADMIN_AUTH_HEADER}" \
+  -H "Content-Type: application/json" \
+  -d '{"petKeys":["fortune"],"dryRun":false}' | jq
+```
+
+### 3.6.3 正式执行全量回填：POST /api/admin/pet/backfill-default-abilities
+
+```bash
+curl -sS -X POST "${BASE_URL}/api/admin/pet/backfill-default-abilities" \
+  -H "${ADMIN_AUTH_HEADER}" \
+  -H "Content-Type: application/json" \
+  -d '{"petKeys":["fortune","lava","lightning","shell"],"dryRun":false}' | jq
+```
+
+---
+
 ## 4) abilities（给龟种配置特性）
 
 ### 4.1 整体替换：PUT /api/admin/pet/defs/:petId/abilities

@@ -5,6 +5,7 @@ import (
 
 	"github.com/mlogclub/simple/sqls"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type userPetStateRepository struct{}
@@ -74,4 +75,39 @@ func (r *petDailySettleLogRepository) FindPageByCnd(db *gorm.DB, cnd *sqls.Cnd) 
 
 	paging = &sqls.Paging{Page: cnd.Paging.Page, Limit: cnd.Paging.Limit, Total: count}
 	return
+}
+
+type petBetRewardLogRepository struct{}
+
+var PetBetRewardLogRepository = new(petBetRewardLogRepository)
+
+func (r *petBetRewardLogRepository) GetByUserDayRewardType(db *gorm.DB, userId int64, dayName int, rewardType string) *models.PetBetRewardLog {
+	ret := &models.PetBetRewardLog{}
+	if err := db.Where("user_id = ? and day_name = ? and reward_type = ?", userId, dayName, rewardType).First(ret).Error; err != nil {
+		return nil
+	}
+	return ret
+}
+
+// CreateIfAbsent 按幂等键插入，已存在时返回 created=false 且不报错。
+func (r *petBetRewardLogRepository) CreateIfAbsent(db *gorm.DB, t *models.PetBetRewardLog) (created bool, err error) {
+	if t == nil {
+		return false, nil
+	}
+	res := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "day_name"}, {Name: "reward_type"}},
+		DoNothing: true,
+	}).Create(t)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+func (r *petBetRewardLogRepository) Update(db *gorm.DB, t *models.PetBetRewardLog) error {
+	return db.Save(t).Error
+}
+
+func (r *petBetRewardLogRepository) Delete(db *gorm.DB, id int64) error {
+	return db.Delete(&models.PetBetRewardLog{}, "id = ?", id).Error
 }
