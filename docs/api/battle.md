@@ -44,7 +44,9 @@
 | `battle not found` | 赌局不存在或已删除 |
 | `battle is not open` | 赌局当前不可加入 |
 | `battle is full` | 赌局已满 |
+| `inviteCode format invalid` | 邀请码格式错误，需为 4 位字母数字 |
 | `invalid inviteCode` | 邀请码错误 |
+| `inviteCode expired` | 邀请码已过期 |
 | `permission denied` | 无权限操作 |
 | `insufficient balance` | 余额不足 |
 | `battle is not settled` | 尚未结算，无法提取 |
@@ -79,7 +81,7 @@
 - `bankerSide/challengerSide` 为空：`sides are required`
 - `stakeAmount < 100`：`stakeAmount must be >= 100`
 - `settleTime <= 0`：`settleTime is required`
-- 私密场未传 `inviteCode`：`inviteCode is required for private battle`
+- 私密场邀请码由服务端自动生成（创建请求不接收 `inviteCode`）
 
 > 余额不足：由 `UserCoinService.SpendToPool` 返回的 message 决定（通常是余额不足/扣款失败），文案需以实际实现为准。
 
@@ -95,7 +97,9 @@
 - `requestId` 为空：`requestId is required`
 - 庄家尝试作为挑战者加入：`banker cannot join as challenger`
 - battle 不在 open：`battle is not open`
+- 私密场邀请码格式非法：`inviteCode format invalid`
 - 私密场邀请码错误：`invalid inviteCode`
+- 私密场邀请码过期：`inviteCode expired`
 - 容量已满：`battle is full`
 - 下注超过剩余容量：`amount exceeds remaining capacity: {remaining}`
 
@@ -167,7 +171,7 @@
 - `title`: string
 - `bankerUserId`: int64
 - `bankerSide` / `challengerSide`: string
-- `isPublic`: bool（公开场收取入场费；私密场需邀请码且不收入场费）
+- `isPublic`: bool（公开场收取入场费；私密场由服务端生成邀请码且不收入场费）
 - `inviteCode`: string
 - `status`: string（`open/sealed/pending/disputed/settled`）
 - `settleTime`: int64（到点后自动进入待宣判/待确认流程）
@@ -439,9 +443,16 @@ GET /api/battle/by?battleId=1
 - `challengerSide`: string，必填
 - `stakeAmount`: int64，必填（最小 100）
 - `isPublic`: bool，必填
-- `inviteCode`: string，私密场必填
 - `settleTime`: int64，必填（秒级时间戳）
 - `requestId`: string，可选
+
+私密场邀请码规则（服务端）：
+
+- 创建时由服务端自动生成 `inviteCode`，客户端不可传入。
+- 邀请码固定 4 位，只允许字母和数字（`[A-Za-z0-9]{4}`）。
+- 邀请码大小写不敏感（校验时统一转大写）。
+- 邀请码默认有效期 24 小时。
+- 唯一性与过期由 Redis 保障（`127.0.0.1:6379`）。
 
 #### 返回值（data）
 - Battle
@@ -460,7 +471,6 @@ Content-Type: application/json
   "challengerSide": "皇马",
   "stakeAmount": 1000,
   "isPublic": true,
-  "inviteCode": "",
   "settleTime": 1760000000,
   "requestId": "create-001"
 }
@@ -502,6 +512,8 @@ Content-Type: application/json
 - 公开场会对 `amount` 收取 5% 入场费（向下取整），实时转给庄家。
 - 本金入资金池（userId=-1）。
 - 挑战者总额不得超过庄家押注额，满额会自动封盘。
+- 私密场邀请码必须为 4 位字母数字，大小写不敏感。
+- 私密场邀请码默认 24 小时过期，过期或无效时拒绝加入。
 
 #### 返回值（data）
 - `battle`: Battle
@@ -519,7 +531,7 @@ Content-Type: application/json
   "battleId": 1,
   "amount": 300,
   "requestId": "join-20001-0001",
-  "inviteCode": ""
+  "inviteCode": "A7b9"
 }
 ```
 
