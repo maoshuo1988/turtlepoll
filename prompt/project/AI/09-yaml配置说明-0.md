@@ -1,171 +1,103 @@
 # AI 系统 YAML 配置说明
 
-> 本页说明 AI 系统的 YAML 配置文件结构、参数定义和运营维护方式。
+> AI 相关配置统一写在项目根目录的 `bbs-go.yaml` 中，由 `internal/pkg/config/config.go` 中的 `Config` 结构体解析。
+> 不存在独立的 `ai_config.yaml`、`ai_templates.yaml` 等文件。
 
-## 1. 配置文件位置与规范
+## 1. 配置来源
 
-### 1.1 配置文件结构
-
-```
-config/
-├── ai_config.yaml          # AI 系统主配置
-├── ai_templates.yaml       # 推送模板定义
-└── ai_kill_switches.yaml   # 紧急止血开关
-```
-
-### 1.2 配置加载流程
-
-1. 系统启动时读取 YAML 配置文件
-2. 将配置解析为内存结构（缓存）
-3. 运营侧修改配置后，通过 API 触发配置重载
-4. 配置变更自动同步到所有实例（如使用配置中心）
+- 配置文件：`bbs-go.yaml`（项目根目录，示例见 `bbs-go.example.yaml`）
+- 读取时机：服务启动时一次性加载，运行期通过 `POST /api/admin/ai/config/reload` 热重载
+- API Key 必须通过环境变量 `DEEPSEEK_API_KEY` 注入，不得明文写入版本仓库
 
 ---
 
-## 2. AI 主配置（ai_config.yaml）
+## 2. bbs-go.yaml 中 AI 相关配置
 
-### 2.1 完整示例
+### 2.1 完整示例（与代码 struct 字段一一对应）
 
 ```yaml
-# AI 聊天系统主配置
-
-# ===== 体力系统配置 =====
-aiChat:
-  # 体力上限
-  maxStamina: 100
-  
-  # 自然恢复配置
-  staminaRecoverMinutes: 60        # 每 60 分钟恢复一次
-  staminaRecoverPerUnit: 1         # 每次恢复 1 点
-  
-  # 聊天消耗配置
-  defaultStaminaCost: 1            # 默认每次聊天消耗 1 点体力
-  minStaminaRequiredPerChat: 1     # 最少需要 1 点体力才能聊天
-  
-  # 苹果配置
-  appleRecoveryPerApple: 1         # 1 个苹果恢复 1 点体力
-  appleCostInCoin: 5               # 1 个苹果 5 龟币
-  maxAppleUsagePerDay: 10          # 每天最多购买 10 个苹果
-  
-  # 宠物系统集成
-  petStaminaReductionEnabled: true
-  petStaminaReductionKey: "stamina_reduction"
-  
-  # 体力不足兜底
-  insufficientStaminaResponse: |
-    小龟睡着啦~ 喂它一颗苹果(5 龟币)就能继续聊咯
-
-# ===== 推送配置 =====
-aiPush:
-  # 结算推送
-  settlement:
-    enabled: true
-    winSceneEnabled: true
-    loseSceneEnabled: true
-    winStreakThreshold: 3            # 连胜 >= 3 场触发
-    loseStreakThreshold: 5           # 连败 >= 5 场触发
-    templatePoolSize: 100            # 模板池监听大小
-  
-  # 闲置推送
-  idle:
-    enabled: true
-    inactiveThresholdMinutes: 30     # 30 分钟无交互则闲置
-    idlePushDailyLimit: 3            # 每日最多推送 3 条
-    idlePushCooldownMinutes: 60      # 两条推送间隔 >= 60 分钟
-    minPresenceDurationMinutes: 5    # 在线 >= 5 分钟才考虑推送
-  
-  # 去重配置
-  templateDeduplicationEnabled: true
-  viewCountWeight: 1.0               # 曝光计数权重
-
-# ===== Prompt 与人格配置 =====
-prompt:
-  # 系统 Prompt
-  system: |
-    你是一个名叫"小龟"的 AI 助手。
-    [详细 Prompt 内容...]
-  
-  # 场景化 Prompt（可选）
-  scenes:
-    battle_analysis: |
-      用户正在查看体育比赛...
-    memory_qa: |
-      用户询问历史记忆...
-  
-  # Prompt 更新时间戳（用于版本管理）
-  systemPromptVersion: "v1.20260611"
-  lastUpdateTime: "2026-06-11T10:00:00Z"
-
-# ===== DeepSeek 调用配置 =====
+# DeepSeek API（服务端调用；生产环境建议通过 DEEPSEEK_API_KEY 注入密钥）
 deepseek:
-  # API 配置
-  apiUrl: "https://api.deepseek.com/v1/chat/completions"
-  model: "deepseek-chat"
-  apiKeyEnvVar: "DEEPSEEK_API_KEY"  # 从环境变量读取
-  
-  # 调用策略
-  timeout: 10000                     # 超时 10 秒
-  maxRetries: 2                      # 最多重试 2 次
-  retryBackoffMs: 500                # 重试间隔 500ms
-  
-  # 输入限制
-  maxUserInputLength: 1000           # 用户输入最长 1000 字
-  maxContextLength: 5000             # 上下文最长 5000 字符
-  
-  # 输出限制
-  maxCompletionTokens: 500           # 回复最长 500 token
-  temperature: 0.7                   # 创意度
-  topP: 0.9                          # 采样参数
+  enabled: true
+  baseURL: "https://api.deepseek.com"
+  apiKey: ""                  # 明文留空，生产用 DEEPSEEK_API_KEY 环境变量
+  defaultModel: "deepseek-v4-flash"
+  reasoningModel: "deepseek-v4-pro"
+  timeoutSeconds: 120
+  maxRetries: 2
 
-# ===== 灰度与止血配置 =====
-featureFlags:
-  aiChatEnabled: true
-  aiPushEnabled: true
-  aiStaminaDeduction: true
-  aiApplePurchase: true
-  aiIdlePush: true
-  aiMemoryQa: false                  # 记忆问答未上线
-  aiSensitiveTopicDetection: false
-  rolloutPercentage: 100             # 100% 灰度
-
-# ===== 运营配置 =====
-operations:
-  # 模板管理
-  templateManagementEnabled: true
-  templateWeightDefault: 100
-  templateViewCountResetDays: 7      # 每 7 天重置曝光计数
-  
-  # 数据导出
-  dataExportEnabled: true
-  dataExportRetentionDays: 90
-  
-  # 日志级别
-  logLevel: "INFO"                   # DEBUG / INFO / WARN / ERROR
-  enableDetailedLogging: false
+# AI 聊天
+aiChat:
+  enabled: true
+  defaultStaminaCost: 1        # 每次聊天消耗体力
+  defaultMaxStamina: 5         # 体力上限（当前生产值）
+  staminaRecoverMinutes: 60    # 每 60 分钟自然恢复 1 点
+  appleCoinCost: 5             # 1 个苹果 = 5 龟币
+  maxInputChars: 500           # 用户输入字符上限
+  maxHistoryMessages: 8        # 对话上下文最大条数
+  dailyUserMessageLimit: 50    # 每自然日主动聊天上限
+  idlePushCooldownMinutes: 120 # 两次闲置推送最短间隔（分钟）
+  idlePushDailyLimit: 2        # 每日闲置推送上限
+  idleTriggerMinutes: 10       # 闲置判定阈值（分钟）
 ```
 
 ### 2.2 参数说明
 
-| 参数 | 类型 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `maxStamina` | int | 100 | 用户体力上限 |
-| `staminaRecoverMinutes` | int | 60 | 体力恢复周期（分钟） |
-| `defaultStaminaCost` | int | 1 | 每次聊天消耗体力 |
-| `appleCostInCoin` | int | 5 | 苹果价格（龟币） |
-| `winStreakThreshold` | int | 3 | 连胜推送触发阈值 |
-| `idlePushDailyLimit` | int | 3 | 每日闲置推送上限 |
-| `timeout` | int | 10000 | DeepSeek 超时（毫秒） |
-| `maxUserInputLength` | int | 1000 | 用户输入长度限制 |
+#### DeepSeek 结构体字段（`internal/pkg/config/config.go`）
+
+| yaml 键 | Go 字段 | 类型 | 当前值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `deepseek.enabled` | `Enabled` | bool | true | 是否启用 DeepSeek 调用 |
+| `deepseek.baseURL` | `BaseURL` | string | `https://api.deepseek.com` | API 地址 |
+| `deepseek.apiKey` | `APIKey` | string | — | 优先读 `DEEPSEEK_API_KEY` 环境变量 |
+| `deepseek.defaultModel` | `DefaultModel` | string | `deepseek-v4-flash` | 普通对话模型 |
+| `deepseek.reasoningModel` | `ReasoningModel` | string | `deepseek-v4-pro` | 复杂推理模型 |
+| `deepseek.timeoutSeconds` | `TimeoutSeconds` | int | 120 | HTTP 超时（秒） |
+| `deepseek.maxRetries` | `MaxRetries` | int | 2 | 最大重试次数 |
+
+#### AIChat 结构体字段
+
+| yaml 键 | Go 字段 | 类型 | 当前值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `aiChat.enabled` | `Enabled` | bool | true | 功能总开关 |
+| `aiChat.defaultStaminaCost` | `DefaultStaminaCost` | int | 1 | 每次聊天消耗体力点数 |
+| `aiChat.defaultMaxStamina` | `DefaultMaxStamina` | int | 5 | 体力上限 |
+| `aiChat.staminaRecoverMinutes` | `StaminaRecoverMinutes` | int | 60 | 自然恢复周期（分钟/点） |
+| `aiChat.appleCoinCost` | `AppleCoinCost` | int | 5 | 苹果价格（龟币/个） |
+| `aiChat.maxInputChars` | `MaxInputChars` | int | 500 | 用户输入字符上限 |
+| `aiChat.maxHistoryMessages` | `MaxHistoryMessages` | int | 8 | 上下文历史条数 |
+| `aiChat.dailyUserMessageLimit` | `DailyUserMessageLimit` | int | 50 | 每自然日主动聊天次数上限 |
+| `aiChat.idlePushCooldownMinutes` | `IdlePushCooldownMinutes` | int | 120 | 两次闲置推送最短间隔（分钟） |
+| `aiChat.idlePushDailyLimit` | `IdlePushDailyLimit` | int | 2 | 每日闲置推送上限 |
+| `aiChat.idleTriggerMinutes` | `IdleTriggerMinutes` | int | 10 | 闲置判定阈值（分钟） |
+
+> **不存在的字段**：`aiPush`、`featureFlags`、`operations`、`prompt`、`aiPush.settlement`、`maxAppleUsagePerDay`、`staminaRecoverPerUnit`、`petStaminaReductionEnabled` 均不在代码结构体中，不要写入 bbs-go.yaml。
 
 ---
 
-## 3. 推送模板配置（ai_templates.yaml）
+## 3. 推送模板（数据库表，非 YAML）
 
-### 3.1 完整示例
+推送模板存储在数据库表 `ai_message_template` 中，通过管理端接口维护，**不**通过 YAML 文件配置。
+
+原 `ai_templates.yaml` 章节内容已废弃，下方仅保留字段说明供参考。
+
+### 3.1 模板字段说明（数据库）
+
+| 字段 | 说明 |
+| --- | --- |
+| `template_key` | 唯一标识，如 `settle_win_1` |
+| `scene` | `settle_push` / `idle_push` |
+| `content` | 支持 `{amount}`、`{n}` 等占位符 |
+| `enabled` | 是否启用 |
+| `weight` | 权重（0-100） |
+
+---
+
+## 4. 原 ai_templates.yaml 种子模板（仅供参考）
+
+原
 
 ```yaml
-# AI 推送模板库
-
 templates:
   # ===== 结算赢推送 =====
   - key: "settle_win_1"
@@ -289,13 +221,17 @@ templateSelectionStrategy:
 
 ---
 
-## 4. 止血开关配置（ai_kill_switches.yaml）
+## 5. 止血开关（`aiChat.enabled` + 管理端接口）
 
-### 4.1 完整示例
+止血通过以下两种方式实现，**不**存在独立的 `ai_kill_switches.yaml`：
+
+1. **静态关闭**：修改 `bbs-go.yaml` 中 `aiChat.enabled: false` 或 `deepseek.enabled: false`，重启生效。
+2. **运行时关闭**：通过管理端接口 `POST /api/admin/ai/kill-switch` 修改内存中的开关状态，立即生效，详见 [06-接口-管理与内部触发.md](./06-接口-管理与内部触发.md#13-止血开关管理)。
+
+> 以下为原文档保留的 `killSwitches` 字段说明（仅供理解业务意图，不要写入 bbs-go.yaml）：
 
 ```yaml
-# 紧急止血开关
-
+# 仅供参考，非真实配置文件结构
 killSwitches:
   # ===== 功能禁用开关 =====
   - key: "ai_chat_enabled"
@@ -381,16 +317,16 @@ killSwitchRules:
 
 ---
 
-## 5. 配置加载与优先级
+## 6. 配置加载与优先级
 
-环境变量 > YAML 配置 > 默认值
-
-可通过环境变量覆盖 YAML 配置：
+`bbs-go.yaml` 字段 < 环境变量覆盖（仅 `DEEPSEEK_API_KEY` 支持环境变量注入）
 
 ```bash
-export AI_CHAT_MAX_STAMINA=150
+# 生产环境必须通过环境变量注入 API Key，不得明文写入 yaml
 export DEEPSEEK_API_KEY="sk-xxx"
 ```
 
-详见补充文档：[09-配置YAML说明-运营维护.md](./09-配置YAML说明-运营维护.md)
+> `AI_CHAT_MAX_STAMINA` 等环境变量覆盖不存在，体力参数只能改 `bbs-go.yaml`。
+
+详见补充文档：[09-yaml配置说明-运营维护.md](./09-yaml配置说明-运营维护.md)
 
