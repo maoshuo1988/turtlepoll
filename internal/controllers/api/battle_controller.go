@@ -84,6 +84,8 @@ func (c *BattleController) GetBy() *web.JsonResult {
 		return web.JsonError(errs.NotLogin())
 	}
 	battleId, _ := params.GetInt64(c.Ctx, "battleId")
+	inviteCode := strings.TrimSpace(params.FormValue(c.Ctx, "inviteCode"))
+	refreshInvite := strings.TrimSpace(params.FormValue(c.Ctx, "refreshInvite"))
 	if battleId <= 0 {
 		return web.JsonErrorMsg("battleId is required")
 	}
@@ -92,6 +94,23 @@ func (c *BattleController) GetBy() *web.JsonResult {
 	b := repositories.BattleRepository.Take(db, "id = ?", battleId)
 	if b == nil {
 		return web.JsonErrorMsg("battle not found")
+	}
+	if !b.IsPublic {
+		ok, err := services.BattleService.CanViewBattle(db, user.Id, b, inviteCode, dates.NowTimestamp())
+		if err != nil {
+			return web.JsonErrorMsg(err.Error())
+		}
+		if !ok {
+			return web.JsonErrorMsg("battle not found")
+		}
+	}
+
+	if refreshInvite == "1" {
+		nb, err := services.BattleService.RefreshInviteCode(user.Id, b.Id)
+		if err != nil {
+			return web.JsonErrorMsg(err.Error())
+		}
+		b = nb
 	}
 
 	// 当前用户动作（仅挑战者会有）
@@ -111,14 +130,20 @@ func (c *BattleController) GetBy() *web.JsonResult {
 		}
 	}
 
-	return web.JsonData(map[string]any{
+	resp := map[string]any{
 		"battle":   b,
 		"myAction": myAction,
 		"settlement": map[string]any{
 			"settlement": st,
 			"myItem":     myItem,
 		},
-	})
+	}
+	if !b.IsPublic && b.BankerUserId == user.Id {
+		resp["inviteCode"] = b.InviteCode
+		resp["inviteExpireAt"] = b.InviteCodeExpireAt
+	}
+
+	return web.JsonData(resp)
 }
 
 // 赌局列表：GET /api/battle/list?page=1&pageSize=20&status=open
@@ -151,6 +176,9 @@ func (c *BattleController) GetList() *web.JsonResult {
 	queryDB := db.Model(&models.Battle{})
 	if status != "" {
 		queryDB = queryDB.Where("status = ?", status)
+	}
+	if role == "" && mine != "1" {
+		queryDB = queryDB.Where("is_public = ?", true)
 	}
 	// 参与维度筛选：
 	// - role 优先级高于 mine（mine 为历史兼容参数）
@@ -277,11 +305,11 @@ func (c *BattleController) PostCreate() *web.JsonResult {
 	if err := c.Ctx.ReadJSON(&form); err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
-	b, err := services.BattleService.CreateBattle(user.Id, form)
+	result, err := services.BattleService.CreateBattle(user.Id, form)
 	if err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
-	return web.JsonData(b)
+	return web.JsonData(result)
 }
 
 // 加入/追加下注：POST /api/battle/join

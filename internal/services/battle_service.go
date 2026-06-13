@@ -2,11 +2,15 @@ package services
 
 import (
 	"bbs-go/internal/models/models"
+	"bbs-go/internal/pkg/cache"
 	"bbs-go/internal/repositories"
+	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/sqls"
@@ -49,6 +53,11 @@ const (
 	BattleResultBankerWins  = "banker_wins"
 	BattleResultBankerLoses = "banker_loses"
 	BattleResultVoid        = "void"
+
+	battleInviteCodeLength = 4
+	battleInviteTTLSeconds = int64(48 * 3600)
+	battleInviteMaxRetry   = 64
+	battleInviteCharset    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
 
 type CreateBattleForm struct {
@@ -57,9 +66,14 @@ type CreateBattleForm struct {
 	ChallengerSide string `json:"challengerSide"`
 	StakeAmount    int64  `json:"stakeAmount"`
 	IsPublic       bool   `json:"isPublic"`
-	InviteCode     string `json:"inviteCode"`
 	SettleTime     int64  `json:"settleTime"`
 	RequestId      string `json:"requestId"` // 幂等（同一用户重复创建可选用；当前先不做唯一）
+}
+
+type CreateBattleResult struct {
+	Battle         *models.Battle `json:"battle"`
+	InviteCode     string         `json:"inviteCode,omitempty"`
+	InviteExpireAt int64          `json:"inviteExpireAt,omitempty"`
 }
 
 type JoinBattleForm struct {
@@ -93,7 +107,148 @@ type AdminResolveForm struct {
 	Remark    string `json:"remark"`
 }
 
-func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) (*models.Battle, error) {
+func normalizeInviteCode(code string) string {
+	return strings.ToUpper(strings.TrimSpace(code))
+}
+
+func isInviteCodeFormatValid(code string) bool {
+	if len(code) != battleInviteCodeLength {
+		return false
+	}
+	for _, c := range code {
+		if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func (s *battleService) newRandomInviteCode() (string, error) {
+	b := make([]byte, battleInviteCodeLength)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	out := make([]byte, battleInviteCodeLength)
+	for i, v := range b {
+		out[i] = battleInviteCharset[int(v)%len(battleInviteCharset)]
+	}
+	return string(out), nil
+}
+
+func (s *battleService) generateUniqueInviteCode(tx *gorm.DB, now int64, excludeBattleId int64) (string, int64, error) {
+	for i := 0; i < battleInviteMaxRetry; i++ {
+		code, err := s.newRandomInviteCode()
+		if err != nil {
+			return "", 0, err
+		}
+		q := tx.Model(&models.Battle{}).
+			Where("is_public = ?", false).
+			Where("invite_code = ?", code).
+			Where("invite_code_expire_at > ?", now)
+		if excludeBattleId > 0 {
+			q = q.Where("id <> ?", excludeBattleId)
+		}
+		var cnt int64
+		if err := q.Count(&cnt).Error; err != nil {
+			return "", 0, err
+		}
+		if cnt == 0 {
+			expireAt := now + battleInviteTTLSeconds
+			// 异步存入 Redis（不阻塞邀请码生成）
+			go s.storeInviteCodeToRedis(code, excludeBattleId)
+			return code, expireAt, nil
+		}
+	}
+	return "", 0, errors.New("inviteCode generate failed")
+}
+
+// storeInviteCodeToRedis 异步存储邀请码到 Redis
+func (s *battleService) storeInviteCodeToRedis(code string, battleId int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	ttl := time.Duration(battleInviteTTLSeconds) * time.Second
+	redisKey := fmt.Sprintf("battle:invite:code:%s", code)
+
+	// 存储邀请码 → battleId 的映射
+	_ = cache.Set(ctx, redisKey, battleId, ttl)
+}
+
+func (s *battleService) canJoinPrivateBattleWithInvite(b *models.Battle, rawInviteCode string, now int64) error {
+	code := normalizeInviteCode(rawInviteCode)
+	if code == "" {
+		return errors.New("inviteCode is required for private battle")
+	}
+	if !isInviteCodeFormatValid(code) {
+		return errors.New("inviteCode format invalid")
+	}
+
+	// 第一步：尝试从 Redis 验证（快速路径）
+	if s.validateInviteCodeWithRedis(code, b.Id) {
+		return nil // Redis 中邀请码有效
+	}
+
+	// 第二步：回退到数据库验证（当 Redis 不可用或邀请码不在 Redis 中）
+	if normalizeInviteCode(b.InviteCode) != code {
+		return errors.New("invalid inviteCode")
+	}
+	if b.InviteCodeExpireAt <= 0 || now > b.InviteCodeExpireAt {
+		return errors.New("inviteCode expired")
+	}
+	return nil
+}
+
+// validateInviteCodeWithRedis 从 Redis 验证邀请码
+func (s *battleService) validateInviteCodeWithRedis(code string, expectedBattleId int64) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	redisKey := fmt.Sprintf("battle:invite:code:%s", code)
+	battleIdStr, err := cache.Get(ctx, redisKey)
+	if err != nil || battleIdStr == "" {
+		return false // Redis 中无此邀请码，返回 false 让数据库检查
+	}
+
+	// 验证 battleId 匹配
+	var redisBattleId int64
+	_, err = fmt.Sscanf(battleIdStr, "%d", &redisBattleId)
+	if err != nil || redisBattleId != expectedBattleId {
+		return false
+	}
+
+	return true // 邀请码在 Redis 中且 battleId 匹配，验证通过
+}
+
+func (s *battleService) CanViewBattle(tx *gorm.DB, userId int64, b *models.Battle, rawInviteCode string, now int64) (bool, error) {
+	if b == nil {
+		return false, errors.New("battle not found")
+	}
+	if b.IsPublic {
+		return true, nil
+	}
+	if b.BankerUserId == userId {
+		return true, nil
+	}
+	var challengerBetCount int64
+	if err := tx.Model(&models.BattleBet{}).
+		Where("battle_id = ? AND user_id = ? AND role = ?", b.Id, userId, BattleRoleChallenger).
+		Count(&challengerBetCount).Error; err != nil {
+		return false, err
+	}
+	if challengerBetCount > 0 {
+		return true, nil
+	}
+	if strings.TrimSpace(rawInviteCode) == "" {
+		return false, nil
+	}
+	if err := s.canJoinPrivateBattleWithInvite(b, rawInviteCode, now); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) (*CreateBattleResult, error) {
 	if bankerUserId <= 0 {
 		return nil, errors.New("bankerUserId is required")
 	}
@@ -112,12 +267,6 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 	if form.SettleTime <= 0 {
 		return nil, errors.New("settleTime is required")
 	}
-	if !form.IsPublic {
-		form.InviteCode = strings.TrimSpace(form.InviteCode)
-		if form.InviteCode == "" {
-			return nil, errors.New("inviteCode is required for private battle")
-		}
-	}
 
 	now := dates.NowTimestamp()
 	b := &models.Battle{
@@ -126,7 +275,6 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 		BankerSide:         form.BankerSide,
 		ChallengerSide:     form.ChallengerSide,
 		IsPublic:           form.IsPublic,
-		InviteCode:         form.InviteCode,
 		Status:             BattleStatusOpen,
 		SettleTime:         form.SettleTime,
 		BankerStakeTotal:   form.StakeAmount,
@@ -135,7 +283,20 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 		UpdateTime:         now,
 	}
 
+	var resultCode string
+	var resultExpireAt int64
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		if !form.IsPublic {
+			inviteCode, inviteExpireAt, err := s.generateUniqueInviteCode(tx, now, 0)
+			if err != nil {
+				return err
+			}
+			b.InviteCode = inviteCode
+			b.InviteCodeExpireAt = inviteExpireAt
+			resultCode = inviteCode
+			resultExpireAt = inviteExpireAt
+		}
+
 		if err := repositories.BattleRepository.Create(tx, b); err != nil {
 			return err
 		}
@@ -178,7 +339,11 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 	if err != nil {
 		return nil, err
 	}
-	return b, nil
+	return &CreateBattleResult{
+		Battle:         b,
+		InviteCode:     resultCode,
+		InviteExpireAt: resultExpireAt,
+	}, nil
 }
 
 // JoinOrAddStake 挑战者加入/追加下注（支持多次，幂等通过 requestId）。
@@ -217,8 +382,8 @@ func (s *battleService) JoinOrAddStake(challengerUserId int64, form JoinBattleFo
 			return errors.New("battle is not open")
 		}
 		if !b.IsPublic {
-			if strings.TrimSpace(form.InviteCode) == "" || strings.TrimSpace(form.InviteCode) != strings.TrimSpace(b.InviteCode) {
-				return errors.New("invalid inviteCode")
+			if err := s.canJoinPrivateBattleWithInvite(b, form.InviteCode, now); err != nil {
+				return err
 			}
 		}
 
@@ -395,6 +560,63 @@ func (s *battleService) BankerAddStake(bankerUserId int64, form BankerAddStakeFo
 		return nil, err
 	}
 	return battle, nil
+}
+
+func (s *battleService) RefreshInviteCode(bankerUserId, battleId int64) (*models.Battle, error) {
+	if bankerUserId <= 0 {
+		return nil, errors.New("bankerUserId is required")
+	}
+	if battleId <= 0 {
+		return nil, errors.New("battleId is required")
+	}
+
+	now := dates.NowTimestamp()
+	var battle *models.Battle
+	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		b, err := repositories.BattleRepository.TakeForUpdate(tx, battleId)
+		if err != nil {
+			return err
+		}
+		if b.IsPublic {
+			return errors.New("refresh inviteCode only for private battle")
+		}
+		if b.BankerUserId != bankerUserId {
+			return errors.New("only banker can refresh inviteCode")
+		}
+
+		// 删除旧邀请码的 Redis key（异步，不阻塞更新）
+		oldInviteCode := normalizeInviteCode(b.InviteCode)
+		if oldInviteCode != "" {
+			go s.deleteInviteCodeFromRedis(oldInviteCode)
+		}
+
+		inviteCode, inviteExpireAt, err := s.generateUniqueInviteCode(tx, now, b.Id)
+		if err != nil {
+			return err
+		}
+		b.InviteCode = inviteCode
+		b.InviteCodeExpireAt = inviteExpireAt
+		b.UpdateTime = now
+
+		if err := repositories.BattleRepository.Update(tx, b); err != nil {
+			return err
+		}
+		battle = b
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return battle, nil
+}
+
+// deleteInviteCodeFromRedis 异步删除邀请码的 Redis key
+func (s *battleService) deleteInviteCodeFromRedis(code string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	redisKey := fmt.Sprintf("battle:invite:code:%s", code)
+	_ = cache.Delete(ctx, redisKey) // 忽略删除错误（可能已过期或不存在）
 }
 
 // SealIfNeeded open->sealed：到达结算时间或容量满

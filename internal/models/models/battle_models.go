@@ -15,8 +15,9 @@ type Battle struct {
 	ChallengerSide string `gorm:"size:1024;not null" json:"challengerSide"`
 
 	// 是否公开（公开：收取入场费；私人：邀请码加入且不收取入场费）
-	IsPublic   bool   `gorm:"not null;default:true;index" json:"isPublic"`
-	InviteCode string `gorm:"size:64;index" json:"inviteCode"`
+	IsPublic           bool   `gorm:"not null;default:true;index" json:"isPublic"`
+	InviteCode         string `gorm:"size:64;index" json:"inviteCode"`
+	InviteCodeExpireAt int64  `gorm:"not null;default:0;index" json:"inviteExpireAt"`
 
 	// 状态：open/sealed/pending/disputed/settled
 	Status string `gorm:"size:16;not null;index" json:"status"`

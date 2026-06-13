@@ -5,6 +5,7 @@ import (
 	"bbs-go/internal/models/constants"
 	"bbs-go/internal/models/models"
 	modelreq "bbs-go/internal/models/req"
+	"bbs-go/internal/pkg/cache"
 	"bbs-go/internal/pkg/config"
 	"bbs-go/internal/pkg/idcodec"
 	"bbs-go/internal/pkg/iplocator"
@@ -330,5 +331,9 @@ func InitOthers() error {
 	}
 	iplocator.InitIpLocator()
 	search.Init()
+	// 初始化 Redis（可选，若连接失败仅记录警告但不中断启动）
+	if err := cache.InitRedis(); err != nil {
+		slog.Warn("Redis 初始化失败，邀请码管理将使用数据库存储", "error", err)
+	}
 	return nil
 }

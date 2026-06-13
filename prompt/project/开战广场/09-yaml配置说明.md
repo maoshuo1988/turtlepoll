@@ -12,7 +12,7 @@ battle:
     length: 4
     charset: "A-Za-z0-9"
     caseInsensitive: true
-    ttlSeconds: 86400
+    ttlSeconds: 172800
 
   deadlines:
     pendingSeconds: 86400
@@ -42,7 +42,7 @@ redis:
 | `battle.inviteCode.length` | int | 4 | 邀请码长度 |
 | `battle.inviteCode.charset` | string | A-Za-z0-9 | 邀请码字符集 |
 | `battle.inviteCode.caseInsensitive` | bool | true | 邀请码大小写不敏感 |
-| `battle.inviteCode.ttlSeconds` | int | 86400 | 邀请码过期时间（24h） |
+| `battle.inviteCode.ttlSeconds` | int | 172800 | 邀请码过期时间（48h） |
 | `battle.deadlines.pendingSeconds` | int | 86400 | 庄家宣判窗口 |
 | `battle.deadlines.confirmSeconds` | int | 86400 | 挑战者确认窗口 |
 | `battle.deadlines.disputeSeconds` | int | 86400 | 管理员仲裁窗口 |
@@ -57,4 +57,5 @@ redis:
 
 - 邀请码生成与校验必须读取 `battle.inviteCode` 配置。
 - 邀请码唯一写入必须使用 Redis `SET NX EX`，过期时间取 `ttlSeconds`。
+- 邀请码刷新时必须删除旧 code key，再写入新 code key。
 - 轮巡任务频率由 `battle.cron.tickSeconds` 控制，不允许小于 10 秒。
