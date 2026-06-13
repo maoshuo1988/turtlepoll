@@ -41,12 +41,15 @@
 
 | message（后端原文） | 建议中文提示 |
 | --- | --- |
-| `battle not found` | 赌局不存在或已删除 |
+| `battle not found` | 赌局不存在或已删除；或私人局无有效邀请码 |
 | `battle is not open` | 赌局当前不可加入 |
 | `battle is full` | 赌局已满 |
+| `inviteCode is required for private battle` | 私人局需要邀请码 |
 | `inviteCode format invalid` | 邀请码格式错误，需为 4 位字母数字 |
 | `invalid inviteCode` | 邀请码错误 |
-| `inviteCode expired` | 邀请码已过期 |
+| `inviteCode expired` | 邀请码已过期（48 小时有效期） |
+| `only banker can refresh inviteCode` | 仅庄家可刷新邀请码 |
+| `not battle banker` | 不是该赌局的庄家 |
 | `permission denied` | 无权限操作 |
 | `insufficient balance` | 余额不足 |
 | `battle is not settled` | 尚未结算，无法提取 |
@@ -81,7 +84,8 @@
 - `bankerSide/challengerSide` 为空：`sides are required`
 - `stakeAmount < 100`：`stakeAmount must be >= 100`
 - `settleTime <= 0`：`settleTime is required`
-- 私密场邀请码由服务端自动生成（创建请求不接收 `inviteCode`）
+- 私密场（`isPublic=false`）邀请码由服务端自动生成，4 位字母数字，48 小时有效期（创建请求不接收 `inviteCode`）
+- Redis 存储邀请码快速验证路径（127.0.0.1:6379），数据库作为可靠回退
 
 > 余额不足：由 `UserCoinService.SpendToPool` 返回的 message 决定（通常是余额不足/扣款失败），文案需以实际实现为准。
 
@@ -97,9 +101,11 @@
 - `requestId` 为空：`requestId is required`
 - 庄家尝试作为挑战者加入：`banker cannot join as challenger`
 - battle 不在 open：`battle is not open`
-- 私密场邀请码格式非法：`inviteCode format invalid`
-- 私密场邀请码错误：`invalid inviteCode`
-- 私密场邀请码过期：`inviteCode expired`
+- 私密场（`isPublic=false`）邀请码相关校验：
+  - 缺失邀请码：`inviteCode is required for private battle`
+  - 格式非法：`inviteCode format invalid`
+  - 邀请码错误：`invalid inviteCode`
+  - 邀请码过期（>48 小时）：`inviteCode expired`
 - 容量已满：`battle is full`
 - 下注超过剩余容量：`amount exceeds remaining capacity: {remaining}`
 
@@ -172,7 +178,8 @@
 - `bankerUserId`: int64
 - `bankerSide` / `challengerSide`: string
 - `isPublic`: bool（公开场收取入场费；私密场由服务端生成邀请码且不收入场费）
-- `inviteCode`: string
+- `inviteCode`: string（私密场时由服务端自动生成，4 位大小写不敏感字母数字）
+- `inviteExpireAt`: int64（邀请码过期时间戳，私密场时为有效期，48 小时后失效）
 - `status`: string（`open/sealed/pending/disputed/settled`）
 - `settleTime`: int64（到点后自动进入待宣判/待确认流程）
 - `pendingDeadline`: int64（庄家宣判截止；超时默认庄家输）
@@ -355,13 +362,43 @@ GET /api/battle/stats
 
 #### 请求参数（query）
 - `battleId`: int64，必填
+- `inviteCode`: string，可选；访问私密场时需提供有效邀请码，否则返回 `battle not found`
+- `refreshInvite`: int，可选；传 `1` 时，庄家可刷新邀请码（生成新码，旧码立即失效）
 
 #### 返回值（data）
-- `battle`: Battle
-- `myAction`: string（`confirm/dispute/""`）
-- `settlement`:
+- `battle`: Battle（私密场庄家可见 `inviteCode` 和 `inviteExpireAt` 用于刷新；非庄家访问不返回此字段）
+- `myAction`: string（`confirm/dispute/\"\"`）
+- `settlement`：
   - `settlement`: BattleSettlement（若未生成则为 null）
   - `myItem`: BattleSettlementItem（若我无 payout 或未生成则为 null）
+
+#### 私密场邀请码刷新（仅庄家）
+
+请求：
+```http
+GET /api/battle/by?battleId=1&refreshInvite=1
+```
+
+- 仅庄家可操作，返回新的 `inviteCode` 和 `inviteExpireAt`
+- 旧邀请码立即失效（Redis 异步删除）
+- 48 小时后新邀请码自动过期
+
+响应示例：
+```json
+{
+  "success": true,
+  "data": {
+    "battle": {
+      "id": 1,
+      "isPublic": false,
+      "inviteCode": "XYZ9",
+      "inviteExpireAt": 1718280000
+    },
+    "myAction": "",
+    "settlement": { "settlement": null, "myItem": null }
+  }
+}
+```
 
 #### 示例
 
@@ -442,24 +479,32 @@ GET /api/battle/by?battleId=1
 - `bankerSide`: string，必填
 - `challengerSide`: string，必填
 - `stakeAmount`: int64，必填（最小 100）
-- `isPublic`: bool，必填
+- `isPublic`: bool，必填（公开=true，私密=false）
 - `settleTime`: int64，必填（秒级时间戳）
-- `requestId`: string，可选
+- `requestId`: string，可选（幂等 ID）
 
-私密场邀请码规则（服务端）：
+**私密场（`isPublic=false`）邀请码规则：**
 
-- 创建时由服务端自动生成 `inviteCode`，客户端不可传入。
-- 邀请码固定 4 位，只允许字母和数字（`[A-Za-z0-9]{4}`）。
-- 邀请码大小写不敏感（校验时统一转大写）。
-- 邀请码默认有效期 24 小时。
-- 唯一性与过期由 Redis 保障（`127.0.0.1:6379`）。
+- 创建时由服务端自动生成 `inviteCode`，**客户端不可传入**
+- 邀请码格式：固定 4 位，只允许字母和数字（`[0-9A-Z]`）
+- 大小写处理：校验时大小写不敏感（自动转大写）
+- 有效期：**48 小时**（172800 秒）后自动过期
+- 存储方案：
+  - **主存储**：数据库（`battle.invite_code` + `battle.invite_code_expire_at`）
+  - **加速层**：Redis（`battle:invite:code:{CODE}` → `battleId`，TTL 48h），快速验证路径
+  - **降级**：Redis 不可用时自动回退到数据库验证
+- 唯一性保证：生成时检查数据库确保在有效期内不重复，最多重试 64 次
+- 刷新机制：庄家可随时刷新（GET `/api/battle/{id}?refreshInvite=1`），旧码立即失效
 
 #### 返回值（data）
-- Battle
+返回 `CreateBattleResult` 结构，包含：
+- `battle`: Battle 对象
+- `inviteCode`: string（仅私密场非空，4 位大小写不敏感字母数字）
+- `inviteExpireAt`: int64（仅私密场非 0，48 小时有效期的时间戳）
 
 #### 示例
 
-请求：
+请求（公开场）：
 
 ```http
 POST /api/battle/create
@@ -476,18 +521,63 @@ Content-Type: application/json
 }
 ```
 
-响应（示意）：
+请求（私密场）：
+
+```http
+POST /api/battle/create
+Content-Type: application/json
+
+{
+  "title": "私密赌局",
+  "bankerSide": "我赢",
+  "challengerSide": "你赢",
+  "stakeAmount": 500,
+  "isPublic": false,
+  "settleTime": 1760000000,
+  "requestId": "create-002"
+}
+```
+
+响应（公开场示意）：
 
 ```json
 {
   "success": true,
   "data": {
-    "id": 1,
-    "title": "巴萨 vs 皇马，谁赢？",
-    "status": "open",
-    "bankerUserId": 10001,
-    "bankerStakeTotal": 1000,
-    "challengerStakeTotal": 0
+    "battle": {
+      "id": 1,
+      "title": "巴萨 vs 皇马，谁赢？",
+      "status": "open",
+      "bankerUserId": 10001,
+      "isPublic": true,
+      "bankerStakeTotal": 1000,
+      "challengerStakeTotal": 0
+    },
+    "inviteCode": "",
+    "inviteExpireAt": 0
+  }
+}
+```
+
+响应（私密场示意）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "battle": {
+      "id": 2,
+      "title": "私密赌局",
+      "status": "open",
+      "bankerUserId": 10001,
+      "isPublic": false,
+      "inviteCode": "ABC1",
+      "inviteExpireAt": 1718280000,
+      "bankerStakeTotal": 500,
+      "challengerStakeTotal": 0
+    },
+    "inviteCode": "ABC1",
+    "inviteExpireAt": 1718280000
   }
 }
 ```
