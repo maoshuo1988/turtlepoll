@@ -217,10 +217,8 @@ func (c *BattleController) GetList() *web.JsonResult {
 			queryDB = queryDB.Where("banker_user_id = ? OR id IN (?)", user.Id, sub)
 		}
 	} else {
-		// 兼容旧行为：未传 listScope 时，默认公共列表；mine/role 允许扩展到“与我相关”。
-		if role == "" && mine != "1" {
-			queryDB = queryDB.Where("is_public = ?", true)
-		}
+		// 未传 listScope 时默认公共列表，不允许通过 role/mine 扩展到私人局。
+		queryDB = queryDB.Where("is_public = ?", true)
 		if role == "banker" {
 			queryDB = queryDB.Where("banker_user_id = ?", user.Id)
 		} else if role == "challenger" {

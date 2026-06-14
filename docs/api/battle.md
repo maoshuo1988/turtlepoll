@@ -226,7 +226,7 @@
 - `pageSize`: int，默认 20，最大 100
 - `status`: string，可选（`open/sealed/pending/disputed/settled`）
 - `listScope`: string，可选（`public/private`，默认 `public`）
-- `mine`: string，可选；传 `1` 时仅返回我参与的（我是庄家或我下过注）【历史兼容】
+- `mine`: string，可选；传 `1` 时在公开局范围内仅返回我参与的（我是庄家或我下过注）【历史兼容】
 - `role`: string，可选；更精确的参与角色筛选（优先级高于 `mine`）
   - `role=banker`：只看我做庄的赌局（`battle.bankerUserId = me`）
   - `role=challenger`：只看我挑战的赌局（我作为 challenger 下过注；不包含我做庄的）
@@ -235,7 +235,7 @@
 #### 查询语义（与当前实现一致）
 - `listScope=public`：仅公开局（`isPublic=true`）。
 - `listScope=private`：仅与我相关的私人局（`isPublic=false`，且我是庄家或挑战者）。
-- 未传 `listScope`：走历史兼容行为；默认公开列表，若 `mine=1` 或传 `role` 会返回与我相关局（可能包含私人局）。
+- 未传 `listScope`：默认公开列表（仅 `isPublic=true`），`mine=1` 和 `role` 仅在公开局范围内生效。
 - `sort=settle_soon`：只对未结算局排序（按 `settleTime asc`）。
 
 #### 返回值（data）
