@@ -166,8 +166,21 @@ func (c *BattleController) GetList() *web.JsonResult {
 		pageSize = 20
 	}
 	status := strings.TrimSpace(params.FormValue(c.Ctx, "status"))
+	rawListScope := strings.TrimSpace(strings.ToLower(params.FormValue(c.Ctx, "listScope")))
+	hasListScope := rawListScope != ""
+	listScope := rawListScope
+	if listScope == "" {
+		listScope = "public"
+	}
 	mine := strings.TrimSpace(params.FormValue(c.Ctx, "mine"))
 	role := strings.TrimSpace(strings.ToLower(params.FormValue(c.Ctx, "role")))
+	sort := strings.TrimSpace(strings.ToLower(params.FormValue(c.Ctx, "sort")))
+	if sort == "" {
+		sort = "latest"
+	}
+	if listScope != "public" && listScope != "private" {
+		return web.JsonErrorMsg("invalid listScope")
+	}
 
 	db := repositories.BattleRepository.DB()
 
@@ -177,29 +190,68 @@ func (c *BattleController) GetList() *web.JsonResult {
 	if status != "" {
 		queryDB = queryDB.Where("status = ?", status)
 	}
-	if role == "" && mine != "1" {
+
+	if listScope == "private" {
+		queryDB = queryDB.Where("is_public = ?", false)
+		if role == "banker" {
+			queryDB = queryDB.Where("banker_user_id = ?", user.Id)
+		} else if role == "challenger" {
+			sub := db.Model(&models.BattleBet{}).Select("battle_id").
+				Where("user_id = ? AND role = ?", user.Id, "challenger")
+			queryDB = queryDB.Where("id IN (?)", sub)
+		} else {
+			sub := db.Model(&models.BattleBet{}).Select("battle_id").Where("user_id = ?", user.Id)
+			queryDB = queryDB.Where("banker_user_id = ? OR id IN (?)", user.Id, sub)
+		}
+	} else if hasListScope {
+		// 显式传 listScope=public 时，强制只查公开局。
 		queryDB = queryDB.Where("is_public = ?", true)
-	}
-	// 参与维度筛选：
-	// - role 优先级高于 mine（mine 为历史兼容参数）
-	// - role=challenger：只看我作为 challenger 下注过的 battle（不包含我做庄的）
-	if role == "banker" {
-		queryDB = queryDB.Where("banker_user_id = ?", user.Id)
-	} else if role == "challenger" {
-		sub := db.Model(&models.BattleBet{}).Select("battle_id").
-			Where("user_id = ? AND role = ?", user.Id, "challenger")
-		queryDB = queryDB.Where("id IN (?)", sub)
-	} else if mine == "1" {
-		// 我是庄家或我有下注（包含 banker/challenger 两种 bet）
-		sub := db.Model(&models.BattleBet{}).Select("battle_id").Where("user_id = ?", user.Id)
-		queryDB = queryDB.Where("banker_user_id = ? OR id IN (?)", user.Id, sub)
+		if role == "banker" {
+			queryDB = queryDB.Where("banker_user_id = ?", user.Id)
+		} else if role == "challenger" {
+			sub := db.Model(&models.BattleBet{}).Select("battle_id").
+				Where("user_id = ? AND role = ?", user.Id, "challenger")
+			queryDB = queryDB.Where("id IN (?)", sub)
+		} else if mine == "1" {
+			sub := db.Model(&models.BattleBet{}).Select("battle_id").Where("user_id = ?", user.Id)
+			queryDB = queryDB.Where("banker_user_id = ? OR id IN (?)", user.Id, sub)
+		}
+	} else {
+		// 兼容旧行为：未传 listScope 时，默认公共列表；mine/role 允许扩展到“与我相关”。
+		if role == "" && mine != "1" {
+			queryDB = queryDB.Where("is_public = ?", true)
+		}
+		if role == "banker" {
+			queryDB = queryDB.Where("banker_user_id = ?", user.Id)
+		} else if role == "challenger" {
+			sub := db.Model(&models.BattleBet{}).Select("battle_id").
+				Where("user_id = ? AND role = ?", user.Id, "challenger")
+			queryDB = queryDB.Where("id IN (?)", sub)
+		} else if mine == "1" {
+			sub := db.Model(&models.BattleBet{}).Select("battle_id").Where("user_id = ?", user.Id)
+			queryDB = queryDB.Where("banker_user_id = ? OR id IN (?)", user.Id, sub)
+		}
 	}
 
 	var count int64
 	if err := queryDB.Count(&count).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
-	if err := queryDB.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&bs).Error; err != nil {
+	if sort == "settle_soon" {
+		queryDB = queryDB.Where("status <> ?", services.BattleStatusSettled)
+	}
+
+	orderExpr := "id desc"
+	switch sort {
+	case "heat":
+		orderExpr = "heat desc, id desc"
+	case "big":
+		orderExpr = "pool_principal_total desc, id desc"
+	case "settle_soon":
+		orderExpr = "settle_time asc, id desc"
+	}
+
+	if err := queryDB.Order(orderExpr).Offset((page - 1) * pageSize).Limit(pageSize).Find(&bs).Error; err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}
 
@@ -353,8 +405,26 @@ func (c *BattleController) PostDeclare() *web.JsonResult {
 	if user == nil {
 		return web.JsonError(errs.NotLogin())
 	}
+	type declareForm struct {
+		BattleId int64  `json:"battleId"`
+		Result   string `json:"result"`
+	}
+
 	battleId, _ := params.GetInt64(c.Ctx, "battleId")
-	result := params.FormValue(c.Ctx, "result")
+	result := strings.TrimSpace(params.FormValue(c.Ctx, "result"))
+
+	if battleId <= 0 || result == "" {
+		var form declareForm
+		if err := c.Ctx.ReadJSON(&form); err == nil {
+			if battleId <= 0 {
+				battleId = form.BattleId
+			}
+			if result == "" {
+				result = strings.TrimSpace(form.Result)
+			}
+		}
+	}
+
 	b, err := services.BattleService.DeclareResultByBanker(user.Id, battleId, result)
 	if err != nil {
 		return web.JsonErrorMsg(err.Error())
