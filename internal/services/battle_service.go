@@ -224,7 +224,7 @@ func (s *battleService) CanViewBattle(tx *gorm.DB, userId int64, b *models.Battl
 	if b == nil {
 		return false, errors.New("battle not found")
 	}
-	if b.IsPublic {
+	if b.IsPublicValue() {
 		return true, nil
 	}
 	if b.BankerUserId == userId {
@@ -269,12 +269,13 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 	}
 
 	now := dates.NowTimestamp()
+	isPublic := form.IsPublic
 	b := &models.Battle{
 		Title:              form.Title,
 		BankerUserId:       bankerUserId,
 		BankerSide:         form.BankerSide,
 		ChallengerSide:     form.ChallengerSide,
-		IsPublic:           form.IsPublic,
+		IsPublic:           &isPublic,
 		Status:             BattleStatusOpen,
 		SettleTime:         form.SettleTime,
 		BankerStakeTotal:   form.StakeAmount,
@@ -381,7 +382,7 @@ func (s *battleService) JoinOrAddStake(challengerUserId int64, form JoinBattleFo
 		if b.Status != BattleStatusOpen {
 			return errors.New("battle is not open")
 		}
-		if !b.IsPublic {
+		if !b.IsPublicValue() {
 			if err := s.canJoinPrivateBattleWithInvite(b, form.InviteCode, now); err != nil {
 				return err
 			}
@@ -409,7 +410,7 @@ func (s *battleService) JoinOrAddStake(challengerUserId int64, form JoinBattleFo
 
 		// 入场费（公开 5%），向下取整
 		entryFee := int64(0)
-		if b.IsPublic {
+		if b.IsPublicValue() {
 			entryFee = int64(math.Floor(float64(form.Amount) * 0.05))
 			if entryFee < 0 {
 				entryFee = 0
@@ -577,7 +578,7 @@ func (s *battleService) RefreshInviteCode(bankerUserId, battleId int64) (*models
 		if err != nil {
 			return err
 		}
-		if b.IsPublic {
+		if b.IsPublicValue() {
 			return errors.New("refresh inviteCode only for private battle")
 		}
 		if b.BankerUserId != bankerUserId {

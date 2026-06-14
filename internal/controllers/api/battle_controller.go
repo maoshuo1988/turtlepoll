@@ -95,7 +95,7 @@ func (c *BattleController) GetBy() *web.JsonResult {
 	if b == nil {
 		return web.JsonErrorMsg("battle not found")
 	}
-	if !b.IsPublic {
+	if !b.IsPublicValue() {
 		ok, err := services.BattleService.CanViewBattle(db, user.Id, b, inviteCode, dates.NowTimestamp())
 		if err != nil {
 			return web.JsonErrorMsg(err.Error())
@@ -138,7 +138,7 @@ func (c *BattleController) GetBy() *web.JsonResult {
 			"myItem":     myItem,
 		},
 	}
-	if !b.IsPublic && b.BankerUserId == user.Id {
+	if !b.IsPublicValue() && b.BankerUserId == user.Id {
 		resp["inviteCode"] = b.InviteCode
 		resp["inviteExpireAt"] = b.InviteCodeExpireAt
 	}

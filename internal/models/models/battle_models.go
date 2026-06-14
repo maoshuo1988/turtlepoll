@@ -15,7 +15,7 @@ type Battle struct {
 	ChallengerSide string `gorm:"size:1024;not null" json:"challengerSide"`
 
 	// 是否公开（公开：收取入场费；私人：邀请码加入且不收取入场费）
-	IsPublic           bool   `gorm:"not null;default:true;index" json:"isPublic"`
+	IsPublic           *bool  `gorm:"not null;default:true;index" json:"isPublic"`
 	InviteCode         string `gorm:"size:64;index" json:"inviteCode"`
 	InviteCodeExpireAt int64  `gorm:"not null;default:0;index" json:"inviteExpireAt"`
 
@@ -52,6 +52,14 @@ type Battle struct {
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime"`
+}
+
+// IsPublicValue 返回公开性布尔值；nil 视为公开，避免历史脏数据导致空指针。
+func (b *Battle) IsPublicValue() bool {
+	if b == nil || b.IsPublic == nil {
+		return true
+	}
+	return *b.IsPublic
 }
 
 // BattleChallengeAction 挑战者确认/异议动作（幂等）
