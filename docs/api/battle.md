@@ -135,6 +135,10 @@
 - 非庄家操作：`permission denied`
 - battle 不在 pending：`battle is not pending`
 
+### 赌局列表：`GET /api/battle/list`
+
+- `listScope` 非法：`invalid listScope`
+
 ### 挑战者确认：`POST /api/battle/challenger_confirm`
 
 - battle 不在 pending：`battle is not pending`
@@ -221,10 +225,18 @@
 - `page`: int，默认 1
 - `pageSize`: int，默认 20，最大 100
 - `status`: string，可选（`open/sealed/pending/disputed/settled`）
+- `listScope`: string，可选（`public/private`，默认 `public`）
 - `mine`: string，可选；传 `1` 时仅返回我参与的（我是庄家或我下过注）【历史兼容】
 - `role`: string，可选；更精确的参与角色筛选（优先级高于 `mine`）
   - `role=banker`：只看我做庄的赌局（`battle.bankerUserId = me`）
   - `role=challenger`：只看我挑战的赌局（我作为 challenger 下过注；不包含我做庄的）
+- `sort`: string，可选（`latest/heat/big/settle_soon`，默认 `latest`）
+
+#### 查询语义（与当前实现一致）
+- `listScope=public`：仅公开局（`isPublic=true`）。
+- `listScope=private`：仅与我相关的私人局（`isPublic=false`，且我是庄家或挑战者）。
+- 未传 `listScope`：走历史兼容行为；默认公开列表，若 `mine=1` 或传 `role` 会返回与我相关局（可能包含私人局）。
+- `sort=settle_soon`：只对未结算局排序（按 `settleTime asc`）。
 
 #### 返回值（data）
 - `list`: 数组，每项结构：
@@ -243,6 +255,18 @@
 
 ```http
 GET /api/battle/list?page=1&pageSize=20&status=open&mine=1
+```
+
+公共广场（推荐新口径）：
+
+```http
+GET /api/battle/list?listScope=public&page=1&pageSize=20&sort=heat
+```
+
+私人广场（推荐新口径）：
+
+```http
+GET /api/battle/list?listScope=private&page=1&pageSize=20&sort=latest
 ```
 
 只看我做庄：
@@ -276,12 +300,11 @@ GET /api/battle/list?page=1&pageSize=20&role=challenger
           "entryFeeTotal": 0,
           "burnTotal": 0
         },
-        "myAction": ""
-  },
-  "myAction": "",
-  "bankerNickname": "Alice",
-  "commentCount": 12,
-  "likeCount": 8
+        "myAction": "",
+        "bankerNickname": "Alice",
+        "commentCount": 12,
+        "likeCount": 8
+      }
     ],
     "count": 1,
     "page": 1,
@@ -686,11 +709,15 @@ Content-Type: application/json
 
 - **接口**：`POST /api/battle/declare`
 - **认证**：需要登录
-- **请求格式**：表单（通过 `params` 读取）
+- **请求格式**：`application/x-www-form-urlencoded` 或 `application/json`
 
-#### 请求参数（form）
+#### 请求参数
 - `battleId`: int64，必填
 - `result`: string，必填（`banker_wins/banker_loses`）
+
+#### 参数读取策略（当前实现）
+- 先读取表单参数（`battleId/result`）。
+- 若表单缺失，再回退读取 JSON body（`battleId/result`）。
 
 #### 说明
 - 宣布后进入挑战者确认窗口（`confirmDeadline = now + 24h`）。
@@ -706,6 +733,18 @@ POST /api/battle/declare
 Content-Type: application/x-www-form-urlencoded
 
 battleId=1&result=banker_wins
+```
+
+JSON 示例：
+
+```http
+POST /api/battle/declare
+Content-Type: application/json
+
+{
+  "battleId": 1,
+  "result": "banker_wins"
+}
 ```
 
 ---
