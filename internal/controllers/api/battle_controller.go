@@ -119,6 +119,20 @@ func (c *BattleController) GetBy() *web.JsonResult {
 	if act != nil {
 		myAction = act.Action
 	}
+	myRole := "none"
+	if b.BankerUserId == user.Id {
+		myRole = services.BattleRoleBanker
+	} else {
+		var challengerBetCount int64
+		if err := db.Model(&models.BattleBet{}).
+			Where("battle_id = ? AND user_id = ? AND role = ?", b.Id, user.Id, services.BattleRoleChallenger).
+			Count(&challengerBetCount).Error; err != nil {
+			return web.JsonErrorMsg(err.Error())
+		}
+		if challengerBetCount > 0 {
+			myRole = services.BattleRoleChallenger
+		}
+	}
 
 	// 结算单（如已生成）
 	st := repositories.BattleSettlementRepository.TakeByBattleId(db, b.Id)
@@ -133,6 +147,7 @@ func (c *BattleController) GetBy() *web.JsonResult {
 	resp := map[string]any{
 		"battle":   b,
 		"myAction": myAction,
+		"myRole":   myRole,
 		"settlement": map[string]any{
 			"settlement": st,
 			"myItem":     myItem,
@@ -321,16 +336,54 @@ func (c *BattleController) GetList() *web.JsonResult {
 		}
 	}
 
-	// 附带我对每个 battle 的动作（仅 challengers）
+	myActionByBattleId := map[int64]string{}
+	myChallengerBattleIdSet := map[int64]struct{}{}
+	if len(battleIds) > 0 {
+		type actionRow struct {
+			BattleId int64  `gorm:"column:battle_id"`
+			Action   string `gorm:"column:action"`
+		}
+		var actionRows []actionRow
+		if err := db.Model(&models.BattleChallengeAction{}).
+			Select("battle_id, action").
+			Where("user_id = ? AND battle_id IN ?", user.Id, battleIds).
+			Find(&actionRows).Error; err != nil {
+			slog.Error("load my battle actions failed", slog.Any("err", err))
+		} else {
+			for _, row := range actionRows {
+				myActionByBattleId[row.BattleId] = row.Action
+			}
+		}
+
+		type betRow struct {
+			BattleId int64 `gorm:"column:battle_id"`
+		}
+		var betRows []betRow
+		if err := db.Model(&models.BattleBet{}).
+			Select("DISTINCT battle_id").
+			Where("user_id = ? AND role = ? AND battle_id IN ?", user.Id, services.BattleRoleChallenger, battleIds).
+			Find(&betRows).Error; err != nil {
+			slog.Error("load my challenger battles failed", slog.Any("err", err))
+		} else {
+			for _, row := range betRows {
+				myChallengerBattleIdSet[row.BattleId] = struct{}{}
+			}
+		}
+	}
+
+	// 附带我对每个 battle 的动作和角色
 	for _, b := range bs {
-		act := repositories.BattleChallengeActionRepository.TakeByUser(db, b.Id, user.Id)
-		myAction := ""
-		if act != nil {
-			myAction = act.Action
+		myAction := myActionByBattleId[b.Id]
+		myRole := "none"
+		if b.BankerUserId == user.Id {
+			myRole = services.BattleRoleBanker
+		} else if _, ok := myChallengerBattleIdSet[b.Id]; ok {
+			myRole = services.BattleRoleChallenger
 		}
 		list = append(list, map[string]any{
 			"battle":         b,
 			"myAction":       myAction,
+			"myRole":         myRole,
 			"bankerNickname": bankerNicknames[b.BankerUserId],
 			"commentCount":   commentCounts[b.Id],
 			"likeCount":      likeCounts[b.Id],

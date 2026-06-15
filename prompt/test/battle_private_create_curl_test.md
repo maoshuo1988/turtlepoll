@@ -52,7 +52,7 @@ curl -sS -k -X POST "${BASE_URL}/api/battle/create" \
   -b "${AUTH_COOKIE}" \
   -H "Content-Type: application/json" \
   --data-raw "{\
-    \"title\": \"私人局测试：主队能否净胜2球\",\
+    \"title\": \"私人局测试：主队能否净胜21球\",\
     \"bankerSide\": \"能\",\
     \"challengerSide\": \"不能\",\
     \"stakeAmount\": 1000,\

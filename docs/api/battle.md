@@ -241,6 +241,7 @@
 #### 返回值（data）
 - `list`: 数组，每项结构：
   - `battle`: Battle
+  - `myRole`: string（当前用户在该 battle 的身份：`banker/challenger/none`）
   - `myAction`: string（当前用户对该 battle 的挑战者动作：`confirm/dispute/""`）
   - `bankerNickname`: string（庄家昵称；可能为空字符串）
   - `commentCount`: int64（该 battle 的评论数；基于 `Comment.entity_type="battle"` 聚合）
@@ -300,6 +301,7 @@ GET /api/battle/list?page=1&pageSize=20&role=challenger
           "entryFeeTotal": 0,
           "burnTotal": 0
         },
+        "myRole": "banker",
         "myAction": "",
         "bankerNickname": "Alice",
         "commentCount": 12,
@@ -390,6 +392,7 @@ GET /api/battle/stats
 
 #### 返回值（data）
 - `battle`: Battle（私密场庄家可见 `inviteCode` 和 `inviteExpireAt` 用于刷新；非庄家访问不返回此字段）
+- `myRole`: string（当前用户在该 battle 的身份：`banker/challenger/none`）
 - `myAction`: string（`confirm/dispute/\"\"`）
 - `settlement`：
   - `settlement`: BattleSettlement（若未生成则为 null）
@@ -444,6 +447,7 @@ GET /api/battle/by?battleId=1
       "pendingDeadline": 1760000000,
       "confirmDeadline": 1760003600
     },
+    "myRole": "challenger",
     "myAction": "",
     "settlement": {
       "settlement": null,
@@ -466,6 +470,7 @@ GET /api/battle/by?battleId=1
       "resultBy": "admin",
       "resultTime": 1760000500
     },
+    "myRole": "challenger",
     "myAction": "confirm",
     "settlement": {
       "settlement": {
