@@ -136,3 +136,27 @@ func TestBattle_InviteCodeGeneration(t *testing.T) {
 		}
 	})
 }
+
+// 有效邀请码可直接查看私人局，不要求当前用户是庄家或挑战者。
+func TestBattle_CanViewWithInviteCodeWithoutRole(t *testing.T) {
+	now := int64(1000000)
+	b := &models.Battle{
+		IsPublic:           boolPtr(false),
+		BankerUserId:       99,
+		InviteCode:         "ABC1",
+		InviteCodeExpireAt: now + 1000,
+	}
+
+	s := &battleService{}
+	ok, err := s.CanViewBattle(nil, 1, b, "ABC1", now)
+	if err != nil {
+		t.Fatalf("CanViewBattle returned error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("CanViewBattle returned false, want true")
+	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}

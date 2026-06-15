@@ -382,13 +382,21 @@ GET /api/battle/stats
 
 ### 2) 赌局详情
 
-- **接口**：`GET /api/battle/by?battleId=1`
+- **接口**：`GET /api/battle/by?battleId=1` 或 `GET /api/battle/by?inviteCode=ABCD`
 - **认证**：需要登录
 
 #### 请求参数（query）
-- `battleId`: int64，必填
-- `inviteCode`: string，可选；访问私密场时需提供有效邀请码，否则返回 `battle not found`
+- `battleId`: int64，可选；传入后优先按房间号查询
+- `inviteCode`: string，可选；当 `battleId` 为空时可通过未过期的邀请码查询私密场，否则返回 `battle not found`
 - `refreshInvite`: int，可选；传 `1` 时，庄家可刷新邀请码（生成新码，旧码立即失效）
+
+#### 设计要求
+- 公开局按 `battleId` 可直接查询。
+- 私人局按 `battleId` 查询时，只要携带有效 `inviteCode` 即可直接查看详情，无需再判断是否庄家或已参与。
+- `battleId` 为空时，可通过未过期的 `inviteCode` 反查私密局；邀请码过期或无效时统一返回 `battle not found`。
+- 私密局庄家查询时返回当前 `inviteCode` 与 `inviteExpireAt`。
+- 私密局庄家传 `refreshInvite=1` 时触发生成新邀请码并立即使旧邀请码失效。
+- 邀请码刷新后的有效期固定 48 小时。
 
 #### 返回值（data）
 - `battle`: Battle（私密场庄家可见 `inviteCode` 和 `inviteExpireAt` 用于刷新；非庄家访问不返回此字段）
@@ -432,6 +440,12 @@ GET /api/battle/by?battleId=1&refreshInvite=1
 
 ```http
 GET /api/battle/by?battleId=1
+```
+
+按邀请码查询：
+
+```http
+GET /api/battle/by?inviteCode=ABC1
 ```
 
 响应（未结算时 `settlement.settlement=null`）：

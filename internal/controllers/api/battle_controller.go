@@ -76,7 +76,7 @@ func (c *BattleController) GetStats() *web.JsonResult {
 	})
 }
 
-// 赌局详情：GET /api/battle/by?battleId=1
+// 赌局详情：GET /api/battle/by?battleId=1 或 inviteCode=ABCD
 // 说明：返回 battle + 当前用户 challenger 动作（confirm/dispute）+ 结算单/我的结算明细（如已生成）。
 func (c *BattleController) GetBy() *web.JsonResult {
 	user := common.GetCurrentUser(c.Ctx)
@@ -86,17 +86,21 @@ func (c *BattleController) GetBy() *web.JsonResult {
 	battleId, _ := params.GetInt64(c.Ctx, "battleId")
 	inviteCode := strings.TrimSpace(params.FormValue(c.Ctx, "inviteCode"))
 	refreshInvite := strings.TrimSpace(params.FormValue(c.Ctx, "refreshInvite"))
-	if battleId <= 0 {
-		return web.JsonErrorMsg("battleId is required")
+	if battleId <= 0 && inviteCode == "" {
+		return web.JsonErrorMsg("battleId or inviteCode is required")
 	}
 
 	db := repositories.BattleRepository.DB()
-	b := repositories.BattleRepository.Take(db, "id = ?", battleId)
+	now := dates.NowTimestamp()
+	b, err := services.BattleService.TakeBattleForView(db, battleId, inviteCode, now)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
 	if b == nil {
 		return web.JsonErrorMsg("battle not found")
 	}
 	if !b.IsPublicValue() {
-		ok, err := services.BattleService.CanViewBattle(db, user.Id, b, inviteCode, dates.NowTimestamp())
+		ok, err := services.BattleService.CanViewBattle(db, user.Id, b, inviteCode, now)
 		if err != nil {
 			return web.JsonErrorMsg(err.Error())
 		}

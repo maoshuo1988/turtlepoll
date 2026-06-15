@@ -199,6 +199,31 @@ func (s *battleService) canJoinPrivateBattleWithInvite(b *models.Battle, rawInvi
 	return nil
 }
 
+// TakeBattleForView 按房间号优先、邀请码兜底查询战局。
+// - battleId 有值时，直接按 ID 查询，不受邀请码过期影响。
+// - battleId 为空时，仅允许通过未过期的私人局邀请码反查战局。
+func (s *battleService) TakeBattleForView(tx *gorm.DB, battleId int64, rawInviteCode string, now int64) (*models.Battle, error) {
+	if battleId > 0 {
+		return repositories.BattleRepository.Take(tx, "id = ?", battleId), nil
+	}
+
+	code := normalizeInviteCode(rawInviteCode)
+	if code == "" {
+		return nil, nil
+	}
+	if !isInviteCodeFormatValid(code) {
+		return nil, nil
+	}
+
+	return repositories.BattleRepository.Take(
+		tx,
+		"is_public = ? AND invite_code = ? AND invite_code_expire_at > ?",
+		false,
+		code,
+		now,
+	), nil
+}
+
 // validateInviteCodeWithRedis 从 Redis 验证邀请码
 func (s *battleService) validateInviteCodeWithRedis(code string, expectedBattleId int64) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -227,6 +252,11 @@ func (s *battleService) CanViewBattle(tx *gorm.DB, userId int64, b *models.Battl
 	if b.IsPublicValue() {
 		return true, nil
 	}
+	if strings.TrimSpace(rawInviteCode) != "" {
+		if err := s.canJoinPrivateBattleWithInvite(b, rawInviteCode, now); err == nil {
+			return true, nil
+		}
+	}
 	if b.BankerUserId == userId {
 		return true, nil
 	}
@@ -239,13 +269,7 @@ func (s *battleService) CanViewBattle(tx *gorm.DB, userId int64, b *models.Battl
 	if challengerBetCount > 0 {
 		return true, nil
 	}
-	if strings.TrimSpace(rawInviteCode) == "" {
-		return false, nil
-	}
-	if err := s.canJoinPrivateBattleWithInvite(b, rawInviteCode, now); err != nil {
-		return false, nil
-	}
-	return true, nil
+	return false, nil
 }
 
 func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) (*CreateBattleResult, error) {
