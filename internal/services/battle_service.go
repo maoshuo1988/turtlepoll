@@ -137,6 +137,7 @@ func (s *battleService) newRandomInviteCode() (string, error) {
 }
 
 func (s *battleService) generateUniqueInviteCode(tx *gorm.DB, now int64, excludeBattleId int64) (string, int64, error) {
+	now = battleTimeToSeconds(now)
 	for i := 0; i < battleInviteMaxRetry; i++ {
 		code, err := s.newRandomInviteCode()
 		if err != nil {
@@ -176,6 +177,7 @@ func (s *battleService) storeInviteCodeToRedis(code string, battleId int64) {
 }
 
 func (s *battleService) canJoinPrivateBattleWithInvite(b *models.Battle, rawInviteCode string, now int64) error {
+	now = battleTimeToSeconds(now)
 	code := normalizeInviteCode(rawInviteCode)
 	if code == "" {
 		return errors.New("inviteCode is required for private battle")
@@ -193,7 +195,8 @@ func (s *battleService) canJoinPrivateBattleWithInvite(b *models.Battle, rawInvi
 	if normalizeInviteCode(b.InviteCode) != code {
 		return errors.New("invalid inviteCode")
 	}
-	if b.InviteCodeExpireAt <= 0 || now > b.InviteCodeExpireAt {
+	inviteExpireAt := battleTimeToSeconds(b.InviteCodeExpireAt)
+	if inviteExpireAt <= 0 || now > inviteExpireAt {
 		return errors.New("inviteCode expired")
 	}
 	return nil
@@ -203,6 +206,7 @@ func (s *battleService) canJoinPrivateBattleWithInvite(b *models.Battle, rawInvi
 // - battleId 有值时，直接按 ID 查询，不受邀请码过期影响。
 // - battleId 为空时，仅允许通过未过期的私人局邀请码反查战局。
 func (s *battleService) TakeBattleForView(tx *gorm.DB, battleId int64, rawInviteCode string, now int64) (*models.Battle, error) {
+	now = battleTimeToSeconds(now)
 	if battleId > 0 {
 		return repositories.BattleRepository.Take(tx, "id = ?", battleId), nil
 	}
@@ -292,7 +296,7 @@ func (s *battleService) CreateBattle(bankerUserId int64, form CreateBattleForm) 
 		return nil, errors.New("settleTime is required")
 	}
 
-	now := dates.NowTimestamp()
+	now := battleTimeToSeconds(dates.NowTimestamp())
 	isPublic := form.IsPublic
 	b := &models.Battle{
 		Title:              form.Title,
@@ -595,7 +599,7 @@ func (s *battleService) RefreshInviteCode(bankerUserId, battleId int64) (*models
 		return nil, errors.New("battleId is required")
 	}
 
-	now := dates.NowTimestamp()
+	now := battleTimeToSeconds(dates.NowTimestamp())
 	var battle *models.Battle
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
 		b, err := repositories.BattleRepository.TakeForUpdate(tx, battleId)

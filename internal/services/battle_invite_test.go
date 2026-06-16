@@ -58,37 +58,43 @@ func TestBattle_NormalizeInviteCode(t *testing.T) {
 
 // 邀请码验证逻辑测试
 func TestBattle_CanJoinWithInviteCode(t *testing.T) {
-	now := int64(1000000)
+	now := int64(1700000000)
 
 	tests := []struct {
 		name           string
 		inviteCode     string // 输入的邀请码
 		battleInvite   string // 战局中存储的邀请码
 		battleExpireAt int64  // 战局邀请码过期时间
+		now            int64  // 当前时间（允许秒/毫秒混合输入，函数应自行归一化）
 		shouldSuccess  bool
 	}{
 		// 正常情况
-		{"exact match", "ABC1", "ABC1", now + 1000, true},
+		{"exact match", "ABC1", "ABC1", now + 1000, now, true},
 
 		// 大小写不敏感
-		{"uppercase input lowercase stored", "ABC1", "abc1", now + 1000, true},
-		{"lowercase input uppercase stored", "abc1", "ABC1", now + 1000, true},
+		{"uppercase input lowercase stored", "ABC1", "abc1", now + 1000, now, true},
+		{"lowercase input uppercase stored", "abc1", "ABC1", now + 1000, now, true},
 
 		// 格式检查
-		{"format invalid - too short", "ABC", "ABC1", now + 1000, false},
-		{"format invalid - too long", "ABCDE", "ABC1", now + 1000, false},
-		{"format invalid - special char", "AB@1", "AB@1", now + 1000, false},
+		{"format invalid - too short", "ABC", "ABC1", now + 1000, now, false},
+		{"format invalid - too long", "ABCDE", "ABC1", now + 1000, now, false},
+		{"format invalid - special char", "AB@1", "AB@1", now + 1000, now, false},
 
 		// 匹配检查
-		{"code mismatch", "XXXX", "ABC1", now + 1000, false},
+		{"code mismatch", "XXXX", "ABC1", now + 1000, now, false},
 
 		// 过期检查
-		{"code expired", "ABC1", "ABC1", now - 100, false},
-		{"code just expired (now > expireAt)", "ABC1", "ABC1", now - 1, false},
-		{"code still valid (now == expireAt)", "ABC1", "ABC1", now, true},
+		{"code expired", "ABC1", "ABC1", now - 100, now, false},
+		{"code just expired (now > expireAt)", "ABC1", "ABC1", now - 1, now, false},
+		{"code still valid (now == expireAt)", "ABC1", "ABC1", now, now, true},
+
+		// 单位兼容：now 为毫秒、过期时间为秒（修复前会被误判过期）
+		{"milliseconds now with seconds expire", "ABC1", "ABC1", now + 1000, now * 1000, true},
+		// 单位兼容：过期时间为毫秒历史数据，now 为秒
+		{"seconds now with milliseconds expire", "ABC1", "ABC1", (now + 1000) * 1000, now, true},
 
 		// 空值检查
-		{"empty input code", "", "ABC1", now + 1000, false},
+		{"empty input code", "", "ABC1", now + 1000, now, false},
 	}
 
 	for _, tt := range tests {
@@ -99,7 +105,7 @@ func TestBattle_CanJoinWithInviteCode(t *testing.T) {
 			}
 
 			s := &battleService{}
-			err := s.canJoinPrivateBattleWithInvite(b, tt.inviteCode, now)
+			err := s.canJoinPrivateBattleWithInvite(b, tt.inviteCode, tt.now)
 			hasError := err != nil
 
 			if hasError == tt.shouldSuccess {
