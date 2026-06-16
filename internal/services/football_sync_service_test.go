@@ -62,6 +62,24 @@ func TestTranslateKnownFootballTeamName(t *testing.T) {
 	if got, ok := translateKnownFootballTeamName(0, "Bosnia-Herzegovina"); !ok || got != "波黑" {
 		t.Fatalf("expected Bosnia-Herzegovina translated to 波黑, got=%q ok=%v", got, ok)
 	}
+	if got, ok := translateKnownFootballTeamName(0, "Jordan"); !ok || got != "约旦" {
+		t.Fatalf("expected Jordan translated to 约旦, got=%q ok=%v", got, ok)
+	}
+	if got, ok := translateKnownFootballTeamName(0, "Algeria"); !ok || got != "阿尔及利亚" {
+		t.Fatalf("expected Algeria translated to 阿尔及利亚, got=%q ok=%v", got, ok)
+	}
+	if got, ok := translateKnownFootballTeamName(0, "Ivory Coast"); !ok || got != "科特迪瓦" {
+		t.Fatalf("expected Ivory Coast translated to 科特迪瓦, got=%q ok=%v", got, ok)
+	}
+	if got, ok := translateKnownFootballTeamName(0, "Cape Verde Islands"); !ok || got != "佛得角" {
+		t.Fatalf("expected Cape Verde Islands translated to 佛得角, got=%q ok=%v", got, ok)
+	}
+	if got, ok := translateKnownFootballTeamName(0, "Congo DR"); !ok || got != "刚果（金）" {
+		t.Fatalf("expected Congo DR translated to 刚果（金）, got=%q ok=%v", got, ok)
+	}
+	if got, ok := translateKnownFootballTeamName(0, "Uzbekistan"); !ok || got != "乌兹别克斯坦" {
+		t.Fatalf("expected Uzbekistan translated to 乌兹别克斯坦, got=%q ok=%v", got, ok)
+	}
 	if got, ok := translateKnownFootballTeamName(0, "阿根廷"); ok || got != "阿根廷" {
 		t.Fatalf("known translator should not rewrite custom/unknown names, got=%q ok=%v", got, ok)
 	}
