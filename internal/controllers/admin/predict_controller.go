@@ -30,6 +30,106 @@ type PredictController struct {
 	Ctx iris.Context
 }
 
+func normalizeAdminPredictMarketStatus(v string) string {
+	v = strings.ToUpper(strings.TrimSpace(v))
+	switch v {
+	case "OPEN", "CLOSED", "SETTLED":
+		return v
+	default:
+		return "OPEN"
+	}
+}
+
+// ensureMarketForContextUpdate 保证 context_update 对应的 market 存在：
+// - 传了 marketId：若存在直接返回；不存在则按该 ID 创建。
+// - 没传 marketId：创建新 market 并回填 form.MarketId。
+func (c *PredictController) ensureMarketForContextUpdate(form *models.PredictContext) (*models.PredictMarket, error) {
+	db := sqls.DB()
+	if form == nil {
+		return nil, errors.New("invalid form")
+	}
+
+	title := strings.TrimSpace(c.Ctx.FormValue("title"))
+	if title == "" {
+		title = strings.TrimSpace(form.EventName)
+	}
+	if title == "" {
+		title = "Untitled Market"
+	}
+
+	marketType := services.NormalizePredictMarketType(c.Ctx.FormValue("marketType"))
+	status := normalizeAdminPredictMarketStatus(c.Ctx.FormValue("status"))
+	closeTime, _ := params.GetInt64(c.Ctx, "closeTime")
+	if closeTime < 0 {
+		closeTime = 0
+	}
+	sourceModel := strings.TrimSpace(c.Ctx.FormValue("sourceModel"))
+	if sourceModel == "" {
+		sourceModel = "AdminManual"
+	}
+	sourceModelId, _ := params.GetInt64(c.Ctx, "sourceModelId")
+
+	if form.MarketId > 0 {
+		market := &models.PredictMarket{}
+		err := db.Where("id = ?", form.MarketId).First(market).Error
+		if err == nil {
+			return market, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+
+		if sourceModelId <= 0 {
+			sourceModelId = form.MarketId
+		}
+		market = &models.PredictMarket{
+			Model:         models.Model{Id: form.MarketId},
+			SourceModel:   sourceModel,
+			SourceModelId: sourceModelId,
+			Title:         title,
+			MarketType:    marketType,
+			Status:        status,
+			CloseTime:     closeTime,
+			CreateTime:    dates.NowTimestamp(),
+			UpdateTime:    dates.NowTimestamp(),
+		}
+		if e := db.Create(market).Error; e != nil {
+			return nil, e
+		}
+		return market, nil
+	}
+
+	if sourceModelId <= 0 {
+		sourceModelId = time.Now().UnixNano()
+	}
+	market := &models.PredictMarket{}
+	err := db.Where("source_model = ? AND source_model_id = ?", sourceModel, sourceModelId).First(market).Error
+	if err == nil {
+		form.MarketId = market.Id
+		return market, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	now := dates.NowTimestamp()
+	market = &models.PredictMarket{
+		SourceModel:   sourceModel,
+		SourceModelId: sourceModelId,
+		Title:         title,
+		MarketType:    marketType,
+		Status:        status,
+		CloseTime:     closeTime,
+		CreateTime:    now,
+		UpdateTime:    now,
+	}
+	if e := db.Create(market).Error; e != nil {
+		return nil, e
+	}
+	form.MarketId = market.Id
+	return market, nil
+}
+
 func (c *PredictController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("POST", "/market/settle", "PostMarket_settle")
 	b.Handle("POST", "/comment_reward/run", "PostComment_rewardRun")
@@ -83,6 +183,13 @@ func (c *PredictController) PostContext_update() *web.JsonResult {
 	if form.MarketId <= 0 {
 		marketId, _ := params.GetInt64(c.Ctx, "marketId")
 		form.MarketId = marketId
+	}
+	market, err := c.ensureMarketForContextUpdate(form)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+	if strings.TrimSpace(form.EventName) == "" {
+		form.EventName = market.Title
 	}
 
 	ctxModel, err := services.PredictContextService.UpsertByMarketId(form)
