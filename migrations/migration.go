@@ -145,4 +145,5 @@ func init() {
 	register(23, "news init tables and seed data", migrate_news_init_tables)
 	register(24, "news add content_images column", migrate_news_add_content_images)
 	register(25, "battle add invite_code_expire_at column", migrate_battle_add_invite_expire)
+	register(26, "tear heat snapshot table", migrate_tear_heat_snapshot_table)
 }

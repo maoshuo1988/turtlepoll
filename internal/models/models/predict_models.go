@@ -348,3 +348,40 @@ type PredictCommentRewardItem struct {
 	CoinLogId      int64 `gorm:"not null;default:0" json:"coinLogId" form:"coinLogId"`
 	CreateTime     int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 }
+
+// TearHeatSnapshot 撕裂带热度快照。
+type TearHeatSnapshot struct {
+	Model
+	EventId      int64  `gorm:"not null;index:idx_tear_heat_event_snapshot" json:"eventId" form:"eventId"`
+	UserId       int64  `gorm:"not null;index:idx_tear_heat_event_user_option" json:"userId" form:"userId"`
+	Option       string `gorm:"size:16;not null;index:idx_tear_heat_event_user_option" json:"option" form:"option"`
+	BusinessType int    `gorm:"not null;default:1;index:idx_tear_heat_event_user_option" json:"businessType" form:"businessType"`
+
+	HLike    float64 `gorm:"type:decimal(18,6);not null;default:0" json:"hLike" form:"hLike"`
+	HComment float64 `gorm:"type:decimal(18,6);not null;default:0" json:"hComment" form:"hComment"`
+	HCoin    float64 `gorm:"type:decimal(18,6);not null;default:0" json:"hCoin" form:"hCoin"`
+
+	SnapshotTime int64  `gorm:"not null;default:0;index:idx_tear_heat_event_snapshot" json:"snapshotTime" form:"snapshotTime"`
+	SnapshotType string `gorm:"size:32;not null;default:'LIVE';index" json:"snapshotType" form:"snapshotType"`
+	CreateTime   int64  `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime   int64  `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}
+
+// TearEventHeat 记录用户在事件维度上的累计热度。
+type TearEventHeat struct {
+	Model
+	EventId      int64  `gorm:"not null;uniqueIndex:idx_tear_event_heat_user_option" json:"eventId" form:"eventId"`
+	UserId       int64  `gorm:"not null;uniqueIndex:idx_tear_event_heat_user_option" json:"userId" form:"userId"`
+	Option       string `gorm:"size:16;not null;uniqueIndex:idx_tear_event_heat_user_option" json:"option" form:"option"`
+	BusinessType int    `gorm:"not null;default:1;uniqueIndex:idx_tear_event_heat_user_option" json:"businessType" form:"businessType"`
+
+	HLike    float64 `gorm:"type:decimal(18,6);not null;default:0" json:"hLike" form:"hLike"`
+	HComment float64 `gorm:"type:decimal(18,6);not null;default:0" json:"hComment" form:"hComment"`
+	HCoin    float64 `gorm:"type:decimal(18,6);not null;default:0" json:"hCoin" form:"hCoin"`
+	HTotal   float64 `gorm:"type:decimal(18,6);not null;default:0;index:idx_tear_event_heat_total" json:"hTotal" form:"hTotal"`
+
+	SnapshotTime int64  `gorm:"not null;default:0;index" json:"snapshotTime" form:"snapshotTime"`
+	SnapshotType string `gorm:"size:32;not null;default:'LIVE';index" json:"snapshotType" form:"snapshotType"`
+	CreateTime   int64  `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	UpdateTime   int64  `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
+}

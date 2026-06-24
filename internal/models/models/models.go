@@ -43,6 +43,8 @@ var Models = []interface{}{
 	&PredictCommentMeta{},
 	&PredictCommentRewardLog{},
 	&PredictCommentRewardItem{},
+	&TearHeatSnapshot{},
+	&TearEventHeat{},
 
 	// Battle Square
 	&Battle{},
