@@ -496,17 +496,26 @@
 |------|------|
 | topicId / roundId | 话题或回合 ID，至少传一个 |
 | scope | 榜单范围：ALL=全榜，MY_SIDE=仅当前用户所在阵营 |
-| page / pageSize | 分页参数 |
+| page / pageSize | 分页参数，page 默认 1，pageSize 默认 20，最大 100 |
 
 **返回字段说明：**
 | 字段 | 说明 |
 |------|------|
+| topicId / roundId | 目标话题与回合 ID |
+| phase | 当前回合阶段 |
+| options | 当前热度快照，格式同 /heat 接口 |
 | leaderSide | 当前热度领先方：A / B |
+| list[].userId | 用户 ID |
+| list[].username / nickname | 用户名与昵称；当前实现两者保持一致 |
+| list[].avatar | 用户头像 |
+| list[].heat | 用户本回合热度贡献总值 |
 | list[].rank | 排名，从 1 起，按总热度倒序排列 |
 | list[].option | 该用户所在阵营 |
-| list[].totalHeat / heat | 用户本回合热度贡献总值（两字段值相同） |
+| list[].totalHeat | 用户本回合热度贡献总值（与 heat 相同） |
 | list[].actionCount | 用户本回合互动总次数（评论+回复+点赞+下注） |
 | list[].firstActionTime | 用户首次互动时间戳 |
+| count | 总条数 |
+| page / pageSize | 当前页与分页大小 |
 
 ### 7) GET /api/pk/heat/me
 请求参数：topicId/roundId
