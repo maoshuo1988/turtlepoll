@@ -15,6 +15,7 @@ import (
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/sqls"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var PKService = newPKService()
@@ -35,11 +36,18 @@ const (
 	PKSideB    = "B"
 	PKSideDraw = "draw"
 
-	PKBetAmount        int64 = 100
+	PKBetAmountMin     int64 = 1
+	PKBetAmountDefault int64 = 100
 	pkRoundBettingSec        = 48 * 3600 * 1000
 	pkRoundLockedSec         = 24 * 3600 * 1000
 	pkRoundCooldownSec       = 10 * 60 * 1000
 	pkSeasonSec              = 30 * 24 * 3600 * 1000
+
+	TearEventTypePK      = "pk"
+	TearLockTypeInteract = "INTERACT"
+	TearLockTypeBet      = "BET"
+	TearSnapshotSettle   = "SETTLE"
+	TearSnapshotCkpt     = "CHECKPOINT"
 )
 
 type pkService struct{}
@@ -65,11 +73,13 @@ type PKBetForm struct {
 	TopicId   int64  `json:"topicId"`
 	Side      string `json:"side"`
 	RequestId string `json:"requestId"`
+	Amount    int64  `json:"amount"`
 }
 
 func (f *PKBetForm) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		TopicId   json.RawMessage `json:"topicId"`
+		Amount    json.RawMessage `json:"amount"`
 		Side      string          `json:"side"`
 		RequestId string          `json:"requestId"`
 	}
@@ -79,35 +89,79 @@ func (f *PKBetForm) UnmarshalJSON(data []byte) error {
 
 	f.Side = raw.Side
 	f.RequestId = raw.RequestId
-	if len(raw.TopicId) == 0 || string(raw.TopicId) == "null" {
-		return nil
+	f.Amount = PKBetAmountDefault
+	if len(raw.TopicId) != 0 && string(raw.TopicId) != "null" {
+		var topicId int64
+		if err := json.Unmarshal(raw.TopicId, &topicId); err == nil {
+			f.TopicId = topicId
+		} else {
+			var topicIdStr string
+			if err := json.Unmarshal(raw.TopicId, &topicIdStr); err != nil {
+				return err
+			}
+			topicIdStr = strings.TrimSpace(topicIdStr)
+			if topicIdStr != "" {
+				parsedTopicId, err := strconv.ParseInt(topicIdStr, 10, 64)
+				if err != nil {
+					return err
+				}
+				f.TopicId = parsedTopicId
+			}
+		}
 	}
 
-	var topicId int64
-	if err := json.Unmarshal(raw.TopicId, &topicId); err == nil {
-		f.TopicId = topicId
-		return nil
-	}
-
-	var topicIdStr string
-	if err := json.Unmarshal(raw.TopicId, &topicIdStr); err != nil {
-		return err
-	}
-	topicIdStr = strings.TrimSpace(topicIdStr)
-	if topicIdStr == "" {
-		return nil
-	}
-	parsedTopicId, err := strconv.ParseInt(topicIdStr, 10, 64)
+	amount, err := parsePKBetAmount(raw.Amount)
 	if err != nil {
 		return err
 	}
-	f.TopicId = parsedTopicId
+	if amount > 0 {
+		f.Amount = amount
+	}
 	return nil
+}
+
+func parsePKBetAmount(raw json.RawMessage) (int64, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, nil
+	}
+
+	var amount int64
+	if err := json.Unmarshal(raw, &amount); err == nil {
+		return amount, nil
+	}
+
+	var amountStr string
+	if err := json.Unmarshal(raw, &amountStr); err != nil {
+		return 0, err
+	}
+	amountStr = strings.TrimSpace(amountStr)
+	if amountStr == "" {
+		return 0, nil
+	}
+	return strconv.ParseInt(amountStr, 10, 64)
 }
 
 type PKDownvoteForm struct {
 	CommentId int64  `json:"commentId"`
 	RequestId string `json:"requestId"`
+}
+
+type PKSettleForm struct {
+	TopicId      int64  `json:"topicId"`
+	RoundId      int64  `json:"roundId"`
+	RequestId    string `json:"requestId"`
+	SnapshotType string `json:"snapshotType"`
+	FreezeSource string `json:"freezeSource"`
+}
+
+type PKRecordOptionForm struct {
+	TopicId    int64  `json:"topicId"`
+	RoundId    int64  `json:"roundId"`
+	Option     string `json:"option"`
+	ActionType string `json:"actionType"`
+	RequestId  string `json:"requestId"`
+	EntityType string `json:"entityType"`
+	EntityId   int64  `json:"entityId"`
 }
 
 func newPKService() *pkService {
@@ -163,6 +217,9 @@ func (s *pkService) TopicDetail(topicId int64, slug string, userId int64) (map[s
 func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, error) {
 	form.Side = normalizePKSide(form.Side)
 	form.RequestId = strings.TrimSpace(form.RequestId)
+	if form.Amount <= 0 {
+		form.Amount = PKBetAmountDefault
+	}
 	if userId <= 0 {
 		return nil, errors.New("userId is required")
 	}
@@ -174,6 +231,9 @@ func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, erro
 	}
 	if form.RequestId == "" {
 		return nil, errors.New("requestId is required")
+	}
+	if form.Amount < PKBetAmountMin {
+		return nil, errors.New("invalid amount")
 	}
 
 	var bet *models.PKBet
@@ -187,6 +247,9 @@ func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, erro
 			return errors.New("pk round not found")
 		}
 		now := dates.NowTimestamp()
+		if err := s.ensureCampLockForBet(tx, topic.Id, round.Id, userId, form.Side, now); err != nil {
+			return err
+		}
 		s.syncRoundPhase(round, now)
 		if round.Phase != PKPhaseBetting {
 			return errors.New("pk round is not betting")
@@ -203,7 +266,7 @@ func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, erro
 			RoundId:    round.Id,
 			UserId:     userId,
 			Side:       form.Side,
-			Amount:     PKBetAmount,
+			Amount:     form.Amount,
 			RequestId:  form.RequestId,
 			CreateTime: now,
 			UpdateTime: now,
@@ -229,6 +292,12 @@ func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, erro
 			RequestId:  form.RequestId,
 			CreateTime: now,
 		}); err != nil {
+			return err
+		}
+		if err := s.recordTearBetStat(tx, topic.Id, round.Id, userId, form.Side, bet.Amount, now); err != nil {
+			return err
+		}
+		if err := s.recordTearInteraction(tx, topic.Id, round.Id, userId, form.Side, "bet", "pk_bet", bet.Id, heat, form.RequestId, now); err != nil {
 			return err
 		}
 		if form.Side == PKSideA {
@@ -266,79 +335,450 @@ func (s *pkService) Heat(topicId int64) (map[string]any, error) {
 	if round == nil {
 		return nil, errors.New("pk round not found")
 	}
+	if _, _, err := s.computeHeatSnapshot(sqls.DB(), topic, round, TearSnapshotCkpt, "ON_DEMAND"); err != nil {
+		return nil, err
+	}
+	options := s.buildHeatOptions(topic, round)
+	heatA, heatB := float64(0), float64(0)
+	for _, option := range options {
+		side, _ := option["option"].(string)
+		hTotal, _ := option["hTotal"].(float64)
+		if side == PKSideA {
+			heatA = hTotal
+		}
+		if side == PKSideB {
+			heatB = hTotal
+		}
+	}
 	return map[string]any{
 		"roundId":          round.Id,
 		"phase":            s.phaseByTime(round, dates.NowTimestamp()),
-		"heatA":            round.HeatA,
-		"heatB":            round.HeatB,
+		"heatA":            heatA,
+		"heatB":            heatB,
+		"options":          options,
 		"leader":           leaderOf(round),
 		"streakStatus":     streakStatus(topic.LastWinner, round),
 		"countdownSeconds": countdownSeconds(round, dates.NowTimestamp()),
 	}, nil
 }
 
-func (s *pkService) CreateComment(userId int64, form req.CreateCommentForm, topicId int64, side string) (*models.Comment, map[string]any, error) {
+func (s *pkService) CreateComment(userId int64, form req.CreateCommentForm, topicId int64, side string) (*models.Comment, map[string]any, string, error) {
 	side = normalizePKSide(side)
 	if topicId <= 0 {
-		return nil, nil, errors.New("topicId is required")
+		return nil, nil, "", errors.New("topicId is required")
 	}
 	if side != PKSideA && side != PKSideB {
-		return nil, nil, errors.New("invalid side")
+		return nil, nil, "", errors.New("invalid side")
 	}
 	topic := repositories.PKRepository.TakeTopic(sqls.DB(), "id = ? AND status = ?", topicId, PKTopicStatusEnabled)
 	if topic == nil {
-		return nil, nil, errors.New("pk topic not found")
+		return nil, nil, "", errors.New("pk topic not found")
 	}
 	round := repositories.PKRepository.TakeRound(sqls.DB(), "id = ?", topic.CurrentRoundId)
 	if round == nil {
-		return nil, nil, errors.New("pk round not found")
+		return nil, nil, "", errors.New("pk round not found")
 	}
 	if s.phaseByTime(round, dates.NowTimestamp()) == PKPhaseCooldown {
-		return nil, nil, errors.New("pk round is cooldown")
+		return nil, nil, "", errors.New("pk round is cooldown")
 	}
 	if bet := repositories.PKRepository.TakeBet(sqls.DB(), "round_id = ? AND user_id = ?", round.Id, userId); bet != nil && bet.Side != side {
-		return nil, nil, errors.New("side must match your bet")
+		return nil, nil, "", errors.New("side must match your bet")
+	}
+	now := dates.NowTimestamp()
+	if err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		return s.ensureCampLockForInteract(tx, topic.Id, round.Id, userId, side, now)
+	}); err != nil {
+		return nil, nil, "", err
 	}
 	form.EntityType = constants.EntityPKTopic
 	form.EntityId = topic.Id
 	comment, err := CommentService.Publish(userId, form)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if err := s.attachCommentMeta(comment, topic, round, side, "comment"); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	heat, _ := s.RecalcRoundHeat(round.Id)
-	return comment, heat, nil
+	return comment, heat, side, nil
 }
 
-func (s *pkService) ReplyComment(userId int64, form req.CreateCommentForm, commentId int64) (*models.Comment, map[string]any, error) {
+func (s *pkService) ReplyComment(userId int64, form req.CreateCommentForm, commentId int64) (*models.Comment, map[string]any, string, error) {
 	meta := repositories.PKRepository.TakeCommentMeta(sqls.DB(), "comment_id = ?", commentId)
 	if meta == nil {
-		return nil, nil, errors.New("pk comment not found")
+		return nil, nil, "", errors.New("pk comment not found")
 	}
 	round := repositories.PKRepository.TakeRound(sqls.DB(), "id = ?", meta.RoundId)
 	if round == nil {
-		return nil, nil, errors.New("pk round not found")
+		return nil, nil, "", errors.New("pk round not found")
 	}
 	if s.phaseByTime(round, dates.NowTimestamp()) == PKPhaseCooldown {
-		return nil, nil, errors.New("pk round is cooldown")
+		return nil, nil, "", errors.New("pk round is cooldown")
 	}
 	topic := repositories.PKRepository.TakeTopic(sqls.DB(), "id = ?", meta.TopicId)
 	if topic == nil {
-		return nil, nil, errors.New("pk topic not found")
+		return nil, nil, "", errors.New("pk topic not found")
+	}
+	optionAtAction := s.getCampOption(sqls.DB(), topic.Id, round.Id, userId)
+	if optionAtAction == "" {
+		optionAtAction = meta.Side
+	}
+	now := dates.NowTimestamp()
+	if err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		return s.ensureCampLockForInteract(tx, topic.Id, round.Id, userId, optionAtAction, now)
+	}); err != nil {
+		return nil, nil, "", err
 	}
 	form.EntityType = constants.EntityComment
 	form.EntityId = commentId
 	comment, err := CommentService.Publish(userId, form)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	if err := s.attachCommentMeta(comment, topic, round, meta.Side, "reply"); err != nil {
-		return nil, nil, err
+	if err := s.attachCommentMeta(comment, topic, round, optionAtAction, "reply"); err != nil {
+		return nil, nil, "", err
 	}
 	heat, _ := s.RecalcRoundHeat(round.Id)
-	return comment, heat, nil
+	return comment, heat, optionAtAction, nil
+}
+
+func (s *pkService) CommentOptionAtAction(commentId int64) string {
+	if commentId <= 0 {
+		return ""
+	}
+	meta := repositories.PKRepository.TakeCommentMeta(sqls.DB(), "comment_id = ?", commentId)
+	if meta == nil {
+		return ""
+	}
+	return normalizePKSide(meta.Side)
+}
+
+func (s *pkService) LikeComment(userId, commentId int64, requestId string) (map[string]any, error) {
+	requestId = strings.TrimSpace(requestId)
+	if commentId <= 0 {
+		return nil, errors.New("commentId is required")
+	}
+	if requestId == "" {
+		return nil, errors.New("requestId is required")
+	}
+	meta := repositories.PKRepository.TakeCommentMeta(sqls.DB(), "comment_id = ?", commentId)
+	if meta == nil {
+		return nil, errors.New("pk comment not found")
+	}
+	round := repositories.PKRepository.TakeRound(sqls.DB(), "id = ?", meta.RoundId)
+	if round == nil {
+		return nil, errors.New("pk round not found")
+	}
+	if s.phaseByTime(round, dates.NowTimestamp()) == PKPhaseCooldown {
+		return nil, errors.New("pk round is cooldown")
+	}
+	camp := s.getCampOption(sqls.DB(), meta.TopicId, meta.RoundId, userId)
+	if camp != "" && camp != meta.Side {
+		return nil, errors.New("TEAR_CAMP_CONFLICT")
+	}
+	now := dates.NowTimestamp()
+	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		if err := s.ensureCampLockForInteract(tx, meta.TopicId, meta.RoundId, userId, meta.Side, now); err != nil {
+			return err
+		}
+		if err := UserLikeService.CommentLike(userId, commentId); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "already") {
+				return nil
+			}
+			return err
+		}
+		return s.recordTearInteraction(tx, meta.TopicId, meta.RoundId, userId, meta.Side, "like", constants.EntityComment, commentId, 1, requestId, now)
+	})
+	if err != nil {
+		return nil, err
+	}
+	heat, _ := s.RecalcRoundHeat(round.Id)
+	return map[string]any{"liked": true, "optionAtAction": meta.Side, "heat": heat}, nil
+}
+
+func (s *pkService) SettleForUser(userId int64, form PKSettleForm) (map[string]any, error) {
+	form.SnapshotType = strings.TrimSpace(form.SnapshotType)
+	form.FreezeSource = strings.TrimSpace(form.FreezeSource)
+	if form.SnapshotType == "" {
+		form.SnapshotType = "SETTLE"
+	}
+	if form.FreezeSource == "" {
+		form.FreezeSource = "ON_DEMAND"
+	}
+	if form.TopicId <= 0 && form.RoundId <= 0 {
+		return nil, errors.New("topicId or roundId is required")
+	}
+
+	var round *models.PKRound
+	var topic *models.PKTopic
+	now := dates.NowTimestamp()
+	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		var err error
+		topic, round, err = s.resolveTopicRound(tx, form.TopicId, form.RoundId)
+		if err != nil {
+			return err
+		}
+		lockedRound, err := repositories.PKRepository.TakeRoundForUpdate(tx, round.Id)
+		if err != nil {
+			return errors.New("pk round not found")
+		}
+		round = lockedRound
+		s.syncRoundPhase(round, now)
+		if round.SettledAt == 0 {
+			if now < round.EndTime {
+				return errors.New("pk round is not ready to settle")
+			}
+			if _, _, err := s.computeHeatSnapshot(tx, topic, round, TearSnapshotSettle, form.FreezeSource); err != nil {
+				return err
+			}
+			if err := s.settleRound(tx, topic, round, now); err != nil {
+				return err
+			}
+			round = repositories.PKRepository.TakeRound(tx, "id = ?", round.Id)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var item *models.PKSettlementItem
+	settle := &models.PKSettlementItem{}
+	if err := sqls.DB().Where("round_id = ? AND user_id = ?", round.Id, userId).Take(settle).Error; err == nil {
+		item = settle
+	}
+
+	return map[string]any{
+		"topicId":      topic.Id,
+		"roundId":      round.Id,
+		"snapshotType": form.SnapshotType,
+		"freezeSource": form.FreezeSource,
+		"winner":       round.Winner,
+		"settledAt":    round.SettledAt,
+		"options":      s.buildHeatOptions(topic, round),
+		"settlement":   item,
+	}, nil
+}
+
+func (s *pkService) HeatRank(topicId, roundId int64, scope string, viewerUserId int64, page, pageSize int) (map[string]any, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 20
+	}
+	topic, round, err := s.resolveTopicRound(sqls.DB(), topicId, roundId)
+	if err != nil {
+		return nil, err
+	}
+
+	type heatRankRow struct {
+		UserId          int64   `gorm:"column:user_id"`
+		Option          string  `gorm:"column:bet_option"`
+		TotalHeat       float64 `gorm:"column:total_heat"`
+		ActionCount     int64   `gorm:"column:action_count"`
+		FirstActionTime int64   `gorm:"column:first_action_time"`
+	}
+	var rows []heatRankRow
+	db := sqls.DB().Table("t_tear_user_event_stat").
+		Select("user_id, bet_option, heat_contribution AS total_heat, action_count, create_time AS first_action_time").
+		Where("event_type = ? AND topic_id = ? AND round_id = ?", TearEventTypePK, topic.Id, round.Id)
+	if strings.EqualFold(strings.TrimSpace(scope), "MY_SIDE") && viewerUserId > 0 {
+		viewerOption := s.getCampOption(sqls.DB(), topic.Id, round.Id, viewerUserId)
+		if viewerOption == "" {
+			return map[string]any{"topicId": topic.Id, "roundId": round.Id, "phase": s.phaseByTime(round, dates.NowTimestamp()), "options": s.buildHeatOptions(topic, round), "list": []map[string]any{}, "count": int64(0), "page": page, "pageSize": pageSize, "leaderSide": leaderOf(round)}, nil
+		}
+		db = db.Where("bet_option = ?", viewerOption)
+	}
+
+	var count int64
+	if err := sqls.DB().Table("(?) AS t", db).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Order("total_heat desc, first_action_time asc, user_id asc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	userIds := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		userIds = append(userIds, row.UserId)
+	}
+	userMap := map[int64]models.User{}
+	if len(userIds) > 0 {
+		var users []models.User
+		if err := sqls.DB().Where("id IN ?", userIds).Find(&users).Error; err == nil {
+			for _, u := range users {
+				userMap[u.Id] = u
+			}
+		}
+	}
+
+	list := make([]map[string]any, 0, len(rows))
+	for idx, row := range rows {
+		u := userMap[row.UserId]
+		list = append(list, map[string]any{
+			"rank":            (page-1)*pageSize + idx + 1,
+			"userId":          row.UserId,
+			"username":        u.Nickname,
+			"nickname":        u.Nickname,
+			"avatar":          u.Avatar,
+			"option":          row.Option,
+			"totalHeat":       row.TotalHeat,
+			"heat":            row.TotalHeat,
+			"actionCount":     row.ActionCount,
+			"firstActionTime": row.FirstActionTime,
+		})
+	}
+
+	return map[string]any{
+		"topicId":    topic.Id,
+		"roundId":    round.Id,
+		"phase":      s.phaseByTime(round, dates.NowTimestamp()),
+		"options":    s.buildHeatOptions(topic, round),
+		"list":       list,
+		"count":      count,
+		"page":       page,
+		"pageSize":   pageSize,
+		"leaderSide": leaderOf(round),
+	}, nil
+}
+
+func (s *pkService) HeatMe(userId, topicId, roundId int64) (map[string]any, error) {
+	topic, round, err := s.resolveTopicRound(sqls.DB(), topicId, roundId)
+	if err != nil {
+		return nil, err
+	}
+
+	bet := repositories.PKRepository.TakeBet(sqls.DB(), "round_id = ? AND user_id = ?", round.Id, userId)
+	stat := &models.TearUserEventStat{}
+	_ = sqls.DB().Where("event_type = ? AND topic_id = ? AND round_id = ? AND user_id = ?", TearEventTypePK, topic.Id, round.Id, userId).Take(stat).Error
+	myHeat := stat.HeatContribution
+	myActionCount := stat.ActionCount
+	mySideHeat := map[string]any{}
+	if stat.BetOption != "" {
+		mySideHeat[stat.BetOption] = map[string]any{"heat": stat.HeatContribution, "count": stat.ActionCount}
+	}
+
+	myRank := int64(0)
+	if myHeat > 0 {
+		type rankVal struct {
+			Rank int64 `gorm:"column:rank"`
+		}
+		var r rankVal
+		_ = sqls.DB().Raw(`
+			SELECT COUNT(1) + 1 AS rank
+			FROM (
+				SELECT user_id, SUM(heat) AS total_heat
+				FROM t_pk_action
+				WHERE round_id = ?
+				GROUP BY user_id
+			) t
+			WHERE t.total_heat > ?
+		`, round.Id, myHeat).Scan(&r).Error
+		if r.Rank > 0 {
+			myRank = r.Rank
+		} else {
+			myRank = 1
+		}
+	}
+
+	return map[string]any{
+		"topicId":           topic.Id,
+		"roundId":           round.Id,
+		"phase":             s.phaseByTime(round, dates.NowTimestamp()),
+		"options":           s.buildHeatOptions(topic, round),
+		"myOption":          stat.BetOption,
+		"receivedLikeCount": stat.LikeCount,
+		"myCommentCount":    stat.CommentCount + stat.ReplyCount,
+		"myBetAmount":       stat.BetAmount,
+		"estimatedPayout":   betPayoutPreview(bet, round),
+		"myHeat":            myHeat,
+		"myActionCount":     myActionCount,
+		"myRank":            myRank,
+		"mySideHeat":        mySideHeat,
+		"myBet":             bet,
+	}, nil
+}
+
+func (s *pkService) OddsCurrent(topicId, roundId int64) (map[string]any, error) {
+	topic, round, err := s.resolveTopicRound(sqls.DB(), topicId, roundId)
+	if err != nil {
+		return nil, err
+	}
+	options := s.buildHeatOptions(topic, round)
+	return map[string]any{
+		"topicId": topic.Id,
+		"roundId": round.Id,
+		"phase":   s.phaseByTime(round, dates.NowTimestamp()),
+		"options": options,
+		"oddsA":   calcPKOdds(round.PoolA, round.PoolB, PKSideA),
+		"oddsB":   calcPKOdds(round.PoolA, round.PoolB, PKSideB),
+	}, nil
+}
+
+func (s *pkService) RecordOption(userId int64, form PKRecordOptionForm) (map[string]any, error) {
+	form.Option = normalizePKSide(form.Option)
+	form.ActionType = strings.TrimSpace(form.ActionType)
+	form.RequestId = strings.TrimSpace(form.RequestId)
+	form.EntityType = strings.TrimSpace(form.EntityType)
+	if form.Option != PKSideA && form.Option != PKSideB {
+		return nil, errors.New("invalid option")
+	}
+	if form.ActionType == "" {
+		return nil, errors.New("actionType is required")
+	}
+	if form.RequestId == "" {
+		return nil, errors.New("requestId is required")
+	}
+	if form.EntityType == "" {
+		form.EntityType = "pk_option"
+	}
+
+	var action *models.PKAction
+	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		topic, round, err := s.resolveTopicRound(tx, form.TopicId, form.RoundId)
+		if err != nil {
+			return err
+		}
+		if s.phaseByTime(round, dates.NowTimestamp()) == PKPhaseCooldown {
+			return errors.New("pk round is cooldown")
+		}
+		if form.EntityId <= 0 {
+			form.EntityId = round.Id
+		}
+		action = &models.PKAction{
+			TopicId:    topic.Id,
+			RoundId:    round.Id,
+			UserId:     userId,
+			Side:       form.Option,
+			ActionType: form.ActionType,
+			EntityType: form.EntityType,
+			EntityId:   form.EntityId,
+			Amount:     1,
+			Heat:       1,
+			AntiSpam:   1,
+			RequestId:  form.RequestId,
+			CreateTime: dates.NowTimestamp(),
+		}
+		if err := repositories.PKRepository.CreateAction(tx, action); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+				return s.recordTearInteraction(tx, topic.Id, round.Id, userId, form.Option, form.ActionType, form.EntityType, form.EntityId, 1, form.RequestId, dates.NowTimestamp())
+			}
+			return err
+		}
+		return s.recordTearInteraction(tx, topic.Id, round.Id, userId, form.Option, form.ActionType, form.EntityType, form.EntityId, 1, form.RequestId, dates.NowTimestamp())
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"recorded":       true,
+		"optionAtAction": form.Option,
+		"actionType":     form.ActionType,
+		"requestId":      form.RequestId,
+		"action":         action,
+	}, nil
 }
 
 func (s *pkService) Downvote(userId int64, form PKDownvoteForm) (map[string]any, error) {
@@ -466,6 +906,73 @@ func (s *pkService) Comments(topicId int64, side string, cursor int64, sort stri
 		m := metaMap[c.Id]
 		ret = append(ret, map[string]any{
 			"comment":       c,
+			"option":        m.Side,
+			"side":          m.Side,
+			"heatScore":     m.HeatScore,
+			"downvoteCount": m.DownvoteCount,
+			"liked":         liked[c.Id],
+		})
+	}
+	return ret, nextCursor, hasMore, nil
+}
+
+func (s *pkService) CommentReplies(commentId, cursor int64, pageSize int, userId int64) ([]map[string]any, int64, bool, error) {
+	if commentId <= 0 {
+		return nil, cursor, false, errors.New("commentId is required")
+	}
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 20
+	}
+	parentMeta := repositories.PKRepository.TakeCommentMeta(sqls.DB(), "comment_id = ?", commentId)
+	if parentMeta == nil {
+		return nil, cursor, false, errors.New("pk comment not found")
+	}
+
+	db := sqls.DB().Table("t_comment AS c").
+		Select("c.*").
+		Joins("JOIN t_pk_comment_meta AS m ON m.comment_id = c.id").
+		Where("c.entity_type = ? AND c.entity_id = ? AND c.status = ?", constants.EntityComment, commentId, constants.StatusOk).
+		Where("m.topic_id = ? AND m.round_id = ?", parentMeta.TopicId, parentMeta.RoundId)
+	if cursor > 0 {
+		db = db.Where("c.id > ?", cursor)
+	}
+	db = db.Order("c.id asc")
+
+	var comments []models.Comment
+	if err := db.Limit(pageSize).Find(&comments).Error; err != nil {
+		return nil, cursor, false, err
+	}
+	nextCursor := cursor
+	if len(comments) > 0 {
+		nextCursor = comments[len(comments)-1].Id
+	}
+	hasMore := len(comments) >= pageSize
+
+	ids := make([]int64, 0, len(comments))
+	for _, c := range comments {
+		ids = append(ids, c.Id)
+	}
+	metaMap := map[int64]models.PKCommentMeta{}
+	if len(ids) > 0 {
+		var metas []models.PKCommentMeta
+		_ = sqls.DB().Where("comment_id IN ?", ids).Find(&metas).Error
+		for _, m := range metas {
+			metaMap[m.CommentId] = m
+		}
+	}
+	liked := map[int64]bool{}
+	if userId > 0 && len(ids) > 0 {
+		for _, id := range UserLikeService.IsLiked(userId, constants.EntityComment, ids) {
+			liked[id] = true
+		}
+	}
+
+	ret := make([]map[string]any, 0, len(comments))
+	for _, c := range comments {
+		m := metaMap[c.Id]
+		ret = append(ret, map[string]any{
+			"comment":       c,
+			"option":        m.Side,
 			"side":          m.Side,
 			"heatScore":     m.HeatScore,
 			"downvoteCount": m.DownvoteCount,
@@ -859,34 +1366,60 @@ func (s *pkService) buildTopicItem(db *gorm.DB, topic *models.PKTopic, userId in
 	season := repositories.PKRepository.TakeSeason(db, "id = ?", topic.CurrentSeasonId)
 	var myBet *models.PKBet
 	mySide := ""
+	hasBet := false
 	if userId > 0 && round != nil {
 		myBet = repositories.PKRepository.TakeBet(db, "round_id = ? AND user_id = ?", round.Id, userId)
 		if myBet != nil {
 			mySide = myBet.Side
+			hasBet = true
 		}
 	}
 	oddsA, oddsB := 0.0, 0.0
 	countdown := int64(0)
 	leader := ""
 	streak := ""
+	canSettle := false
+	settleDisabledReason := ""
+	now := dates.NowTimestamp()
 	if round != nil {
 		oddsA = calcPKOdds(round.PoolA, round.PoolB, PKSideA)
 		oddsB = calcPKOdds(round.PoolA, round.PoolB, PKSideB)
-		countdown = countdownSeconds(round, dates.NowTimestamp())
+		countdown = countdownSeconds(round, now)
 		leader = leaderOf(round)
 		streak = streakStatus(topic.LastWinner, round)
+
+		if userId <= 0 {
+			settleDisabledReason = "NOT_LOGIN"
+		} else if round.SettledAt > 0 {
+			settleDisabledReason = "ROUND_ALREADY_SETTLED"
+		} else if now < round.EndTime {
+			settleDisabledReason = "ROUND_NOT_ENDED"
+		} else {
+			canSettle = true
+		}
+	} else if userId <= 0 {
+		settleDisabledReason = "NOT_LOGIN"
+	} else {
+		settleDisabledReason = "ROUND_NOT_READY"
+	}
+
+	if !canSettle && settleDisabledReason == "" {
+		settleDisabledReason = "ROUND_NOT_READY"
 	}
 	return map[string]any{
-		"topic":            topic,
-		"round":            round,
-		"season":           season,
-		"oddsA":            oddsA,
-		"oddsB":            oddsB,
-		"leader":           leader,
-		"streakStatus":     streak,
-		"countdownSeconds": countdown,
-		"mySide":           mySide,
-		"myBet":            myBet,
+		"topic":                topic,
+		"round":                round,
+		"season":               season,
+		"oddsA":                oddsA,
+		"oddsB":                oddsB,
+		"leader":               leader,
+		"streakStatus":         streak,
+		"countdownSeconds":     countdown,
+		"mySide":               mySide,
+		"myBet":                myBet,
+		"hasBet":               hasBet,
+		"canSettle":            canSettle,
+		"settleDisabledReason": settleDisabledReason,
 	}
 }
 
@@ -942,7 +1475,7 @@ func (s *pkService) attachCommentMeta(comment *models.Comment, topic *models.PKT
 		if err := repositories.PKRepository.CreateCommentMeta(tx, meta); err != nil {
 			return err
 		}
-		return repositories.PKRepository.CreateAction(tx, &models.PKAction{
+		if err := repositories.PKRepository.CreateAction(tx, &models.PKAction{
 			TopicId:    topic.Id,
 			RoundId:    round.Id,
 			UserId:     comment.UserId,
@@ -954,7 +1487,10 @@ func (s *pkService) attachCommentMeta(comment *models.Comment, topic *models.PKT
 			Heat:       3,
 			AntiSpam:   1,
 			CreateTime: now,
-		})
+		}); err != nil {
+			return err
+		}
+		return s.recordTearInteraction(tx, topic.Id, round.Id, comment.UserId, side, actionType, constants.EntityComment, comment.Id, 3, "", now)
 	})
 }
 
@@ -962,19 +1498,35 @@ func (s *pkService) settleRound(tx *gorm.DB, topic *models.PKTopic, round *model
 	if round.SettledAt > 0 {
 		return nil
 	}
-	if _, err := s.recalcRoundHeat(tx, round.Id); err != nil {
+	options, snapshotTime, err := s.computeHeatSnapshot(tx, topic, round, TearSnapshotSettle, "ON_DEMAND")
+	if err != nil {
 		return err
 	}
-	round = repositories.PKRepository.TakeRound(tx, "id = ?", round.Id)
+	heatA := float64(0)
+	heatB := float64(0)
+	for _, option := range options {
+		side, _ := option["option"].(string)
+		hTotal, _ := option["hTotal"].(float64)
+		if side == PKSideA {
+			heatA = hTotal
+		}
+		if side == PKSideB {
+			heatB = hTotal
+		}
+	}
 	winner := PKSideDraw
-	if round.HeatA > round.HeatB {
+	if heatA > heatB {
 		winner = PKSideA
-	} else if round.HeatB > round.HeatA {
+	} else if heatB > heatA {
 		winner = PKSideB
 	}
+	round.HeatA = heatA
+	round.HeatB = heatB
+	round.CommentCount = int64(len(options))
 	round.Winner = winner
 	round.SettledAt = now
 	round.Phase = PKPhaseCooldown
+	round.UpdateTime = snapshotTime
 	round.UpdateTime = now
 	if err := repositories.PKRepository.UpdateRound(tx, round); err != nil {
 		return err
@@ -1182,7 +1734,7 @@ func normalizePKSide(side string) string {
 }
 
 func calcPKOdds(poolA, poolB int64, side string) float64 {
-	virtual := float64(PKBetAmount)
+	virtual := float64(PKBetAmountDefault)
 	effA := virtual + float64(poolA)
 	effB := virtual + float64(poolB)
 	if side == PKSideA {
@@ -1234,4 +1786,276 @@ func countdownSeconds(round *models.PKRound, now int64) int64 {
 		return 0
 	}
 	return target - now
+}
+
+func betPayoutPreview(bet *models.PKBet, round *models.PKRound) int64 {
+	if bet == nil || round == nil {
+		return 0
+	}
+	if bet.Side == PKSideA {
+		if round.PoolA <= 0 {
+			return bet.Amount
+		}
+		return bet.Amount + int64(math.Floor(float64(round.PoolB)*float64(bet.Amount)/float64(round.PoolA)))
+	}
+	if bet.Side == PKSideB {
+		if round.PoolB <= 0 {
+			return bet.Amount
+		}
+		return bet.Amount + int64(math.Floor(float64(round.PoolA)*float64(bet.Amount)/float64(round.PoolB)))
+	}
+	return 0
+}
+
+func (s *pkService) resolveTopicRound(db *gorm.DB, topicId, roundId int64) (*models.PKTopic, *models.PKRound, error) {
+	if roundId > 0 {
+		round := repositories.PKRepository.TakeRound(db, "id = ?", roundId)
+		if round == nil {
+			return nil, nil, errors.New("pk round not found")
+		}
+		topic := repositories.PKRepository.TakeTopic(db, "id = ?", round.TopicId)
+		if topic == nil {
+			return nil, nil, errors.New("pk topic not found")
+		}
+		if topicId > 0 && topic.Id != topicId {
+			return nil, nil, errors.New("topicId does not match roundId")
+		}
+		return topic, round, nil
+	}
+	if topicId <= 0 {
+		return nil, nil, errors.New("topicId or roundId is required")
+	}
+	topic := repositories.PKRepository.TakeTopic(db, "id = ?", topicId)
+	if topic == nil {
+		return nil, nil, errors.New("pk topic not found")
+	}
+	round := repositories.PKRepository.TakeRound(db, "id = ?", topic.CurrentRoundId)
+	if round == nil {
+		return nil, nil, errors.New("pk round not found")
+	}
+	return topic, round, nil
+}
+
+func (s *pkService) buildHeatOptions(topic *models.PKTopic, round *models.PKRound) []map[string]any {
+	if topic == nil || round == nil {
+		return []map[string]any{}
+	}
+	if snapshots, err := s.loadHeatSnapshot(sqls.DB(), topic.Id, round.Id, TearSnapshotSettle); err == nil && len(snapshots) > 0 {
+		return snapshots
+	}
+	if snapshots, err := s.loadHeatSnapshot(sqls.DB(), topic.Id, round.Id, TearSnapshotCkpt); err == nil && len(snapshots) > 0 {
+		return snapshots
+	}
+	return []map[string]any{
+		{
+			"option":    PKSideA,
+			"name":      topic.SideAName,
+			"heat":      round.HeatA,
+			"pool":      round.PoolA,
+			"betCount":  round.BetCountA,
+			"odds":      calcPKOdds(round.PoolA, round.PoolB, PKSideA),
+			"isLeading": round.HeatA > round.HeatB,
+		},
+		{
+			"option":    PKSideB,
+			"name":      topic.SideBName,
+			"heat":      round.HeatB,
+			"pool":      round.PoolB,
+			"betCount":  round.BetCountB,
+			"odds":      calcPKOdds(round.PoolA, round.PoolB, PKSideB),
+			"isLeading": round.HeatB > round.HeatA,
+		},
+	}
+}
+
+func (s *pkService) loadHeatSnapshot(db *gorm.DB, topicId, roundId int64, snapshotType string) ([]map[string]any, error) {
+	return TearHeatService.GetHeatSnapshot(db, TearHeatSnapshotQuery{
+		EventType:    TearEventTypePK,
+		EventId:      topicId,
+		RoundId:      roundId,
+		SnapshotType: snapshotType,
+	})
+}
+
+func (s *pkService) computeHeatSnapshot(tx *gorm.DB, topic *models.PKTopic, round *models.PKRound, snapshotType, freezeSource string) ([]map[string]any, int64, error) {
+	if topic == nil || round == nil {
+		return nil, 0, errors.New("pk topic/round is required")
+	}
+	return TearHeatService.ComputeHeatSnapshot(tx, TearHeatSnapshotComputeRequest{
+		EventType:    TearEventTypePK,
+		EventId:      topic.Id,
+		TopicId:      topic.Id,
+		RoundId:      round.Id,
+		SnapshotType: snapshotType,
+		FreezeSource: freezeSource,
+	})
+}
+
+func (s *pkService) getCampOption(db *gorm.DB, topicId, roundId, userId int64) string {
+	if userId <= 0 || roundId <= 0 {
+		return ""
+	}
+	member := &models.TearCampMember{}
+	if err := db.Where("event_type = ? AND topic_id = ? AND round_id = ? AND user_id = ?", TearEventTypePK, topicId, roundId, userId).Take(member).Error; err != nil {
+		return ""
+	}
+	return normalizePKSide(member.Option)
+}
+
+func (s *pkService) ensureCampLockForBet(tx *gorm.DB, topicId, roundId, userId int64, option string, now int64) error {
+	option = normalizePKSide(option)
+	member := &models.TearCampMember{}
+	err := tx.Where("event_type = ? AND topic_id = ? AND round_id = ? AND user_id = ?", TearEventTypePK, topicId, roundId, userId).Take(member).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return tx.Create(&models.TearCampMember{
+				EventType:       TearEventTypePK,
+				EventId:         topicId,
+				TopicId:         topicId,
+				RoundId:         roundId,
+				UserId:          userId,
+				Option:          option,
+				LockType:        TearLockTypeBet,
+				FirstActionTime: now,
+				CreateTime:      now,
+				UpdateTime:      now,
+			}).Error
+		}
+		return err
+	}
+	if normalizePKSide(member.Option) != option {
+		if strings.EqualFold(member.LockType, TearLockTypeBet) {
+			return errors.New("TEAR_CAMP_LOCKED_BY_BET")
+		}
+		return errors.New("TEAR_CAMP_CONFLICT")
+	}
+	member.LockType = TearLockTypeBet
+	member.UpdateTime = now
+	if member.FirstActionTime == 0 {
+		member.FirstActionTime = now
+	}
+	return tx.Save(member).Error
+}
+
+func (s *pkService) ensureCampLockForInteract(tx *gorm.DB, topicId, roundId, userId int64, option string, now int64) error {
+	option = normalizePKSide(option)
+	member := &models.TearCampMember{}
+	err := tx.Where("event_type = ? AND topic_id = ? AND round_id = ? AND user_id = ?", TearEventTypePK, topicId, roundId, userId).Take(member).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return tx.Create(&models.TearCampMember{
+				EventType:       TearEventTypePK,
+				EventId:         topicId,
+				TopicId:         topicId,
+				RoundId:         roundId,
+				UserId:          userId,
+				Option:          option,
+				LockType:        TearLockTypeInteract,
+				FirstActionTime: now,
+				CreateTime:      now,
+				UpdateTime:      now,
+			}).Error
+		}
+		return err
+	}
+	if normalizePKSide(member.Option) != option {
+		if strings.EqualFold(member.LockType, TearLockTypeBet) {
+			return errors.New("TEAR_CAMP_LOCKED_BY_BET")
+		}
+		return errors.New("TEAR_CAMP_CONFLICT")
+	}
+	if member.FirstActionTime == 0 {
+		member.FirstActionTime = now
+	}
+	member.UpdateTime = now
+	return tx.Save(member).Error
+}
+
+func (s *pkService) recordTearBetStat(tx *gorm.DB, topicId, roundId, userId int64, betOption string, betAmount int64, now int64) error {
+	stat := &models.TearUserEventStat{
+		EventType:  "pk",
+		EventId:    topicId,
+		TopicId:    topicId,
+		RoundId:    roundId,
+		UserId:     userId,
+		BetOption:  betOption,
+		BetAmount:  betAmount,
+		CreateTime: now,
+		UpdateTime: now,
+	}
+	return tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "event_type"}, {Name: "round_id"}, {Name: "user_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"event_id":    topicId,
+			"topic_id":    topicId,
+			"bet_option":  betOption,
+			"bet_amount":  betAmount,
+			"update_time": now,
+		}),
+	}).Create(stat).Error
+}
+
+func (s *pkService) recordTearInteraction(tx *gorm.DB, topicId, roundId, userId int64, option, actionType, entityType string, entityId int64, heat float64, requestId string, now int64) error {
+	log := &models.TearInteractLog{
+		EventType:        "pk",
+		EventId:          topicId,
+		TopicId:          topicId,
+		RoundId:          roundId,
+		UserId:           userId,
+		OptionAtAction:   option,
+		ActionType:       actionType,
+		EntityType:       entityType,
+		EntityId:         entityId,
+		HeatContribution: heat,
+		RequestId:        requestId,
+		CreateTime:       now,
+	}
+	ret := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(log)
+	if ret.Error != nil {
+		return ret.Error
+	}
+	if ret.RowsAffected == 0 {
+		return nil
+	}
+
+	commentInc := int64(0)
+	replyInc := int64(0)
+	likeInc := int64(0)
+	if actionType == "comment" {
+		commentInc = 1
+	}
+	if actionType == "reply" {
+		replyInc = 1
+	}
+	if actionType == "like" {
+		likeInc = 1
+	}
+
+	stat := &models.TearUserEventStat{
+		EventType:        "pk",
+		EventId:          topicId,
+		TopicId:          topicId,
+		RoundId:          roundId,
+		UserId:           userId,
+		ActionCount:      1,
+		CommentCount:     commentInc,
+		ReplyCount:       replyInc,
+		LikeCount:        likeInc,
+		HeatContribution: heat,
+		CreateTime:       now,
+		UpdateTime:       now,
+	}
+	return tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "event_type"}, {Name: "round_id"}, {Name: "user_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"event_id":          topicId,
+			"topic_id":          topicId,
+			"action_count":      gorm.Expr("action_count + ?", 1),
+			"comment_count":     gorm.Expr("comment_count + ?", commentInc),
+			"reply_count":       gorm.Expr("reply_count + ?", replyInc),
+			"like_count":        gorm.Expr("like_count + ?", likeInc),
+			"heat_contribution": gorm.Expr("heat_contribution + ?", heat),
+			"update_time":       now,
+		}),
+	}).Create(stat).Error
 }

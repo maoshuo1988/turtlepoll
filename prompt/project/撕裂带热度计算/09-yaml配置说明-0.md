@@ -14,11 +14,7 @@ tear:
     cooldown_seconds: 600
   heat:
     comment_cap: 20
-    coin_factor: 0.5
-    t_normal: 1.0
-    t_last_10m: 0.8
-    t_last_3m: 0.5
-    quality_default: 1.0
+    coin_factor: 0.02
   settle:
     retry_max: 3
     retry_backoff_seconds: [10, 30, 60]
@@ -28,6 +24,8 @@ tear:
     result_source_retry: 2
     coin_timeout_ms: 1000
     coin_retry: 2
+    user_profile_timeout_ms: 500
+    user_profile_batch_limit: 200
 ```
 
 ## 2. 字段说明
@@ -39,11 +37,13 @@ tear:
 | tear.dark.mint_ratio | float | `0<ratio<=1` |
 | tear.dark.mint_floor | int | `>=0` |
 | tear.round.duration_seconds | int | 固定 `259200` |
-| tear.round.cooldown_seconds | int | 固定 `600` |
+| tear.round.cooldown_seconds | int | 固定 `600`，仅用于对立PK业务冷却期，不作为热度冻结条件 |
 | tear.heat.comment_cap | int | 固定 `20` |
-| tear.heat.coin_factor | float | 固定 `0.5` |
+| tear.heat.coin_factor | float | 固定 `0.02` |
 | tear.settle.retry_max | int | `1~5` |
 | tear.settle.lock_ttl_seconds | int | `60~900` |
+| tear.external.user_profile_timeout_ms | int | `100~2000` |
+| tear.external.user_profile_batch_limit | int | `1~500` |
 
 ## 3. 外部特性依赖详情
 
@@ -131,3 +131,22 @@ tear:
   - requestId 幂等窗口 `48h`
 - 验收标准:
   - 重放同一 requestId 不产生重复入账
+
+### 1.5 EXT-05 用户资料批量查询
+
+- 接口名: `UserProfileService.BatchGetUserProfile`
+- 调用方向: TearQueryService -> UserProfileService
+- 输入参数:
+  - `userIds` (array<int64>, 必填)
+- 输出参数:
+  - `profiles[]` (array, 每项包含 `userId/username/avatar`)
+- 错误码:
+  - `PROFILE_PARTIAL_MISS`: 部分用户资料缺失
+  - `PROFILE_SERVICE_TIMEOUT`: 服务超时
+- 固定策略:
+  - 超时 `500ms`
+  - 重试 `1次`
+  - 单批上限 `200`
+  - 并发 `10`
+- 验收标准:
+  - 榜单接口中用户名与头像回填成功率 `>=99.9%`

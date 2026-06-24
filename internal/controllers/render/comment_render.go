@@ -54,17 +54,18 @@ func doBuildComment(comment *models.Comment, currentUser *models.User, isBuildRe
 	}
 
 	ret := &resp.CommentResponse{
-		Id:           comment.Id,
-		User:         BuildUserInfoDefaultIfNull(comment.UserId),
-		EntityType:   comment.EntityType,
-		EntityId:     comment.EntityId,
-		QuoteId:      comment.QuoteId,
-		LikeCount:    comment.LikeCount,
-		CommentCount: comment.CommentCount,
-		ContentType:  comment.ContentType,
-		IpLocation:   comment.IpLocation,
-		Status:       comment.Status,
-		CreateTime:   comment.CreateTime,
+		Id:             comment.Id,
+		User:           BuildUserInfoDefaultIfNull(comment.UserId),
+		OptionAtAction: services.PKService.CommentOptionAtAction(comment.Id),
+		EntityType:     comment.EntityType,
+		EntityId:       comment.EntityId,
+		QuoteId:        comment.QuoteId,
+		LikeCount:      comment.LikeCount,
+		CommentCount:   comment.CommentCount,
+		ContentType:    comment.ContentType,
+		IpLocation:     comment.IpLocation,
+		Status:         comment.Status,
+		CreateTime:     comment.CreateTime,
 	}
 
 	if comment.Status == constants.StatusOk {

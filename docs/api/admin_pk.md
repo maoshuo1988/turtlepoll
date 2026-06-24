@@ -1,70 +1,96 @@
 # 对立PK管理（Admin PK）
 
-> 设计稿文档：本模块尚未在 `internal/server/router.go` 注册。建议新增管理端路由组 `/api/admin/pk`，经过 `AuthMiddleware` 与 `AdminMiddleware`。
+路由前缀：/api/admin/pk
+认证：管理员登录
 
-## 模块说明
+## 接口总览
 
-管理端负责维护对立PK话题、查看回合与赛季、处理异常热度重算。
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/admin/pk/topic/list | 话题列表 |
+| POST | /api/admin/pk/topic/save | 新增/编辑话题 |
+| POST | /api/admin/pk/topic/status | 话题启停 |
+| GET | /api/admin/pk/round/list | 回合列表 |
+| GET | /api/admin/pk/season/list | 赛季列表 |
+| POST | /api/admin/pk/recalc/heat | 重算回合热度 |
 
-默认话题建议通过 migration 幂等初始化；如果需要后台按钮，再补初始化接口。
+## 详细说明
 
-## 通用约定
+### 1) GET /api/admin/pk/topic/list
+请求参数：page, pageSize, status, q
 
-- 基础路径：`/api/admin/pk`
-- 认证：需要管理员权限。
-- 返回结构沿用项目通用 `web.JsonResult`。
-- 状态：话题 `enabled/disabled`；赛季 `active/finished`；回合 `betting/locked/cooldown/settled`。
+请求参数 JSON 示例（Query）：
+```json
+{
+  "page": 1,
+  "pageSize": 20,
+  "status": "enabled",
+  "q": "足球"
+}
+```
 
-## 接口列表
+返回 data：
+- list（buildTopicItem 结构，含 topic/round/season/个人态字段占位）
+- count, page, pageSize
 
-### 1. 话题管理列表
-
-- 接口：`GET /api/admin/pk/topic/list`
-- 功能：分页查看PK话题。
-
-#### 请求参数
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 默认 1 |
-| `pageSize` | int | 否 | 默认 20 |
-| `status` | string | 否 | `enabled/disabled` |
-| `q` | string | 否 | 搜索标题、slug、阵营名称 |
-
-#### 返回 data
-
+返回 JSON 示例（data）：
 ```json
 {
   "list": [
     {
-      "topic": {},
-      "round": {},
-      "season": {},
-      "stats": {
-        "totalRounds": 20,
-        "winsA": 11,
-        "winsB": 9
+      "topic": {
+        "id": 1,
+        "slug": "pk-hero",
+        "title": "足球GOAT之争",
+        "sideAName": "梅西",
+        "sideBName": "C罗",
+        "status": "enabled"
+      },
+      "round": {
+        "id": 101,
+        "phase": "betting",
+        "winner": "",
+        "settledAt": 0
+      },
+      "season": {
+        "id": 11,
+        "seasonNo": 3,
+        "status": "active"
       }
     }
   ],
-  "count": 16
+  "count": 1,
+  "page": 1,
+  "pageSize": 20
 }
 ```
 
-#### 后端工作
+**请求字段说明：**
+| 字段 | 说明 |
+|------|------|
+| page / pageSize | 分页参数 |
+| status | 筛选话题状态：enabled=启用，disabled=停用，不传则返回全部 |
+| q | 搜索关键词，匹配标题、slug、阵营名称 |
 
-- 分页查询 `PKTopic`。
-- 批量加载当前 `PKRound`、`PKSeason`。
-- 聚合总局数、胜场等统计。
+**返回字段说明（list 每项）：**
+| 字段 | 说明 |
+|------|------|
+| topic.status | 话题状态：enabled=启用，disabled=停用 |
+| round.phase | 当前回合阶段：betting=下注期，locked=锁局期，cooldown=冷却期 |
+| round.winner | 胜方，回合结算前为空字符串 |
+| round.settledAt | 结算完成时间戳，0 表示未结算 |
+| season.status | 赛季状态：active=进行中，finished=已结束 |
 
-### 2. 新增或编辑话题
+### 2) POST /api/admin/pk/topic/save
+请求体字段：
+- id（编辑时传）
+- slug, title, sideAName, sideBName
+- status(enabled/disabled), sort
+- cover, listImage
+- sideABgImage, sideBBgImage
+- sideABgColor, sideBBgColor
 
-- 接口：`POST /api/admin/pk/topic/save`
-- 功能：创建或编辑PK话题。
-- 请求格式：JSON。
-
-#### 请求体
-
+请求 JSON 示例：
 ```json
 {
   "id": 1,
@@ -74,38 +100,69 @@
   "sideBName": "C罗",
   "status": "enabled",
   "sort": 100,
-  "cover": "",
-  "listImage": "",
-  "sideABgImage": "",
-  "sideBBgImage": "",
+  "cover": "https://example.com/pk/cover.png",
+  "listImage": "https://example.com/pk/list.png",
+  "sideABgImage": "https://example.com/pk/a-bg.png",
+  "sideBBgImage": "https://example.com/pk/b-bg.png",
   "sideABgColor": "#E23D3D",
   "sideBBgColor": "#276EF1"
 }
 ```
 
-#### 后端工作
+返回 data：topic
 
-- 校验 `title`、`sideAName`、`sideBName` 必填。
-- 校验 `slug` 格式与唯一性。
-- 新建话题时同步创建第一赛季和第一回合。
-- 编辑进行中的话题时，限制破坏性字段变更。
-- 写入操作日志。
+返回 JSON 示例（data）：
+```json
+{
+  "id": 1,
+  "slug": "pk-hero",
+  "title": "足球GOAT之争",
+  "sideAName": "梅西",
+  "sideBName": "C罗",
+  "status": "enabled",
+  "sort": 100,
+  "cover": "https://example.com/pk/cover.png",
+  "listImage": "https://example.com/pk/list.png",
+  "sideABgImage": "https://example.com/pk/a-bg.png",
+  "sideBBgImage": "https://example.com/pk/b-bg.png",
+  "sideABgColor": "#E23D3D",
+  "sideBBgColor": "#276EF1",
+  "currentRoundId": 101,
+  "currentSeasonId": 11
+}
+```
 
-#### 可能错误
+**请求字段说明：**
+| 字段 | 说明 |
+|------|------|
+| id | 话题 ID，编辑时必传，新建时不传 |
+| slug | 话题唯一标识（URL 友好），全局唯一，不可重复 |
+| title | 话题标题，必填 |
+| sideAName / sideBName | A/B 阵营名称，必填 |
+| status | 话题状态：enabled=启用，disabled=停用 |
+| sort | 排序权重，数值越大越靠前 |
+| cover | 话题封面图 URL |
+| listImage | 列表展示图 URL |
+| sideABgImage / sideBBgImage | A/B 阵营撕裂带背景图 URL |
+| sideABgColor / sideBBgColor | A/B 阵营背景色（十六进制色值） |
 
-- `title is required`
-- `sides are required`
-- `slug already exists`
-- `pk topic not found`
+**返回字段说明：**
+| 字段 | 说明 |
+|------|------|
+| currentRoundId | 新建话题时自动生成的首个回合 ID |
+| currentSeasonId | 新建话题时自动生成的首个赛季 ID |
 
-### 3. 启用或停用话题
+常见错误：
+- title is required
+- sides are required
+- invalid status
+- slug already exists
+- pk topic not found
 
-- 接口：`POST /api/admin/pk/topic/status`
-- 功能：启用或停用PK话题。
-- 请求格式：JSON。
+### 3) POST /api/admin/pk/topic/status
+请求参数或请求体：topicId, status
 
-#### 请求体
-
+请求 JSON 示例：
 ```json
 {
   "topicId": 1,
@@ -113,146 +170,188 @@
 }
 ```
 
-#### 后端工作
+返回 data：topic
 
-- 校验话题存在。
-- 启用时确保存在当前赛季和当前回合。
-- 停用后用户端列表隐藏，当前回合不再接受新动作。
-- 写入操作日志。
-
-### 4. 回合管理列表
-
-- 接口：`GET /api/admin/pk/round/list`
-- 功能：分页查询PK回合记录。
-
-#### 请求参数
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 默认 1 |
-| `pageSize` | int | 否 | 默认 20 |
-| `topicId` | int64 | 否 | 按话题筛选 |
-| `phase` | string | 否 | 按阶段筛选 |
-| `winner` | string | 否 | `A/B/draw` |
-| `startTime` | int64 | 否 | 起始时间 |
-| `endTime` | int64 | 否 | 结束时间 |
-
-#### 返回 data
-
+返回 JSON 示例（data）：
 ```json
 {
-  "list": [
-    {
-      "round": {},
-      "topic": {}
-    }
-  ],
-  "count": 1
+  "id": 1,
+  "slug": "pk-hero",
+  "title": "足球GOAT之争",
+  "status": "disabled"
 }
 ```
 
-#### 后端工作
+**请求字段说明：**
+| 字段 | 说明 |
+|------|------|
+| topicId | 话题 ID |
+| status | 目标状态：enabled=启用，disabled=停用 |
 
-- 查询 `PKRound`。
-- 关联 `PKTopic`。
-- 返回热度、奖池、下注人数、胜方、结算时间。
+**返回字段说明：**
+返回更新后的完整 topic 对象。
 
-### 5. 赛季管理列表
+常见错误：
+- invalid status
+- pk topic not found
 
-- 接口：`GET /api/admin/pk/season/list`
-- 功能：分页查询PK赛季记录。
+### 4) GET /api/admin/pk/round/list
+请求参数：page, pageSize, topicId, phase, winner
 
-#### 请求参数
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `page` | int | 否 | 默认 1 |
-| `pageSize` | int | 否 | 默认 20 |
-| `topicId` | int64 | 否 | 按话题筛选 |
-| `status` | string | 否 | `active/finished` |
-
-#### 返回 data
-
+请求参数 JSON 示例（Query）：
 ```json
 {
-  "list": [
-    {
-      "season": {},
-      "topic": {}
-    }
-  ],
-  "count": 1
-}
-```
-
-### 6. 管理员重算热度
-
-- 接口：`POST /api/admin/pk/recalc_heat`
-- 功能：异常修复或规则调整后重算指定回合热度。
-- 请求格式：JSON。
-
-#### 请求体
-
-```json
-{
+  "page": 1,
+  "pageSize": 20,
   "topicId": 1,
-  "roundId": 10,
-  "reason": "fix comment heat"
+  "phase": "betting",
+  "winner": ""
 }
 ```
 
-#### 后端工作
+返回 data：
+- list（PKRound）
+- count, page, pageSize
 
-- 校验话题和回合存在。
-- 默认只允许未结算回合重算。
-- 基于 `PKCommentMeta`、`Comment`、`UserLike`、`PKAction` 重算。
-- 更新 `PKCommentMeta.heatScore`。
-- 更新 `PKRound.heatA/heatB`。
-- 写入操作日志。
+返回 JSON 示例（data）：
+```json
+{
+  "list": [
+    {
+      "id": 101,
+      "topicId": 1,
+      "seasonId": 11,
+      "roundNo": 11,
+      "phase": "betting",
+      "heatA": 140.5,
+      "heatB": 132.2,
+      "poolA": 2400,
+      "poolB": 2100,
+      "winner": "",
+      "settledAt": 0
+    }
+  ],
+  "count": 1,
+  "page": 1,
+  "pageSize": 20
+}
+```
 
-#### 可能错误
+**请求字段说明：**
+| 字段 | 说明 |
+|------|------|
+| topicId | 按话题筛选，不传则返回全部 |
+| phase | 按阶段筛选：betting / locked / cooldown |
+| winner | 按胜方筛选：A / B / draw，不传则返回全部 |
 
-- `topicId is required`
-- `roundId is required`
-- `pk round not found`
-- `settled round cannot recalc heat`
+**返回字段说明（list 每项）：**
+| 字段 | 说明 |
+|------|------|
+| roundNo | 回合序号，从 1 开始递增 |
+| phase | 当前阶段 |
+| heatA / heatB | A/B 阵营热度（来自撕裂带快照或本地重算） |
+| poolA / poolB | A/B 阵营奖池，单位龟币 |
+| winner | 胜方，未结算为空字符串 |
+| settledAt | 结算完成时间戳，0 表示未结算 |
 
-## 现有接口影响
+### 5) GET /api/admin/pk/season/list
+请求参数：page, pageSize, topicId, status
 
-### 评论管理
+请求参数 JSON 示例（Query）：
+```json
+{
+  "page": 1,
+  "pageSize": 20,
+  "topicId": 1,
+  "status": "active"
+}
+```
 
-现有 `docs/api/admin_comment.md` 可继续管理通用评论。
+返回 data：
+- list（PKSeason）
+- count, page, pageSize
 
-如需管理PK评论的阵营、热度、拉踩数，建议后续新增：
+返回 JSON 示例（data）：
+```json
+{
+  "list": [
+    {
+      "id": 11,
+      "topicId": 1,
+      "seasonNo": 3,
+      "status": "active",
+      "totalRounds": 10,
+      "winsA": 6,
+      "winsB": 4,
+      "champion": ""
+    }
+  ],
+  "count": 1,
+  "page": 1,
+  "pageSize": 20
+}
+```
 
-- `GET /api/admin/pk/comment/list`
-- `POST /api/admin/pk/comment/recalc`
+**请求字段说明：**
+| 字段 | 说明 |
+|------|------|
+| topicId | 按话题筛选，不传则返回全部 |
+| status | 赛季状态筛选：active=进行中，finished=已结束 |
 
-### 金币流水
+**返回字段说明（list 每项）：**
+| 字段 | 说明 |
+|------|------|
+| seasonNo | 赛季序号，从 1 开始递增 |
+| status | 赛季状态：active=进行中，finished=已结束 |
+| totalRounds | 本赛季总回合数 |
+| winsA / winsB | 本赛季 A/B 阵营胜场数 |
+| champion | 赛季冠军（赛季结束后填写），进行中为空字符串 |
 
-现有管理员金币流水接口可继续按 `bizType` 查询。
+### 6) POST /api/admin/pk/recalc/heat
+请求参数或请求体：roundId
 
-建议新增流水类型：
+请求 JSON 示例：
+```json
+{
+  "roundId": 101
+}
+```
 
-- `PK_BET_STAKE_IN`
-- `PK_PAYOUT`
-- `PK_DRAW_REFUND`
+返回 data：
+- round
+- heatA
+- heatB
 
-### 操作日志
+返回 JSON 示例（data）：
+```json
+{
+  "round": {
+    "id": 101,
+    "topicId": 1,
+    "phase": "betting",
+    "heatA": 141.5,
+    "heatB": 132.2
+  },
+  "heatA": 141.5,
+  "heatB": 132.2
+}
+```
 
-话题新增、编辑、启停、热度重算都应写入操作日志，便于回溯运营行为。
+**请求字段说明：**
+| 字段 | 说明 |
+|------|------|
+| roundId | 需要重算热度的回合 ID |
 
-## 定时任务
+**返回字段说明：**
+| 字段 | 说明 |
+|------|------|
+| round | 重算后的回合对象，含最新 heatA / heatB |
+| heatA / heatB | 重算后 A/B 阵营热度（与 round.heatA / heatB 相同，方便直接读取） |
 
-管理端不直接暴露定时任务接口。后端实现时在 `internal/scheduler/cron.go` 注册：
+常见错误：
+- pk round not found
 
-- `PKService.CronTick()`
+## 备注
 
-任务内容：
-
-- `betting -> locked`
-- `locked -> cooldown`
-- `cooldown -> betting`
-- 赛季归档与下一赛季创建
-
-所有任务必须幂等。
+- 管理端当前没有 retry_settle 接口，实现中仍是 recalc heat。
+- 文档路径已按控制器方法 PostRecalcHeat 对应的 /recalc/heat 同步。

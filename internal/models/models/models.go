@@ -60,6 +60,10 @@ var Models = []interface{}{
 	&PKSettlementItem{},
 	&PKCommentMeta{},
 	&PKAction{},
+	&TearInteractLog{},
+	&TearUserEventStat{},
+	&TearCampMember{},
+	&TearHeatSnapshot{},
 
 	// TurtlePoll: Pet
 	&PetDefinition{},
