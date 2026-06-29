@@ -94,6 +94,7 @@ func NewServer() {
 		m.Party("/captcha").Handle(new(api.CaptchaController))
 		m.Party("/search").Handle(new(api.SearchController))
 		m.Party("/football").Handle(new(api.FootballController))
+		m.Party("/predict").Handle(new(api.PredictController))
 		m.Party("/predict-tag").Handle(new(api.PredictTagController))
 		m.Party("/coin").Handle(new(api.CoinController))
 		m.Party("/battle").Handle(new(api.BattleController))
@@ -160,6 +161,13 @@ func NewServer() {
 		m.Party("/user-badge").Handle(new(admin.UserBadgeController))
 		m.Party("/level-config").Handle(new(admin.LevelConfigController))
 		m.Party("/user-exp-log").Handle(new(admin.UserExpLogController))
+	})
+
+	mvc.Configure(app.Party("/api/predict/admin"), func(m *mvc.Application) {
+		m.Router.Use(middleware.InstallMiddleware)
+		m.Router.Use(middleware.AuthMiddleware)
+		m.Router.Use(middleware.AdminMiddleware)
+		m.Party("/").Handle(new(admin.PredictController))
 	})
 
 	if err := app.Listen(":"+cast.ToString(conf.Port),

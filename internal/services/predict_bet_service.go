@@ -84,6 +84,9 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 			)
 			return errors.New("market is closed")
 		}
+		if err := PredictCampLockService.EnsureBetLock(tx, market.Id, userId, option, nowSec); err != nil {
+			return err
+		}
 
 		oddsA, oddsB, effA, effB, _ := CalcClampedOdds(market.BaseA, market.BaseB, market.PoolA, market.PoolB)
 		oddsDraw := float64(0)

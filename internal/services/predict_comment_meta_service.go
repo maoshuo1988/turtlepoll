@@ -18,6 +18,17 @@ func newPredictCommentMetaService() *predictCommentMetaService {
 
 type predictCommentMetaService struct{}
 
+func (s *predictCommentMetaService) OptionAtActionByCommentId(db *gorm.DB, commentId int64) string {
+	if db == nil || commentId <= 0 {
+		return ""
+	}
+	meta := &models.PredictCommentMeta{}
+	if err := db.Take(meta, "comment_id = ?", commentId).Error; err != nil {
+		return ""
+	}
+	return strings.ToUpper(strings.TrimSpace(meta.Option))
+}
+
 func (s *predictCommentMetaService) CreateForComment(tx *gorm.DB, market *models.PredictMarket, comment *models.Comment, option string) error {
 	if tx == nil {
 		return errors.New("tx is required")

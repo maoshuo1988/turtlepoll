@@ -70,17 +70,21 @@ func TestPredictCommentRewardService_RunForMarket(t *testing.T) {
 	require.Equal(t, "PAID", log.Status)
 	require.EqualValues(t, 1000, log.MarketBetTotal)
 	require.EqualValues(t, 100, log.RewardPool)
+	require.Greater(t, log.WinnerTotalCommentHeat, float64(0))
 	require.EqualValues(t, 2, log.WinnerCommentUserCount)
 	require.EqualValues(t, 50, log.PerUserReward)
 	require.EqualValues(t, 0, log.Remainder)
+	require.EqualValues(t, now+3600, log.DeadlineAt)
 
 	var items []models.PredictCommentRewardItem
 	require.NoError(t, db.Where("reward_log_id = ?", log.Id).Order("user_id asc").Find(&items).Error)
 	require.Len(t, items, 2)
 	require.Equal(t, users[0], items[0].UserId)
+	require.Greater(t, items[0].UserCommentHeat, float64(0))
 	require.EqualValues(t, 2, items[0].CommentCount)
 	require.EqualValues(t, 50, items[0].Amount)
 	require.Equal(t, users[1], items[1].UserId)
+	require.Greater(t, items[1].UserCommentHeat, float64(0))
 	require.EqualValues(t, 1, items[1].CommentCount)
 
 	var coinLogs []models.UserCoinLog

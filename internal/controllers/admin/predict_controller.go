@@ -132,9 +132,14 @@ func (c *PredictController) ensureMarketForContextUpdate(form *models.PredictCon
 
 func (c *PredictController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("POST", "/market/settle", "PostMarket_settle")
+	b.Handle("POST", "/market-settle", "PostMarket_settle")
+	// Keep underscore routes for backward compatibility and expose hyphen routes for new contract docs.
 	b.Handle("POST", "/comment_reward/run", "PostComment_rewardRun")
 	b.Handle("POST", "/comment_reward/retry", "PostComment_rewardRetry")
 	b.Handle("GET", "/comment_reward/logs", "GetComment_rewardLogs")
+	b.Handle("POST", "/comment-reward/run", "PostComment_rewardRun")
+	b.Handle("POST", "/comment-reward/retry", "PostComment_rewardRetry")
+	b.Handle("GET", "/comment-reward/logs", "GetComment_rewardLogs")
 }
 
 // PostSyncWorldcup POST /api/admin/predict/sync_worldcup

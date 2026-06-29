@@ -319,18 +319,19 @@ type PredictCommentMeta struct {
 // PredictCommentRewardLog 预测市场获胜方评论奖励批次审计。
 type PredictCommentRewardLog struct {
 	Model
-	MarketId               int64  `gorm:"not null;uniqueIndex" json:"marketId" form:"marketId"`
-	WinnerOption           string `gorm:"size:16;not null;default:''" json:"winnerOption" form:"winnerOption"`
-	MarketBetTotal         int64  `gorm:"not null;default:0" json:"marketBetTotal" form:"marketBetTotal"`
-	RewardPool             int64  `gorm:"not null;default:0" json:"rewardPool" form:"rewardPool"`
-	WinnerCommentUserCount int64  `gorm:"not null;default:0" json:"winnerCommentUserCount" form:"winnerCommentUserCount"`
-	PerUserReward          int64  `gorm:"not null;default:0" json:"perUserReward" form:"perUserReward"`
-	Remainder              int64  `gorm:"not null;default:0" json:"remainder" form:"remainder"`
-	Status                 string `gorm:"size:32;not null;default:'PENDING';index:idx_predict_comment_reward_status_deadline" json:"status" form:"status"`
-	Reason                 string `gorm:"size:255;not null;default:''" json:"reason" form:"reason"`
-	SettledAt              int64  `gorm:"not null;default:0" json:"settledAt" form:"settledAt"`
-	DeadlineAt             int64  `gorm:"not null;default:0;index:idx_predict_comment_reward_status_deadline" json:"deadlineAt" form:"deadlineAt"`
-	PaidAt                 int64  `gorm:"not null;default:0" json:"paidAt" form:"paidAt"`
+	MarketId               int64   `gorm:"not null;uniqueIndex" json:"marketId" form:"marketId"`
+	WinnerOption           string  `gorm:"size:16;not null;default:''" json:"winnerOption" form:"winnerOption"`
+	MarketBetTotal         int64   `gorm:"not null;default:0" json:"marketBetTotal" form:"marketBetTotal"`
+	RewardPool             int64   `gorm:"not null;default:0" json:"rewardPool" form:"rewardPool"`
+	WinnerTotalCommentHeat float64 `gorm:"not null;default:0" json:"winnerTotalCommentHeat" form:"winnerTotalCommentHeat"`
+	WinnerCommentUserCount int64   `gorm:"not null;default:0" json:"winnerCommentUserCount" form:"winnerCommentUserCount"`
+	PerUserReward          int64   `gorm:"not null;default:0" json:"perUserReward" form:"perUserReward"`
+	Remainder              int64   `gorm:"not null;default:0" json:"remainder" form:"remainder"`
+	Status                 string  `gorm:"size:32;not null;default:'PENDING';index:idx_predict_comment_reward_status_deadline" json:"status" form:"status"`
+	Reason                 string  `gorm:"size:255;not null;default:''" json:"reason" form:"reason"`
+	SettledAt              int64   `gorm:"not null;default:0" json:"settledAt" form:"settledAt"`
+	DeadlineAt             int64   `gorm:"not null;default:0;index:idx_predict_comment_reward_status_deadline" json:"deadlineAt" form:"deadlineAt"`
+	PaidAt                 int64   `gorm:"not null;default:0" json:"paidAt" form:"paidAt"`
 
 	CreateTime int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 	UpdateTime int64 `gorm:"not null;default:0" json:"updateTime" form:"updateTime"`
@@ -339,12 +340,13 @@ type PredictCommentRewardLog struct {
 // PredictCommentRewardItem 预测市场评论奖励用户明细。
 type PredictCommentRewardItem struct {
 	Model
-	RewardLogId    int64 `gorm:"not null;uniqueIndex:idx_predict_comment_reward_item_log_user" json:"rewardLogId" form:"rewardLogId"`
-	MarketId       int64 `gorm:"not null;index:idx_predict_comment_reward_item_market_user" json:"marketId" form:"marketId"`
-	UserId         int64 `gorm:"not null;uniqueIndex:idx_predict_comment_reward_item_log_user;index:idx_predict_comment_reward_item_market_user" json:"userId" form:"userId"`
-	Amount         int64 `gorm:"not null;default:0" json:"amount" form:"amount"`
-	CommentCount   int64 `gorm:"not null;default:0" json:"commentCount" form:"commentCount"`
-	FirstCommentId int64 `gorm:"not null;default:0" json:"firstCommentId" form:"firstCommentId"`
-	CoinLogId      int64 `gorm:"not null;default:0" json:"coinLogId" form:"coinLogId"`
-	CreateTime     int64 `gorm:"not null;default:0" json:"createTime" form:"createTime"`
+	RewardLogId     int64   `gorm:"not null;uniqueIndex:idx_predict_comment_reward_item_log_user" json:"rewardLogId" form:"rewardLogId"`
+	MarketId        int64   `gorm:"not null;index:idx_predict_comment_reward_item_market_user" json:"marketId" form:"marketId"`
+	UserId          int64   `gorm:"not null;uniqueIndex:idx_predict_comment_reward_item_log_user;index:idx_predict_comment_reward_item_market_user" json:"userId" form:"userId"`
+	Amount          int64   `gorm:"not null;default:0" json:"amount" form:"amount"`
+	UserCommentHeat float64 `gorm:"not null;default:0" json:"userCommentHeat" form:"userCommentHeat"`
+	CommentCount    int64   `gorm:"not null;default:0" json:"commentCount" form:"commentCount"`
+	FirstCommentId  int64   `gorm:"not null;default:0" json:"firstCommentId" form:"firstCommentId"`
+	CoinLogId       int64   `gorm:"not null;default:0" json:"coinLogId" form:"coinLogId"`
+	CreateTime      int64   `gorm:"not null;default:0" json:"createTime" form:"createTime"`
 }

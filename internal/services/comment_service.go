@@ -125,6 +125,8 @@ func (s *commentService) Publish(userId int64, form req.CreateCommentForm) (*mod
 	}
 
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
+		now := dates.NowTimestamp()
+		resolvedOption := strings.ToUpper(strings.TrimSpace(form.Option))
 		if err := repositories.CommentRepository.Create(tx, comment); err != nil {
 			return err
 		}
@@ -135,7 +137,13 @@ func (s *commentService) Publish(userId int64, form req.CreateCommentForm) (*mod
 			if err := tx.Take(market, "id = ?", form.EntityId).Error; err != nil {
 				return errors.New("predict market not found")
 			}
-			if err := PredictCommentMetaService.CreateForComment(tx, market, comment, form.Option); err != nil {
+			if resolvedOption == "" {
+				return errors.New("TEAR_CAMP_OPTION_REQUIRED")
+			}
+			if err := PredictCampLockService.EnsureInteractLock(tx, market.Id, userId, resolvedOption, now); err != nil {
+				return err
+			}
+			if err := PredictCommentMetaService.CreateForComment(tx, market, comment, resolvedOption); err != nil {
 				return err
 			}
 			_ = PredictContextService.IncrHeatByMarketId(tx, form.EntityId, 1)
@@ -156,6 +164,32 @@ func (s *commentService) Publish(userId int64, form req.CreateCommentForm) (*mod
 		case constants.EntityComment: // 二级评论
 			if err := s.onComment(tx, comment); err != nil {
 				return err
+			}
+			parent := repositories.CommentRepository.Get(tx, form.EntityId)
+			if parent != nil && parent.EntityType == constants.EntityPredictMarket && parent.EntityId > 0 {
+				market := &models.PredictMarket{}
+				if err := tx.Take(market, "id = ?", parent.EntityId).Error; err != nil {
+					return errors.New("predict market not found")
+				}
+
+				campOpt := PredictCampLockService.GetOption(tx, market.Id, userId)
+				if campOpt != "" {
+					if resolvedOption != "" && !strings.EqualFold(campOpt, resolvedOption) {
+						return errors.New("TEAR_CAMP_CONFLICT")
+					}
+					resolvedOption = campOpt
+				} else if resolvedOption == "" {
+					resolvedOption = PredictCommentMetaService.OptionAtActionByCommentId(tx, parent.Id)
+				}
+				if resolvedOption == "" {
+					return errors.New("TEAR_CAMP_OPTION_REQUIRED")
+				}
+				if err := PredictCampLockService.EnsureInteractLock(tx, market.Id, userId, resolvedOption, now); err != nil {
+					return err
+				}
+				if err := PredictCommentMetaService.CreateForComment(tx, market, comment, resolvedOption); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

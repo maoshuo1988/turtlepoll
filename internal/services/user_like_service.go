@@ -203,8 +203,14 @@ func (s *userLikeService) CommentLike(userId int64, commentId int64) error {
 	if comment == nil || comment.Status != constants.StatusOk {
 		return errors.New("comment not found")
 	}
+	if err := s.ensurePredictCommentLikeCamp(sqls.DB(), userId, comment); err != nil {
+		return err
+	}
 
 	if err := sqls.WithTransaction(func(ctx *sqls.TxContext) error {
+		if err := s.ensurePredictCommentLikeCamp(ctx.Tx, userId, comment); err != nil {
+			return err
+		}
 		if err := s.like(ctx, userId, constants.EntityComment, commentId); err != nil {
 			return err
 		}
@@ -267,4 +273,39 @@ func (s *userLikeService) like(ctx *sqls.TxContext, userId int64, entityType str
 
 func (s userLikeService) unlike(tx *gorm.DB, userId int64, entityType string, entityId int64) error {
 	return tx.Delete(&models.UserLike{}, "user_id = ? and entity_id = ? and entity_type = ?", userId, entityId, entityType).Error
+}
+
+func (s *userLikeService) ensurePredictCommentLikeCamp(tx *gorm.DB, userId int64, comment *models.Comment) error {
+	if tx == nil || comment == nil || userId <= 0 {
+		return nil
+	}
+
+	var marketId int64
+	targetCommentId := comment.Id
+	if comment.EntityType == constants.EntityPredictMarket {
+		marketId = comment.EntityId
+	} else if comment.EntityType == constants.EntityComment {
+		parent := repositories.CommentRepository.Get(tx, comment.EntityId)
+		if parent == nil || parent.EntityType != constants.EntityPredictMarket {
+			return nil
+		}
+		marketId = parent.EntityId
+		targetCommentId = parent.Id
+	} else {
+		return nil
+	}
+
+	if marketId <= 0 {
+		return nil
+	}
+	targetOption := PredictCommentMetaService.OptionAtActionByCommentId(tx, targetCommentId)
+	if targetOption == "" {
+		return nil
+	}
+
+	now := dates.NowTimestamp()
+	if err := PredictCampLockService.EnsureInteractLock(tx, marketId, userId, targetOption, now); err != nil {
+		return err
+	}
+	return nil
 }

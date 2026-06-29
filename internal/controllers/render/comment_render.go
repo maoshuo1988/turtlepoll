@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/mlogclub/simple/common/arrays"
+	"github.com/mlogclub/simple/sqls"
 	"github.com/mlogclub/simple/web"
 )
 
@@ -56,7 +57,7 @@ func doBuildComment(comment *models.Comment, currentUser *models.User, isBuildRe
 	ret := &resp.CommentResponse{
 		Id:             comment.Id,
 		User:           BuildUserInfoDefaultIfNull(comment.UserId),
-		OptionAtAction: services.PKService.CommentOptionAtAction(comment.Id),
+		OptionAtAction: "",
 		EntityType:     comment.EntityType,
 		EntityId:       comment.EntityId,
 		QuoteId:        comment.QuoteId,
@@ -66,6 +67,11 @@ func doBuildComment(comment *models.Comment, currentUser *models.User, isBuildRe
 		IpLocation:     comment.IpLocation,
 		Status:         comment.Status,
 		CreateTime:     comment.CreateTime,
+	}
+	// 优先返回预测市场评论元数据中的 optionAtAction；兼容 PK 旧链路。
+	ret.OptionAtAction = services.PredictCommentMetaService.OptionAtActionByCommentId(sqls.DB(), comment.Id)
+	if ret.OptionAtAction == "" {
+		ret.OptionAtAction = services.PKService.CommentOptionAtAction(comment.Id)
 	}
 
 	if comment.Status == constants.StatusOk {

@@ -6,6 +6,7 @@ import (
 	"bbs-go/internal/repositories"
 	"errors"
 	"math"
+	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
 	"gorm.io/gorm"
@@ -32,6 +33,15 @@ type TearHeatSnapshotComputeRequest struct {
 	FreezeSource string
 }
 
+type TearHeatUserItem struct {
+	UserId      int64
+	Option      string
+	CommentHeat float64
+	LikeHeat    float64
+	CoinHeat    float64
+	TotalHeat   float64
+}
+
 func newTearHeatService() *tearHeatService {
 	return &tearHeatService{}
 }
@@ -43,7 +53,7 @@ func (s *tearHeatService) GetHeatSnapshot(db *gorm.DB, query TearHeatSnapshotQue
 	if query.EventType == "" {
 		return nil, errors.New("eventType is required")
 	}
-	if query.EventId <= 0 || query.RoundId <= 0 {
+	if query.EventId <= 0 || query.RoundId < 0 {
 		return nil, errors.New("eventId and roundId are required")
 	}
 
@@ -81,7 +91,7 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 	if req.EventType == "" {
 		return nil, 0, errors.New("eventType is required")
 	}
-	if req.EventId <= 0 || req.TopicId <= 0 || req.RoundId <= 0 {
+	if req.EventId <= 0 || req.TopicId <= 0 || req.RoundId < 0 {
 		return nil, 0, errors.New("eventId/topicId/roundId are required")
 	}
 	if req.SnapshotType == "" {
@@ -91,7 +101,7 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 		req.FreezeSource = "ON_DEMAND"
 	}
 
-	if req.EventType != TearEventTypePK {
+	if req.EventType != TearEventTypePK && req.EventType != constants.EntityPredictMarket {
 		return nil, 0, errors.New("unsupported event type")
 	}
 
@@ -113,7 +123,16 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 		}
 	}
 
-	likeHeatByOption := map[string]float64{PKSideA: 0, PKSideB: 0}
+	options := []string{PKSideA, PKSideB}
+	if req.EventType == constants.EntityPredictMarket {
+		// 预测市场兼容 DRAW（对于 binary 市场不会产生有效数据）。
+		options = []string{PredictOptionA, PredictOptionB, PredictOptionDraw}
+	}
+
+	likeHeatByOption := map[string]float64{}
+	for _, opt := range options {
+		likeHeatByOption[opt] = 0
+	}
 	type optionAgg struct {
 		Option string  `gorm:"column:option_at_action"`
 		Cnt    float64 `gorm:"column:cnt"`
@@ -125,30 +144,57 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 		Group("option_at_action").
 		Find(&likeAgg).Error
 	for _, item := range likeAgg {
-		opt := normalizePKSide(item.Option)
-		if opt == PKSideA || opt == PKSideB {
+		opt := strings.ToUpper(strings.TrimSpace(item.Option))
+		if req.EventType == TearEventTypePK {
+			opt = normalizePKSide(opt)
+		}
+		if _, ok := likeHeatByOption[opt]; ok {
 			likeHeatByOption[opt] = item.Cnt
 		}
 	}
 
-	commentHeatByOption := map[string]float64{PKSideA: 0, PKSideB: 0}
-	var metas []models.PKCommentMeta
-	if err := tx.Where("topic_id = ? AND round_id = ?", req.TopicId, req.RoundId).Find(&metas).Error; err != nil {
-		return nil, 0, err
+	commentHeatByOption := map[string]float64{}
+	for _, opt := range options {
+		commentHeatByOption[opt] = 0
 	}
-	for _, meta := range metas {
-		comment := repositories.CommentRepository.Get(tx, meta.CommentId)
-		if comment == nil || comment.Status != constants.StatusOk {
-			continue
+	if req.EventType == TearEventTypePK {
+		var metas []models.PKCommentMeta
+		if err := tx.Where("topic_id = ? AND round_id = ?", req.TopicId, req.RoundId).Find(&metas).Error; err != nil {
+			return nil, 0, err
 		}
-		heat := math.Min(3*(1+math.Log(1+float64(comment.LikeCount))), 20)
-		opt := normalizePKSide(meta.Side)
-		if opt == PKSideA || opt == PKSideB {
-			commentHeatByOption[opt] += heat
+		for _, meta := range metas {
+			comment := repositories.CommentRepository.Get(tx, meta.CommentId)
+			if comment == nil || comment.Status != constants.StatusOk {
+				continue
+			}
+			heat := math.Min(3*(1+math.Log(1+float64(comment.LikeCount))), 20)
+			opt := normalizePKSide(meta.Side)
+			if _, ok := commentHeatByOption[opt]; ok {
+				commentHeatByOption[opt] += heat
+			}
+		}
+	} else {
+		var metas []models.PredictCommentMeta
+		if err := tx.Where("market_id = ?", req.TopicId).Find(&metas).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, meta := range metas {
+			comment := repositories.CommentRepository.Get(tx, meta.CommentId)
+			if comment == nil || comment.Status != constants.StatusOk {
+				continue
+			}
+			heat := math.Min(3*(1+math.Log(1+float64(comment.LikeCount))), 20)
+			opt := strings.ToUpper(strings.TrimSpace(meta.Option))
+			if _, ok := commentHeatByOption[opt]; ok {
+				commentHeatByOption[opt] += heat
+			}
 		}
 	}
 
-	coinHeatByOption := map[string]float64{PKSideA: 0, PKSideB: 0}
+	coinHeatByOption := map[string]float64{}
+	for _, opt := range options {
+		coinHeatByOption[opt] = 0
+	}
 	type coinAgg struct {
 		Option string  `gorm:"column:bet_option"`
 		Coin   float64 `gorm:"column:coin"`
@@ -160,15 +206,18 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 		Group("bet_option").
 		Find(&coins).Error
 	for _, item := range coins {
-		opt := normalizePKSide(item.Option)
-		if opt == PKSideA || opt == PKSideB {
+		opt := strings.ToUpper(strings.TrimSpace(item.Option))
+		if req.EventType == TearEventTypePK {
+			opt = normalizePKSide(opt)
+		}
+		if _, ok := coinHeatByOption[opt]; ok {
 			coinHeatByOption[opt] = item.Coin
 		}
 	}
 
 	now := dates.NowTimestamp()
 	upsertCols := []clause.Column{{Name: "event_type"}, {Name: "event_id"}, {Name: "round_id"}, {Name: "option"}, {Name: "snapshot_type"}}
-	for _, opt := range []string{PKSideA, PKSideB} {
+	for _, opt := range options {
 		item := &models.TearHeatSnapshot{
 			EventType:    req.EventType,
 			EventId:      req.EventId,
@@ -211,4 +260,51 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 		return nil, 0, err
 	}
 	return snapshots, now, nil
+}
+
+func (s *tearHeatService) GetUserHeatItems(tx *gorm.DB, eventType string, topicId, roundId int64) ([]TearHeatUserItem, error) {
+	if tx == nil {
+		return nil, errors.New("tx is required")
+	}
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" {
+		return nil, errors.New("eventType is required")
+	}
+	if topicId <= 0 || roundId < 0 {
+		return nil, errors.New("topicId/roundId are required")
+	}
+	if eventType != TearEventTypePK && eventType != constants.EntityPredictMarket {
+		return nil, errors.New("unsupported event type")
+	}
+
+	var rows []models.TearUserEventStat
+	if err := tx.Where("event_type = ? AND topic_id = ? AND round_id = ?", eventType, topicId, roundId).
+		Order("user_id ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []TearHeatUserItem{}, nil
+	}
+
+	items := make([]TearHeatUserItem, 0, len(rows))
+	for _, row := range rows {
+		option := strings.ToUpper(strings.TrimSpace(row.BetOption))
+		if eventType == TearEventTypePK {
+			option = normalizePKSide(option)
+		}
+		if option == "" {
+			continue
+		}
+		coinHeat := float64(row.BetAmount) * 0.02
+		items = append(items, TearHeatUserItem{
+			UserId:      row.UserId,
+			Option:      option,
+			CommentHeat: row.HeatContribution,
+			LikeHeat:    float64(row.LikeCount),
+			CoinHeat:    coinHeat,
+			TotalHeat:   row.HeatContribution + float64(row.LikeCount) + coinHeat,
+		})
+	}
+	return items, nil
 }
