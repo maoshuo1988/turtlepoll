@@ -1391,7 +1391,7 @@ func (s *pkService) CronTick() error {
 					slog.Int64("roundId", round.Id),
 				)
 			}
-			if round.Phase == PKPhaseCooldown && now >= round.NextRoundTime {
+			if round.Phase == PKPhaseSettled && now >= round.NextRoundTime {
 				slog.Info("pk next round trigger",
 					slog.String("marker", PKFlowLogMarker),
 					slog.Int64("topicId", topic.Id),
