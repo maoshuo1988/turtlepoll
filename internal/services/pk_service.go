@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -48,6 +49,8 @@ const (
 	TearLockTypeBet      = "BET"
 	TearSnapshotSettle   = "SETTLE"
 	TearSnapshotCkpt     = "CHECKPOINT"
+
+	PKFlowLogMarker = "PK_FLOW"
 )
 
 type pkService struct{}
@@ -1307,34 +1310,112 @@ func (s *pkService) CronTick() error {
 	if err := sqls.DB().Where("status = ?", PKTopicStatusEnabled).Find(&topics).Error; err != nil {
 		return err
 	}
+	slog.Info("pk cron scan topics",
+		slog.String("marker", PKFlowLogMarker),
+		slog.Int("topicCount", len(topics)),
+		slog.Int64("now", now),
+	)
 	for i := range topics {
 		if err := sqls.DB().Transaction(func(tx *gorm.DB) error {
 			topic := repositories.PKRepository.TakeTopic(tx, "id = ?", topics[i].Id)
 			if topic == nil {
+				slog.Warn("pk cron topic missing",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topics[i].Id),
+				)
 				return nil
 			}
 			if err := s.ensureTopicRuntime(tx, topic, now); err != nil {
+				slog.Error("pk cron ensure runtime failed",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topic.Id),
+					slog.Any("err", err),
+				)
 				return err
 			}
 			round, err := repositories.PKRepository.TakeRoundForUpdate(tx, topic.CurrentRoundId)
 			if err != nil {
+				slog.Error("pk cron load current round failed",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topic.Id),
+					slog.Int64("currentRoundId", topic.CurrentRoundId),
+					slog.Any("err", err),
+				)
 				return err
 			}
 			oldPhase := round.Phase
+			oldRoundID := round.Id
 			s.syncRoundPhase(round, now)
 			if oldPhase != round.Phase {
+				slog.Info("pk round phase changed",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topic.Id),
+					slog.Int64("roundId", round.Id),
+					slog.String("from", oldPhase),
+					slog.String("to", round.Phase),
+					slog.Int64("now", now),
+					slog.Int64("lockTime", round.LockTime),
+					slog.Int64("endTime", round.EndTime),
+					slog.Int64("nextRoundTime", round.NextRoundTime),
+				)
 				round.UpdateTime = now
 				if err := repositories.PKRepository.UpdateRound(tx, round); err != nil {
+					slog.Error("pk round phase update failed",
+						slog.String("marker", PKFlowLogMarker),
+						slog.Int64("topicId", topic.Id),
+						slog.Int64("roundId", round.Id),
+						slog.Any("err", err),
+					)
 					return err
 				}
 			}
 			if round.Phase == PKPhaseCooldown && round.SettledAt == 0 {
+				slog.Info("pk round settle trigger",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topic.Id),
+					slog.Int64("roundId", round.Id),
+					slog.Int64("now", now),
+				)
 				if err := s.settleRound(tx, topic, round, now); err != nil {
+					slog.Error("pk round settle failed",
+						slog.String("marker", PKFlowLogMarker),
+						slog.Int64("topicId", topic.Id),
+						slog.Int64("roundId", round.Id),
+						slog.Any("err", err),
+					)
 					return err
 				}
+				slog.Info("pk round settle done",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topic.Id),
+					slog.Int64("roundId", round.Id),
+				)
 			}
 			if round.Phase == PKPhaseCooldown && now >= round.NextRoundTime {
-				return s.createNextRound(tx, topic, round, now)
+				slog.Info("pk next round trigger",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topic.Id),
+					slog.Int64("prevRoundId", round.Id),
+					slog.Int("prevRoundNo", round.RoundNo),
+					slog.Int64("now", now),
+					slog.Int64("nextRoundTime", round.NextRoundTime),
+				)
+				if err := s.createNextRound(tx, topic, round, now); err != nil {
+					slog.Error("pk next round create failed",
+						slog.String("marker", PKFlowLogMarker),
+						slog.Int64("topicId", topic.Id),
+						slog.Int64("prevRoundId", round.Id),
+						slog.Any("err", err),
+					)
+					return err
+				}
+				slog.Info("pk next round create done",
+					slog.String("marker", PKFlowLogMarker),
+					slog.Int64("topicId", topic.Id),
+					slog.Int64("prevRoundId", oldRoundID),
+					slog.Int64("currentRoundId", topic.CurrentRoundId),
+				)
+				return nil
 			}
 			return repositories.PKRepository.UpdateTopic(tx, topic)
 		}); err != nil {
@@ -1658,6 +1739,12 @@ func (s *pkService) updateTopicAndSeasonAfterRound(tx *gorm.DB, topic *models.PK
 func (s *pkService) createNextRound(tx *gorm.DB, topic *models.PKTopic, prev *models.PKRound, now int64) error {
 	season := repositories.PKRepository.TakeSeason(tx, "id = ?", topic.CurrentSeasonId)
 	if season == nil || season.Status == PKSeasonStatusFinished || now >= season.EndTime {
+		slog.Info("pk next round needs new season",
+			slog.String("marker", PKFlowLogMarker),
+			slog.Int64("topicId", topic.Id),
+			slog.Int64("currentSeasonId", topic.CurrentSeasonId),
+			slog.Bool("seasonNil", season == nil),
+		)
 		seasonNo := 1
 		var latest models.PKSeason
 		if err := tx.Where("topic_id = ?", topic.Id).Order("season_no desc").Limit(1).Find(&latest).Error; err == nil && latest.Id > 0 {
@@ -1679,15 +1766,38 @@ func (s *pkService) createNextRound(tx *gorm.DB, topic *models.PKTopic, prev *mo
 	}
 	nextNo := prev.RoundNo + 1
 	if repositories.PKRepository.TakeRound(tx, "topic_id = ? AND round_no = ?", topic.Id, nextNo) != nil {
+		slog.Warn("pk next round skipped due to duplicate roundNo",
+			slog.String("marker", PKFlowLogMarker),
+			slog.Int64("topicId", topic.Id),
+			slog.Int("nextRoundNo", nextNo),
+		)
 		return nil
 	}
 	round := newPKRound(topic.Id, season.Id, nextNo, now)
 	if err := repositories.PKRepository.CreateRound(tx, round); err != nil {
 		return err
 	}
+	slog.Info("pk next round row created",
+		slog.String("marker", PKFlowLogMarker),
+		slog.Int64("topicId", topic.Id),
+		slog.Int64("seasonId", season.Id),
+		slog.Int64("roundId", round.Id),
+		slog.Int("roundNo", round.RoundNo),
+		slog.Int64("startTime", round.StartTime),
+		slog.Int64("nextRoundTime", round.NextRoundTime),
+	)
 	topic.CurrentRoundId = round.Id
 	topic.UpdateTime = now
-	return repositories.PKRepository.UpdateTopic(tx, topic)
+	if err := repositories.PKRepository.UpdateTopic(tx, topic); err != nil {
+		return err
+	}
+	slog.Info("pk topic currentRound switched",
+		slog.String("marker", PKFlowLogMarker),
+		slog.Int64("topicId", topic.Id),
+		slog.Int64("currentRoundId", topic.CurrentRoundId),
+		slog.Int64("currentSeasonId", topic.CurrentSeasonId),
+	)
+	return nil
 }
 
 func newPKRound(topicId, seasonId int64, roundNo int, start int64) *models.PKRound {
