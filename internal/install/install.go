@@ -326,9 +326,8 @@ func InitLocales() error {
 
 func InitOthers() error {
 	idcodec.Init(config.Instance.IDCodec.Key)
-	if config.IsProd() {
-		scheduler.Start()
-	}
+	// 后台轮询负责 PK/赛事等自动推进逻辑，已安装环境都需要启动。
+	scheduler.Start()
 	iplocator.InitIpLocator()
 	search.Init()
 	// 初始化 Redis（可选，若连接失败仅记录警告但不中断启动）
