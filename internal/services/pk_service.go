@@ -2160,11 +2160,11 @@ func (s *pkService) recordTearInteraction(tx *gorm.DB, topicId, roundId, userId 
 		DoUpdates: clause.Assignments(map[string]any{
 			"event_id":          topicId,
 			"topic_id":          topicId,
-			"action_count":      gorm.Expr("action_count + ?", 1),
-			"comment_count":     gorm.Expr("comment_count + ?", commentInc),
-			"reply_count":       gorm.Expr("reply_count + ?", replyInc),
-			"like_count":        gorm.Expr("like_count + ?", likeInc),
-			"heat_contribution": gorm.Expr("heat_contribution + ?", heat),
+			"action_count":      gorm.Expr("t_tear_user_event_stat.action_count + ?", 1),
+			"comment_count":     gorm.Expr("t_tear_user_event_stat.comment_count + ?", commentInc),
+			"reply_count":       gorm.Expr("t_tear_user_event_stat.reply_count + ?", replyInc),
+			"like_count":        gorm.Expr("t_tear_user_event_stat.like_count + ?", likeInc),
+			"heat_contribution": gorm.Expr("t_tear_user_event_stat.heat_contribution + ?", heat),
 			"update_time":       now,
 		}),
 	}).Create(stat).Error
