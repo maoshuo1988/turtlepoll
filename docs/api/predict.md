@@ -18,6 +18,7 @@
 | 分类 | 方法 | 路径 | 认证 | 说明 | 当前实现映射 |
 |------|------|------|------|------|------|
 | 市场查询 | GET | `/api/predict/markets` | 是 | 查询预测市场聚合列表 | `/api/predict/markets`（内部复用 football 查询逻辑） |
+| 市场查询 | GET | `/api/predict/my/markets` | 是 | 查询我参与（下注）的市场列表（支持状态筛选） | `/api/predict/my/markets`（基于 PredictBet 去重 market） |
 | 市场查询 | GET | `/api/predict/markets/by-name` | 是 | 按名称模糊查询市场 | `/api/predict/markets/by-name`（兼容旧：`/api/football/markets/by_name`） |
 | 市场查询 | GET | `/api/predict/markets/by-tag` | 是 | 按标签查询市场 | `/api/predict/markets/by-tag`（兼容旧：`/api/football/markets/by_tag`） |
 | 市场查询 | GET | `/api/predict/bet-settle-result` | 是 | 查询当前用户某市场下注结算结果 | `/api/predict/bet-settle-result`（兼容旧：`/api/football/bet_settle_result`） |
@@ -47,6 +48,7 @@
 统一约定：以下市场查询接口都返回 `tearSettlement`，用于前端直接判断“是否可触发撕裂带结算”与“当前结算状态”。
 
 - `GET /api/predict/markets`
+- `GET /api/predict/my/markets`
 - `GET /api/predict/markets/by-name`
 - `GET /api/predict/markets/by-tag`
 - `GET /api/predict/bet-settle-result`
@@ -246,6 +248,43 @@ GET /api/predict/bet-settle-result
 
 - 未登录：`errs.NotLogin()`
 - 非本人：`errs.NoPermission()`
+
+### 1.5 查询我参与（下注）的市场列表
+
+```text
+GET /api/predict/my/markets
+```
+
+认证：需要登录。
+
+查询参数：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `page` | int | 否 | 页码，默认 1 |
+| `limit` | int | 否 | 每页条数，默认 20，最大 100 |
+| `status` | string | 否 | 状态筛选：`OPEN/CLOSED/CLOSE/SETTLED`，兼容 `进行中/待结算/已结算` |
+
+返回值（data）：
+
+- `list`
+- `total`
+- `status`
+
+`list` 每项结构与 `GET /api/predict/markets` 对齐：
+
+- `market`
+- `context`
+- `schedule`
+- `matchPhase`
+- `hasBet`
+- `betSettleResult`
+- `tearSettlement`
+
+说明：
+
+- 仅返回当前登录用户在 `PredictBet` 中出现过的 market。
+- `status=待结算/pending` 会映射到 `PredictMarket.status IN (CLOSED, CLOSE)`。
 
 ## 2. 上下文与标签接口
 

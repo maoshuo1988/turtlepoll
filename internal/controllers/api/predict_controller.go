@@ -7,6 +7,7 @@ import (
 	"bbs-go/internal/pkg/common"
 	"bbs-go/internal/pkg/errs"
 	"bbs-go/internal/services"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ type PredictController struct {
 
 func (c *PredictController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("GET", "/markets", "GetMarkets")
+	b.Handle("GET", "/my/markets", "GetMyMarkets")
 	b.Handle("GET", "/markets/by-name", "GetMarketsByName")
 	b.Handle("GET", "/markets/by-tag", "GetMarketsByTag")
 	b.Handle("GET", "/bet-settle-result", "GetBetSettleResult")
@@ -63,6 +65,164 @@ func (c *PredictController) GetMarketsByTag() *web.JsonResult {
 	ret := (&FootballController{Ctx: c.Ctx}).GetMarketsBy_tag()
 	c.attachTearSettlementForMarketList(ret)
 	return ret
+}
+
+// GetMyMarkets 查询当前用户参与下注的市场列表。
+// 返回结构与 /api/predict/markets 对齐：market/context/schedule/matchPhase/hasBet/betSettleResult/tearSettlement。
+func (c *PredictController) GetMyMarkets() *web.JsonResult {
+	user := common.GetCurrentUser(c.Ctx)
+	if user == nil {
+		return web.JsonError(errs.NotLogin())
+	}
+
+	p := params.NewQueryParams(c.Ctx)
+	status, err := normalizePredictMyMarketStatus(c.Ctx.URLParamDefault("status", ""))
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	betMarketSub := sqls.DB().Model(&models.PredictBet{}).
+		Select("DISTINCT market_id").
+		Where("user_id = ?", user.Id)
+
+	q := p.Cnd.Build(sqls.DB().Model(&models.PredictMarket{}).Where("id IN (?)", betMarketSub))
+	if status != "" {
+		if status == "PENDING" {
+			q = q.Where("status IN ?", []string{"CLOSED", "CLOSE"})
+		} else {
+			q = q.Where("status = ?", status)
+		}
+	}
+
+	var list []models.PredictMarket
+	if err := q.
+		Order("CASE status WHEN 'OPEN' THEN 0 WHEN 'CLOSED' THEN 1 WHEN 'CLOSE' THEN 1 ELSE 2 END, close_time asc, id desc").
+		Find(&list).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	count := p.Cnd.Build(sqls.DB().Model(&models.PredictMarket{}).Where("id IN (?)", betMarketSub))
+	if status != "" {
+		if status == "PENDING" {
+			count = count.Where("status IN ?", []string{"CLOSED", "CLOSE"})
+		} else {
+			count = count.Where("status = ?", status)
+		}
+	}
+	var total int64
+	if err := count.Count(&total).Error; err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
+
+	marketIds := make([]int64, 0, len(list))
+	for _, m := range list {
+		if m.Id > 0 {
+			marketIds = append(marketIds, m.Id)
+		}
+	}
+
+	ctxMap := make(map[int64]models.PredictContext, len(marketIds))
+	if len(marketIds) > 0 {
+		var ctxList []models.PredictContext
+		sqls.DB().Where("market_id in (?)", marketIds).Find(&ctxList)
+		for _, mc := range ctxList {
+			ctxMap[mc.MarketId] = mc
+		}
+	}
+
+	scheduleMap := scheduleMetaByMarketIds(marketIds)
+	betSettleResultMap := make(map[int64]string, len(marketIds))
+	hasBetMap := make(map[int64]bool, len(marketIds))
+	if len(marketIds) > 0 {
+		type betRow struct {
+			MarketId     int64
+			SettleResult string
+			SettleTime   int64
+			CreateTime   int64
+		}
+		var betRows []betRow
+		sqls.DB().Model(&models.PredictBet{}).
+			Select("market_id, settle_result, settle_time, create_time").
+			Where("user_id = ? AND market_id in (?)", user.Id, marketIds).
+			Find(&betRows)
+
+		hasWin := make(map[int64]bool, len(marketIds))
+		hasLose := make(map[int64]bool, len(marketIds))
+		latestScore := make(map[int64]int64, len(marketIds))
+		latestVal := make(map[int64]string, len(marketIds))
+		for _, br := range betRows {
+			hasBetMap[br.MarketId] = true
+			v := strings.ToUpper(strings.TrimSpace(br.SettleResult))
+			if v == "WIN" {
+				hasWin[br.MarketId] = true
+				continue
+			}
+			if v == "LOSE" {
+				hasLose[br.MarketId] = true
+			}
+			if v == "" {
+				continue
+			}
+			score := br.SettleTime
+			if score <= 0 {
+				score = br.CreateTime
+			}
+			if score > latestScore[br.MarketId] {
+				latestScore[br.MarketId] = score
+				latestVal[br.MarketId] = v
+			}
+		}
+		for _, m := range list {
+			mid := m.Id
+			if hasWin[mid] {
+				betSettleResultMap[mid] = "WIN"
+				continue
+			}
+			if hasLose[mid] {
+				betSettleResultMap[mid] = "LOSE"
+				continue
+			}
+			betSettleResultMap[mid] = latestVal[mid]
+		}
+	}
+
+	respList := make([]map[string]any, 0, len(list))
+	for _, m := range list {
+		schedule := scheduleMap[m.Id]
+		respList = append(respList, map[string]any{
+			"market":          m,
+			"context":         ctxMap[m.Id],
+			"schedule":        schedule,
+			"matchPhase":      matchPhaseFromSchedule(schedule),
+			"betSettleResult": betSettleResultMap[m.Id],
+			"hasBet":          hasBetMap[m.Id],
+		})
+	}
+
+	ret := web.JsonData(map[string]any{
+		"list":   respList,
+		"total":  total,
+		"status": status,
+	})
+	c.attachTearSettlementForMarketList(ret)
+	return ret
+}
+
+func normalizePredictMyMarketStatus(raw string) (string, error) {
+	s := strings.ToUpper(strings.TrimSpace(raw))
+	if s == "" {
+		return "", nil
+	}
+	switch s {
+	case "OPEN", "进行中", "IN_PROGRESS", "ONGOING", "ACTIVE":
+		return "OPEN", nil
+	case "CLOSED", "CLOSE", "待结算", "PENDING":
+		return "PENDING", nil
+	case "SETTLED", "已结算", "DONE":
+		return "SETTLED", nil
+	default:
+		return "", errors.New("invalid status")
+	}
 }
 
 func (c *PredictController) GetBetSettleResult() *web.JsonResult {
