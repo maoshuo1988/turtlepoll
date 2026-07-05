@@ -312,7 +312,8 @@ func (c *PKController) GetMyBets() *web.JsonResult {
 	}
 	page, _ := params.GetInt(c.Ctx, "page")
 	pageSize, _ := params.GetInt(c.Ctx, "pageSize")
-	data, err := services.PKService.MyBets(user.Id, page, pageSize)
+	status := params.FormValue(c.Ctx, "status")
+	data, err := services.PKService.MyBets(user.Id, page, pageSize, status)
 	if err != nil {
 		return web.JsonErrorMsg(err.Error())
 	}

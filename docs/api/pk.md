@@ -24,7 +24,7 @@
 | POST | /api/pk/recordOption | 是 | 记录阵营行为 |
 | GET | /api/pk/history | 否 | 历史回合 |
 | GET | /api/pk/seasons | 否 | 赛季列表 |
-| GET | /api/pk/my/bets | 是 | 我的下注记录 |
+| GET | /api/pk/my/bets | 是 | 我参与（下注）对局列表（支持按状态查询） |
 
 ## 关键接口
 
@@ -1047,51 +1047,72 @@
 | list[].totalRounds | 本赛季总回合数 |
 | list[].winsA / winsB | 本赛季 A/B 阵营胜场数 |
 ### 15) GET /api/pk/my/bets
-请求参数：page, pageSize
+请求参数：page, pageSize, status
 
 请求参数 JSON 示例（Query）：
 ```json
 {
 	"page": 1,
-	"pageSize": 20
+	"pageSize": 20,
+	"status": "pending"
 }
 ```
 
 返回 data 结构：
-- list: 每项包含 bet, topic, round
-- count, page, pageSize
+- list: 每项顶层结构对齐 `/api/battle/by`：`battle + myAction + myRole + settlement`
+- 兼容字段：每项继续保留 `bet/topic/round`
+- count, page, pageSize, status
 
 返回 JSON 示例（data）：
 ```json
 {
 	"list": [
 		{
-			"bet": {
-				"id": 9001,
-				"topicId": 1,
-				"roundId": 101,
-				"side": "A",
-				"amount": 100,
-				"settleResult": "",
-				"payout": 0
-			},
-			"topic": {
-				"id": 1,
-				"slug": "pk-hero",
-				"title": "足球GOAT之争",
-				"sideAName": "梅西",
-				"sideBName": "C罗"
-			},
-			"round": {
+			"battle": {
 				"id": 101,
-				"roundNo": 11,
-				"phase": "betting"
-			}
+				"topicId": 1,
+				"status": "pending",
+				"phase": "cooldown",
+				"result": "",
+				"resultBy": "system",
+				"resultTime": 0,
+				"bet": {
+					"id": 9001,
+					"topicId": 1,
+					"roundId": 101,
+					"side": "A",
+					"amount": 100,
+					"settleResult": "",
+					"payout": 0
+				},
+				"topic": {
+					"id": 1,
+					"slug": "pk-hero",
+					"title": "足球GOAT之争",
+					"sideAName": "梅西",
+					"sideBName": "C罗"
+				},
+				"round": {
+					"id": 101,
+					"roundNo": 11,
+					"phase": "cooldown"
+				}
+			},
+			"myAction": "bet",
+			"myRole": "challenger",
+			"settlement": {
+				"settlement": null,
+				"myItem": null
+			},
+			"bet": {"id": 9001, "topicId": 1, "roundId": 101, "side": "A", "amount": 100},
+			"topic": {"id": 1, "slug": "pk-hero", "title": "足球GOAT之争"},
+			"round": {"id": 101, "roundNo": 11, "phase": "cooldown"}
 		}
 	],
 	"count": 12,
 	"page": 1,
-	"pageSize": 20
+	"pageSize": 20,
+	"status": "pending"
 }
 ```
 
@@ -1099,13 +1120,16 @@
 | 字段 | 说明 |
 |------|------|
 | page / pageSize | 分页参数 |
+| status | 可选：`in_progress/pending/settled`；也兼容 `betting/locked/cooldown/settled` |
 
 **返回字段说明：**
 | 字段 | 说明 |
 |------|------|
-| bet.side | 下注阵营：A 或 B |
-| bet.amount | 下注金额（龟币），与该条下注记录实际金额一致 |
-| bet.settleResult | 结算结果：win / lose / draw，未结算为空字符串 |
-| bet.payout | 派奖金额，未结算时为 0 |
-| topic | 话题基础信息 |
-| round.phase | 回合当前阶段 |
+| battle.status | 对局状态：`in_progress/pending/settled` |
+| battle.phase | 回合阶段：`betting/locked/cooldown/settled` |
+| battle.result | 结算结果（A/B/draw），未结算为空 |
+| myAction | 当前用户动作（固定 `bet`） |
+| myRole | 当前用户角色（固定 `challenger`） |
+| settlement.settlement | 已结算时返回结算摘要，未结算为 null |
+| settlement.myItem | 当前用户结算明细，存在则返回 |
+| bet/topic/round | 兼容旧调用方的历史字段 |

@@ -1023,15 +1023,50 @@ func (s *pkService) Seasons(topicId int64, page, pageSize int) (map[string]any, 
 	return map[string]any{"list": list, "count": count, "page": page, "pageSize": pageSize}, nil
 }
 
-func (s *pkService) MyBets(userId int64, page, pageSize int) (map[string]any, error) {
+func (s *pkService) MyBets(userId int64, page, pageSize int, rawStatus string) (map[string]any, error) {
 	if page <= 0 {
 		page = 1
 	}
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 20
 	}
+	status, err := normalizePKMyBetStatus(rawStatus)
+	if err != nil {
+		return nil, err
+	}
+	now := dates.NowTimestamp()
+	db := sqls.DB()
 	var bets []models.PKBet
-	q := sqls.DB().Model(&models.PKBet{}).Where("user_id = ?", userId)
+	q := db.Model(&models.PKBet{}).Where("user_id = ?", userId)
+	if status != "" {
+		roundSub := db.Model(&models.PKRound{}).Select("id")
+		switch status {
+		case "in_progress":
+			roundSub = roundSub.
+				Where("settled_at = 0 AND winner = ''").
+				Where("? < end_time", now)
+		case "pending":
+			roundSub = roundSub.
+				Where("settled_at = 0 AND winner = ''").
+				Where("? >= end_time", now)
+		case "settled":
+			roundSub = roundSub.
+				Where("settled_at > 0 OR winner <> ''")
+		case PKPhaseBetting:
+			roundSub = roundSub.
+				Where("settled_at = 0 AND winner = ''").
+				Where("? < lock_time", now)
+		case PKPhaseLocked:
+			roundSub = roundSub.
+				Where("settled_at = 0 AND winner = ''").
+				Where("? >= lock_time AND ? < end_time", now, now)
+		case PKPhaseCooldown:
+			roundSub = roundSub.
+				Where("settled_at = 0 AND winner = ''").
+				Where("? >= end_time", now)
+		}
+		q = q.Where("round_id IN (?)", roundSub)
+	}
 	var count int64
 	if err := q.Count(&count).Error; err != nil {
 		return nil, err
@@ -1039,15 +1074,148 @@ func (s *pkService) MyBets(userId int64, page, pageSize int) (map[string]any, er
 	if err := q.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&bets).Error; err != nil {
 		return nil, err
 	}
+
+	topicIds := make([]int64, 0, len(bets))
+	roundIds := make([]int64, 0, len(bets))
+	topicSet := make(map[int64]struct{}, len(bets))
+	roundSet := make(map[int64]struct{}, len(bets))
+	for _, b := range bets {
+		if _, ok := topicSet[b.TopicId]; !ok {
+			topicSet[b.TopicId] = struct{}{}
+			topicIds = append(topicIds, b.TopicId)
+		}
+		if _, ok := roundSet[b.RoundId]; !ok {
+			roundSet[b.RoundId] = struct{}{}
+			roundIds = append(roundIds, b.RoundId)
+		}
+	}
+
+	topicMap := map[int64]*models.PKTopic{}
+	if len(topicIds) > 0 {
+		var topics []models.PKTopic
+		if err := db.Where("id IN ?", topicIds).Find(&topics).Error; err != nil {
+			return nil, err
+		}
+		for i := range topics {
+			topicMap[topics[i].Id] = &topics[i]
+		}
+	}
+
+	roundMap := map[int64]*models.PKRound{}
+	if len(roundIds) > 0 {
+		var rounds []models.PKRound
+		if err := db.Where("id IN ?", roundIds).Find(&rounds).Error; err != nil {
+			return nil, err
+		}
+		for i := range rounds {
+			roundMap[rounds[i].Id] = &rounds[i]
+		}
+	}
+
+	myItemMap := map[int64]*models.PKSettlementItem{}
+	if len(roundIds) > 0 {
+		var items []models.PKSettlementItem
+		if err := db.Where("user_id = ? AND round_id IN ?", userId, roundIds).Find(&items).Error; err != nil {
+			return nil, err
+		}
+		for i := range items {
+			myItemMap[items[i].RoundId] = &items[i]
+		}
+	}
+
 	ret := make([]map[string]any, 0, len(bets))
 	for _, b := range bets {
+		topic := topicMap[b.TopicId]
+		round := roundMap[b.RoundId]
+		phase := ""
+		statusView := ""
+		result := ""
+		resultTime := int64(0)
+		if round != nil {
+			phase = s.phaseByTime(round, now)
+			statusView = pkRoundStatusForMyList(round, phase)
+			if round.Winner != "" {
+				result = strings.ToLower(round.Winner)
+			}
+			resultTime = round.SettledAt
+		}
+		var settlement any
+		if round != nil && statusView == "settled" {
+			settlement = map[string]any{
+				"roundId":     round.Id,
+				"winner":      round.Winner,
+				"settledAt":   round.SettledAt,
+				"status":      statusView,
+				"phase":       phase,
+				"topicId":     round.TopicId,
+				"seasonId":    round.SeasonId,
+				"nextRoundAt": round.NextRoundTime,
+			}
+		}
+		myItem := any(nil)
+		if it, ok := myItemMap[b.RoundId]; ok {
+			myItem = it
+		}
+
 		ret = append(ret, map[string]any{
+			// 对齐 /api/battle/by 的顶层字段，方便前端复用同一渲染结构。
+			"battle": map[string]any{
+				"id":         b.RoundId,
+				"topicId":    b.TopicId,
+				"status":     statusView,
+				"phase":      phase,
+				"result":     result,
+				"resultBy":   "system",
+				"resultTime": resultTime,
+				"bet":        b,
+				"topic":      topic,
+				"round":      round,
+			},
+			"myAction": "bet",
+			"myRole":   "challenger",
+			"settlement": map[string]any{
+				"settlement": settlement,
+				"myItem":     myItem,
+			},
+			// 兼容旧字段（历史调用方直接读取 bet/topic/round）。
 			"bet":   b,
-			"topic": repositories.PKRepository.TakeTopic(sqls.DB(), "id = ?", b.TopicId),
-			"round": repositories.PKRepository.TakeRound(sqls.DB(), "id = ?", b.RoundId),
+			"topic": topic,
+			"round": round,
 		})
 	}
-	return map[string]any{"list": ret, "count": count, "page": page, "pageSize": pageSize}, nil
+	return map[string]any{"list": ret, "count": count, "page": page, "pageSize": pageSize, "status": status}, nil
+}
+
+func normalizePKMyBetStatus(raw string) (string, error) {
+	s := strings.TrimSpace(strings.ToLower(raw))
+	if s == "" {
+		return "", nil
+	}
+	switch s {
+	case "进行中", "ongoing", "inprogress", "in_progress", "active":
+		return "in_progress", nil
+	case "待结算", "pending", "unsettled":
+		return "pending", nil
+	case "已结算", "settled", "done":
+		return "settled", nil
+	case PKPhaseBetting, PKPhaseLocked, PKPhaseCooldown:
+		return s, nil
+	default:
+		return "", errors.New("invalid status")
+	}
+}
+
+func pkRoundStatusForMyList(round *models.PKRound, phase string) string {
+	if round == nil {
+		return ""
+	}
+	if round.SettledAt > 0 || round.Winner != "" {
+		return "settled"
+	}
+	if phase == PKPhaseCooldown {
+		return "pending"
+	}
+	return "in_progress"
 }
 
 func (s *pkService) AdminListTopics(page, pageSize int, status, q string) (map[string]any, error) {
