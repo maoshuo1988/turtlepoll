@@ -146,6 +146,9 @@ func (s *commentService) Publish(userId int64, form req.CreateCommentForm) (*mod
 			if err := PredictCommentMetaService.CreateForComment(tx, market, comment, resolvedOption); err != nil {
 				return err
 			}
+			if err := PredictTearStatService.RecordInteraction(tx, market.Id, userId, resolvedOption, "comment", constants.EntityComment, comment.Id, 1, ""); err != nil {
+				return err
+			}
 			_ = PredictContextService.IncrHeatByMarketId(tx, form.EntityId, 1)
 		case constants.EntityTopic:
 			if err := TopicService.onComment(tx, form.EntityId, comment); err != nil {
@@ -188,6 +191,9 @@ func (s *commentService) Publish(userId int64, form req.CreateCommentForm) (*mod
 					return err
 				}
 				if err := PredictCommentMetaService.CreateForComment(tx, market, comment, resolvedOption); err != nil {
+					return err
+				}
+				if err := PredictTearStatService.RecordInteraction(tx, market.Id, userId, resolvedOption, "reply", constants.EntityComment, comment.Id, 1, ""); err != nil {
 					return err
 				}
 			}

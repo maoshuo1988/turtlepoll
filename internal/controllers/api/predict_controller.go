@@ -438,7 +438,7 @@ func (c *PredictController) GetHeatMe() *web.JsonResult {
 	})
 
 	myRank := int64(0)
-	myOption := ""
+	myOption := services.PredictCampLockService.GetOption(sqls.DB(), marketId, user.Id)
 	myHeat := 0.0
 	myCommentHeat := 0.0
 	myLikeHeat := 0.0
@@ -455,8 +455,10 @@ func (c *PredictController) GetHeatMe() *web.JsonResult {
 		}
 	}
 
-	stat := &models.TearUserEventStat{}
-	_ = sqls.DB().Where("event_type = ? AND topic_id = ? AND round_id = ? AND user_id = ?", constants.EntityPredictMarket, marketId, 0, user.Id).Take(stat).Error
+	stats, err := services.TearHeatService.GetPredictUserHeatStats(sqls.DB(), marketId, user.Id)
+	if err != nil {
+		return web.JsonErrorMsg(err.Error())
+	}
 
 	return web.JsonData(map[string]any{
 		"marketId":          marketId,
@@ -467,10 +469,10 @@ func (c *PredictController) GetHeatMe() *web.JsonResult {
 		"commentHeat":       myCommentHeat,
 		"likeHeat":          myLikeHeat,
 		"coinHeat":          myCoinHeat,
-		"myActionCount":     stat.ActionCount,
-		"myCommentCount":    stat.CommentCount + stat.ReplyCount,
-		"receivedLikeCount": stat.LikeCount,
-		"myBetAmount":       stat.BetAmount,
+		"myActionCount":     stats.ActionCount,
+		"myCommentCount":    stats.CommentCount + stats.ReplyCount,
+		"receivedLikeCount": stats.ReceivedLikeCount,
+		"myBetAmount":       stats.BetAmount,
 	})
 }
 

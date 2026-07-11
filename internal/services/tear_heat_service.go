@@ -42,6 +42,15 @@ type TearHeatUserItem struct {
 	TotalHeat   float64
 }
 
+type PredictUserHeatStats struct {
+	ActionCount       int64
+	CommentCount      int64
+	ReplyCount        int64
+	LikeCount         int64
+	ReceivedLikeCount int64
+	BetAmount         int64
+}
+
 func newTearHeatService() *tearHeatService {
 	return &tearHeatService{}
 }
@@ -174,16 +183,27 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 			}
 		}
 	} else {
+		likeCntByComment := map[int64]float64{}
+		type commentLikeAgg struct {
+			CommentId int64   `gorm:"column:entity_id"`
+			Cnt       float64 `gorm:"column:cnt"`
+		}
+		var likeRows []commentLikeAgg
+		_ = tx.Table("t_tear_interact_log").
+			Select("entity_id, COUNT(1) AS cnt").
+			Where("event_type = ? AND topic_id = ? AND round_id = ? AND action_type = ? AND entity_type = ?", constants.EntityPredictMarket, req.TopicId, req.RoundId, "like", constants.EntityComment).
+			Group("entity_id").
+			Find(&likeRows).Error
+		for _, row := range likeRows {
+			likeCntByComment[row.CommentId] = row.Cnt
+		}
+
 		var metas []models.PredictCommentMeta
 		if err := tx.Where("market_id = ?", req.TopicId).Find(&metas).Error; err != nil {
 			return nil, 0, err
 		}
 		for _, meta := range metas {
-			comment := repositories.CommentRepository.Get(tx, meta.CommentId)
-			if comment == nil || comment.Status != constants.StatusOk {
-				continue
-			}
-			heat := math.Min(3*(1+math.Log(1+float64(comment.LikeCount))), 20)
+			heat := math.Min(3*(1+math.Log(1+likeCntByComment[meta.CommentId])), 20)
 			opt := strings.ToUpper(strings.TrimSpace(meta.Option))
 			if _, ok := commentHeatByOption[opt]; ok {
 				commentHeatByOption[opt] += heat
@@ -200,11 +220,27 @@ func (s *tearHeatService) ComputeHeatSnapshot(tx *gorm.DB, req TearHeatSnapshotC
 		Coin   float64 `gorm:"column:coin"`
 	}
 	var coins []coinAgg
-	_ = tx.Table("t_tear_user_event_stat").
-		Select("bet_option, COALESCE(SUM(bet_amount) * 0.02, 0) AS coin").
-		Where("event_type = ? AND topic_id = ? AND round_id = ?", req.EventType, req.TopicId, req.RoundId).
-		Group("bet_option").
-		Find(&coins).Error
+	if req.EventType == constants.EntityPredictMarket {
+		type predictCoinAgg struct {
+			Option string  `gorm:"column:option"`
+			Coin   float64 `gorm:"column:coin"`
+		}
+		var predictCoins []predictCoinAgg
+		_ = tx.Table("t_predict_bet").
+			Select("option, COALESCE(SUM(amount) * 0.02, 0) AS coin").
+			Where("market_id = ?", req.TopicId).
+			Group("option").
+			Find(&predictCoins).Error
+		for _, item := range predictCoins {
+			coins = append(coins, coinAgg{Option: item.Option, Coin: item.Coin})
+		}
+	} else {
+		_ = tx.Table("t_tear_user_event_stat").
+			Select("bet_option, COALESCE(SUM(bet_amount) * 0.02, 0) AS coin").
+			Where("event_type = ? AND topic_id = ? AND round_id = ?", req.EventType, req.TopicId, req.RoundId).
+			Group("bet_option").
+			Find(&coins).Error
+	}
 	for _, item := range coins {
 		opt := strings.ToUpper(strings.TrimSpace(item.Option))
 		if req.EventType == TearEventTypePK {
@@ -276,6 +312,9 @@ func (s *tearHeatService) GetUserHeatItems(tx *gorm.DB, eventType string, topicI
 	if eventType != TearEventTypePK && eventType != constants.EntityPredictMarket {
 		return nil, errors.New("unsupported event type")
 	}
+	if eventType == constants.EntityPredictMarket {
+		return s.getPredictUserHeatItems(tx, topicId, roundId)
+	}
 
 	var rows []models.TearUserEventStat
 	if err := tx.Where("event_type = ? AND topic_id = ? AND round_id = ?", eventType, topicId, roundId).
@@ -307,4 +346,147 @@ func (s *tearHeatService) GetUserHeatItems(tx *gorm.DB, eventType string, topicI
 		})
 	}
 	return items, nil
+}
+
+func (s *tearHeatService) getPredictUserHeatItems(tx *gorm.DB, marketId, roundId int64) ([]TearHeatUserItem, error) {
+	if roundId != 0 {
+		return []TearHeatUserItem{}, nil
+	}
+
+	itemsByUser := make(map[int64]*TearHeatUserItem)
+	upsert := func(userId int64, option string) *TearHeatUserItem {
+		option = strings.ToUpper(strings.TrimSpace(option))
+		if userId <= 0 || option == "" {
+			return nil
+		}
+		item, ok := itemsByUser[userId]
+		if !ok {
+			item = &TearHeatUserItem{UserId: userId, Option: option}
+			itemsByUser[userId] = item
+		}
+		if item.Option == "" {
+			item.Option = option
+		}
+		return item
+	}
+
+	type likeRow struct {
+		UserId int64   `gorm:"column:user_id"`
+		Option string  `gorm:"column:option_at_action"`
+		Cnt    float64 `gorm:"column:cnt"`
+	}
+	var likeRows []likeRow
+	_ = tx.Table("t_tear_interact_log").
+		Select("user_id, option_at_action, COUNT(1) AS cnt").
+		Where("event_type = ? AND topic_id = ? AND round_id = ? AND action_type = ?", constants.EntityPredictMarket, marketId, 0, "like").
+		Group("user_id, option_at_action").
+		Find(&likeRows).Error
+	for _, row := range likeRows {
+		item := upsert(row.UserId, row.Option)
+		if item != nil {
+			item.LikeHeat += row.Cnt
+		}
+	}
+
+	type coinRow struct {
+		UserId int64   `gorm:"column:user_id"`
+		Option string  `gorm:"column:option"`
+		Coin   float64 `gorm:"column:coin"`
+	}
+	var coinRows []coinRow
+	_ = tx.Table("t_predict_bet").
+		Select("user_id, option, COALESCE(SUM(amount) * 0.02, 0) AS coin").
+		Where("market_id = ?", marketId).
+		Group("user_id, option").
+		Find(&coinRows).Error
+	for _, row := range coinRows {
+		item := upsert(row.UserId, row.Option)
+		if item != nil {
+			item.CoinHeat += row.Coin
+		}
+	}
+
+	type commentLikeRow struct {
+		CommentId int64   `gorm:"column:entity_id"`
+		Cnt       float64 `gorm:"column:cnt"`
+	}
+	likeCntByComment := map[int64]float64{}
+	var commentLikeRows []commentLikeRow
+	_ = tx.Table("t_tear_interact_log").
+		Select("entity_id, COUNT(1) AS cnt").
+		Where("event_type = ? AND topic_id = ? AND round_id = ? AND action_type = ? AND entity_type = ?", constants.EntityPredictMarket, marketId, 0, "like", constants.EntityComment).
+		Group("entity_id").
+		Find(&commentLikeRows).Error
+	for _, row := range commentLikeRows {
+		likeCntByComment[row.CommentId] = row.Cnt
+	}
+
+	var metas []models.PredictCommentMeta
+	if err := tx.Where("market_id = ?", marketId).Find(&metas).Error; err != nil {
+		return nil, err
+	}
+	for _, meta := range metas {
+		item := upsert(meta.UserId, meta.Option)
+		if item == nil {
+			continue
+		}
+		heat := math.Min(3*(1+math.Log(1+likeCntByComment[meta.CommentId])), 20)
+		item.CommentHeat += heat
+	}
+
+	ret := make([]TearHeatUserItem, 0, len(itemsByUser))
+	for _, item := range itemsByUser {
+		item.TotalHeat = item.CommentHeat + item.LikeHeat + item.CoinHeat
+		ret = append(ret, *item)
+	}
+	return ret, nil
+}
+
+func (s *tearHeatService) GetPredictUserHeatStats(tx *gorm.DB, marketId, userId int64) (PredictUserHeatStats, error) {
+	stats := PredictUserHeatStats{}
+	if tx == nil {
+		return stats, errors.New("tx is required")
+	}
+	if marketId <= 0 || userId <= 0 {
+		return stats, errors.New("marketId/userId are required")
+	}
+
+	type actionRow struct {
+		ActionType string `gorm:"column:action_type"`
+		Cnt        int64  `gorm:"column:cnt"`
+	}
+	var actionRows []actionRow
+	_ = tx.Table("t_tear_interact_log").
+		Select("action_type, COUNT(1) AS cnt").
+		Where("event_type = ? AND topic_id = ? AND round_id = ? AND user_id = ?", constants.EntityPredictMarket, marketId, 0, userId).
+		Group("action_type").
+		Find(&actionRows).Error
+	for _, row := range actionRows {
+		stats.ActionCount += row.Cnt
+		switch strings.ToLower(strings.TrimSpace(row.ActionType)) {
+		case "comment":
+			stats.CommentCount += row.Cnt
+		case "reply":
+			stats.ReplyCount += row.Cnt
+		case "like":
+			stats.LikeCount += row.Cnt
+		}
+	}
+
+	var commentIds []int64
+	_ = tx.Model(&models.PredictCommentMeta{}).
+		Where("market_id = ? AND user_id = ?", marketId, userId).
+		Pluck("comment_id", &commentIds).Error
+	if len(commentIds) > 0 {
+		_ = tx.Table("t_tear_interact_log").
+			Where("event_type = ? AND topic_id = ? AND round_id = ? AND action_type = ? AND entity_type = ? AND entity_id IN ?", constants.EntityPredictMarket, marketId, 0, "like", constants.EntityComment, commentIds).
+			Count(&stats.ReceivedLikeCount).Error
+	}
+
+	_ = tx.Table("t_predict_bet").
+		Select("COALESCE(SUM(amount), 0)").
+		Where("market_id = ? AND user_id = ?", marketId, userId).
+		Scan(&stats.BetAmount).Error
+
+	return stats, nil
 }
