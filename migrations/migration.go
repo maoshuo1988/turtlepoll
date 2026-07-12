@@ -149,4 +149,5 @@ func init() {
 	register(27, "tear heat snapshot and camp tables", migrate_tear_heat_snapshot_and_camp_tables)
 	register(28, "predict comment reward audit fields", migrate_predict_comment_reward_audit_fields)
 	register(29, "fix tear camp member unique index", migrate_fix_tear_camp_member_unique_index)
+	register(30, "normalize predict market close_time unit", migrate_normalize_predict_market_close_time_unit)
 }
