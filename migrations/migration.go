@@ -150,4 +150,6 @@ func init() {
 	register(28, "predict comment reward audit fields", migrate_predict_comment_reward_audit_fields)
 	register(29, "fix tear camp member unique index", migrate_fix_tear_camp_member_unique_index)
 	register(30, "normalize predict market close_time unit", migrate_normalize_predict_market_close_time_unit)
+	register(31, "main site message notify tables and seed templates", migrate_message_notify_tables)
+	register(32, "main site reward message notify scene templates", migrate_message_notify_reward_scene_templates)
 }

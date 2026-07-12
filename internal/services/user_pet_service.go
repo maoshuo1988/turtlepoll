@@ -28,6 +28,13 @@ type signupBonusParams struct {
 	Coins   int64 `json:"coins"`
 }
 
+type SignupBonusResult struct {
+	Granted bool   `json:"granted"`
+	Amount  int64  `json:"amount"`
+	PetKey  string `json:"petKey,omitempty"`
+	PetName string `json:"petName,omitempty"`
+}
+
 func (s *userPetService) GetOrCreateState(userId int64) (*models.UserPetState, error) {
 	if userId <= 0 {
 		return nil, errors.New("userId is required")
@@ -64,9 +71,9 @@ func (s *userPetService) HasPet(userId int64, petId int64) bool {
 	return repositories.UserPetRepository.Get(sqls.DB(), userId, petId) != nil
 }
 
-func (s *userPetService) GrantAndEquipBasicOnSignup(tx *gorm.DB, userId int64, now int64) error {
+func (s *userPetService) GrantAndEquipBasicOnSignup(tx *gorm.DB, userId int64, now int64) (*SignupBonusResult, error) {
 	if userId <= 0 {
-		return errors.New("userId is required")
+		return nil, errors.New("userId is required")
 	}
 	if now <= 0 {
 		now = dates.NowTimestamp()
@@ -76,12 +83,12 @@ func (s *userPetService) GrantAndEquipBasicOnSignup(tx *gorm.DB, userId int64, n
 	if pet == nil {
 		seed := findDefaultPetDefinitionSeed("basic")
 		if seed == nil {
-			return errors.New("basic pet definition seed not found")
+			return nil, errors.New("basic pet definition seed not found")
 		}
 		seed.CreateTime = now
 		seed.UpdateTime = now
 		if err := repositories.PetDefinitionRepository.Create(tx, seed); err != nil {
-			return err
+			return nil, err
 		}
 		pet = seed
 	}
@@ -96,7 +103,7 @@ func (s *userPetService) GrantAndEquipBasicOnSignup(tx *gorm.DB, userId int64, n
 			CreateTime: now,
 			UpdateTime: now,
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -110,13 +117,13 @@ func (s *userPetService) GrantAndEquipBasicOnSignup(tx *gorm.DB, userId int64, n
 			UpdateTime:    now,
 		}
 		if err := repositories.UserPetStateRepository.Create(tx, state); err != nil {
-			return err
+			return nil, err
 		}
 	} else if state.EquippedPetId <= 0 {
 		state.EquippedPetId = pet.Id
 		state.UpdateTime = now
 		if err := repositories.UserPetStateRepository.Update(tx, state); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -133,28 +140,39 @@ func findDefaultPetDefinitionSeed(petId string) *models.PetDefinition {
 	return nil
 }
 
-func (s *userPetService) grantSignupBonusByPet(tx *gorm.DB, userId int64, pet *models.PetDefinition, now int64) error {
+func (s *userPetService) grantSignupBonusByPet(tx *gorm.DB, userId int64, pet *models.PetDefinition, now int64) (*SignupBonusResult, error) {
+	ret := &SignupBonusResult{}
 	if pet == nil {
-		return nil
+		return ret, nil
 	}
 	fc := FeatureCatalogService.GetByFeatureKey("signup_bonus")
 	if fc == nil || !fc.Enabled {
-		return nil
+		return ret, nil
 	}
 	abilities := PetDefinitionService.GetAbilities(pet)
 	raw, ok := abilities["signup_bonus"]
 	if !ok || raw == nil {
-		return nil
+		return ret, nil
 	}
 	params, err := decodeSignupBonusParams(raw)
 	if err != nil {
-		return err
+		return ret, err
 	}
 	if !params.Enabled || params.Coins <= 0 {
-		return nil
+		return ret, nil
 	}
 	remark := fmt.Sprintf("pet signup bonus | petId=%d | petKey=%s", pet.Id, pet.PetKey)
-	return s.mintIfNoSignupBonusLog(tx, userId, params.Coins, remark, now)
+	granted, err := s.mintIfNoSignupBonusLog(tx, userId, params.Coins, remark, now)
+	if err != nil {
+		return ret, err
+	}
+	if granted {
+		ret.Granted = true
+		ret.Amount = params.Coins
+		ret.PetKey = pet.PetKey
+		ret.PetName = pet.Name
+	}
+	return ret, nil
 }
 
 func decodeSignupBonusParams(v any) (*signupBonusParams, error) {
@@ -172,18 +190,18 @@ func decodeSignupBonusParams(v any) (*signupBonusParams, error) {
 	return &p, nil
 }
 
-func (s *userPetService) mintIfNoSignupBonusLog(tx *gorm.DB, userId int64, amount int64, remark string, now int64) error {
+func (s *userPetService) mintIfNoSignupBonusLog(tx *gorm.DB, userId int64, amount int64, remark string, now int64) (bool, error) {
 	var count int64
 	if err := tx.Model(&models.UserCoinLog{}).
 		Where("user_id = ? AND biz_type = ? AND remark LIKE ?", userId, "MINT", "pet signup bonus%").
 		Count(&count).Error; err != nil {
-		return err
+		return false, err
 	}
 	if count > 0 {
-		return nil
+		return false, nil
 	}
 	_, err := UserCoinService.mintWithTx(tx, 0, userId, amount, remark, now)
-	return err
+	return err == nil, err
 }
 
 func (s *userPetService) EquipPet(userId int64, petId int64) (*models.UserPetState, error) {

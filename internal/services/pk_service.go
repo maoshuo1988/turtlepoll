@@ -240,11 +240,14 @@ func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, erro
 	}
 
 	var bet *models.PKBet
+	var firstBetBonus *FirstBetBonusResult
+	topicTitle := ""
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
 		topic := repositories.PKRepository.TakeTopic(tx, "id = ? AND status = ?", form.TopicId, PKTopicStatusEnabled)
 		if topic == nil {
 			return errors.New("pk topic not found")
 		}
+		topicTitle = topic.Title
 		round, err := repositories.PKRepository.TakeRoundForUpdate(tx, topic.CurrentRoundId)
 		if err != nil {
 			return errors.New("pk round not found")
@@ -303,6 +306,18 @@ func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, erro
 		if err := s.recordTearInteraction(tx, topic.Id, round.Id, userId, form.Side, "bet", "pk_bet", bet.Id, heat, form.RequestId, now); err != nil {
 			return err
 		}
+		bonusRes, bonusErr := PetFirstBetBonusService.GrantOnBetPlaced(tx, userId, topic.Id, bet.Id, bet.Amount)
+		if bonusErr != nil {
+			slog.Error("grant pk first bet bonus failed",
+				slog.Any("err", bonusErr),
+				slog.Int64("userId", userId),
+				slog.Int64("topicId", topic.Id),
+				slog.Int64("roundId", round.Id),
+				slog.Int64("betId", bet.Id),
+			)
+			bonusRes = &FirstBetBonusResult{Granted: false, Amount: 0, Reason: "ERROR"}
+		}
+		firstBetBonus = bonusRes
 		if form.Side == PKSideA {
 			round.PoolA += bet.Amount
 			round.BetCountA++
@@ -320,13 +335,41 @@ func (s *pkService) PlaceBet(userId int64, form PKBetForm) (map[string]any, erro
 	}
 	uc, _ := UserCoinService.GetOrCreate(userId)
 	round := repositories.PKRepository.TakeRound(sqls.DB(), "id = ?", bet.RoundId)
+	s.pushFirstBetBonusMessage(userId, bet, firstBetBonus, topicTitle)
 	return map[string]any{
-		"bet":      bet,
-		"round":    round,
-		"userCoin": uc,
-		"oddsA":    calcPKOdds(round.PoolA, round.PoolB, PKSideA),
-		"oddsB":    calcPKOdds(round.PoolA, round.PoolB, PKSideB),
+		"bet":           bet,
+		"round":         round,
+		"userCoin":      uc,
+		"oddsA":         calcPKOdds(round.PoolA, round.PoolB, PKSideA),
+		"oddsB":         calcPKOdds(round.PoolA, round.PoolB, PKSideB),
+		"firstBetBonus": firstBetBonus,
 	}, nil
+}
+
+func (s *pkService) pushFirstBetBonusMessage(userId int64, bet *models.PKBet, bonus *FirstBetBonusResult, topicTitle string) {
+	if bet == nil || bonus == nil || !bonus.Granted {
+		return
+	}
+	if strings.TrimSpace(topicTitle) == "" {
+		topicTitle = fmt.Sprintf("开撕台 %d", bet.TopicId)
+	}
+	detailUrl := fmt.Sprintf("/pk/topic/%d", bet.TopicId)
+	PetFirstBetBonusService.PushMessage(
+		userId,
+		bonus,
+		"first_bet_bonus_pk",
+		"开撕台",
+		topicTitle,
+		detailUrl,
+		strconv.FormatInt(bet.Id, 10),
+		map[string]any{
+			"topicId": bet.TopicId,
+			"roundId": bet.RoundId,
+			"betId":   bet.Id,
+			"side":    bet.Side,
+			"amount":  bet.Amount,
+		},
+	)
 }
 
 func (s *pkService) Heat(topicId int64) (map[string]any, error) {

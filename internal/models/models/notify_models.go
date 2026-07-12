@@ -36,3 +36,37 @@ type Message struct {
 	Status       int    `gorm:"type:int;not null" json:"status" form:"status"`                   // 状态：0：未读、1：已读
 	CreateTime   int64  `json:"createTime" form:"createTime"`                                    // 创建时间
 }
+
+// MessageNotifyTemplate 主站消息通知模板。
+type MessageNotifyTemplate struct {
+	Model
+	BusinessCode      string `gorm:"size:64;not null;uniqueIndex:uk_message_notify_template_biz_tpl;index:idx_message_notify_template_status" json:"businessCode" form:"businessCode"`
+	TemplateCode      string `gorm:"size:128;not null;uniqueIndex:uk_message_notify_template_biz_tpl" json:"templateCode" form:"templateCode"`
+	SubjectTemplate   string `gorm:"size:255;not null" json:"subjectTemplate" form:"subjectTemplate"`
+	BodyTemplate      string `gorm:"type:text;not null" json:"bodyTemplate" form:"bodyTemplate"`
+	DetailUrlTemplate string `gorm:"size:512" json:"detailUrlTemplate" form:"detailUrlTemplate"`
+	TemplateParams    string `gorm:"type:text;not null" json:"templateParams" form:"templateParams"`
+	Status            int    `gorm:"type:int;not null;default:1;index:idx_message_notify_template_status" json:"status" form:"status"`
+	Remark            string `gorm:"size:512" json:"remark" form:"remark"`
+	CreateTime        int64  `gorm:"not null" json:"createTime" form:"createTime"`
+	UpdateTime        int64  `gorm:"not null" json:"updateTime" form:"updateTime"`
+}
+
+// UserMessageNotifyRecord 用户主站消息通知记录。
+type UserMessageNotifyRecord struct {
+	Model
+	BusinessCode   string `gorm:"size:64;not null;index:idx_user_message_notify_biz;index:idx_user_message_notify_user_business,priority:2" json:"businessCode" form:"businessCode"`
+	TemplateCode   string `gorm:"size:128;not null;index:idx_user_message_notify_biz" json:"templateCode" form:"templateCode"`
+	TemplateId     int64  `gorm:"not null" json:"templateId" form:"templateId"`
+	UserId         int64  `gorm:"not null;index:idx_user_message_notify_user_time,priority:1;index:idx_user_message_notify_user_status,priority:1;index:idx_user_message_notify_user_business,priority:1;index:idx_user_message_notify_idem,priority:1" json:"userId" form:"userId"`
+	Subject        string `gorm:"size:255;not null" json:"subject" form:"subject"`
+	Body           string `gorm:"type:text;not null" json:"body" form:"body"`
+	DetailUrl      string `gorm:"size:512" json:"detailUrl" form:"detailUrl"`
+	Status         int    `gorm:"type:int;not null;default:0;index:idx_user_message_notify_user_status,priority:2" json:"status" form:"status"`
+	TemplateParams string `gorm:"type:text" json:"templateParams" form:"templateParams"`
+	ExtraData      string `gorm:"type:text" json:"extraData" form:"extraData"`
+	BizId          string `gorm:"size:128;index:idx_user_message_notify_biz" json:"bizId" form:"bizId"`
+	IdempotencyKey string `gorm:"size:191;index:idx_user_message_notify_idem,priority:2" json:"idempotencyKey" form:"idempotencyKey"`
+	CreateTime     int64  `gorm:"not null;index:idx_user_message_notify_user_time,priority:2;index:idx_user_message_notify_user_business,priority:3" json:"createTime" form:"createTime"`
+	UpdateTime     int64  `gorm:"not null" json:"updateTime" form:"updateTime"`
+}

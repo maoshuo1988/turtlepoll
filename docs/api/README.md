@@ -17,6 +17,7 @@
 - [举报审核（Admin UserReport）](./admin_user_report.md)
 - [用户管理（Admin User）](./admin_user.md)
 - [用户系统](./user.md)
+- [主站消息通知（Message Notify）](./message_notify.md)
 - [用户中心](./user_center.md)
 - [评论系统](./comment.md)
 - [标签评论统计](./tag.md)

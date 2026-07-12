@@ -4,7 +4,9 @@ import (
 	"bbs-go/internal/models/models"
 	"bbs-go/internal/repositories"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
@@ -177,5 +179,37 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 	if err != nil {
 		return nil, err
 	}
+	s.pushFirstBetBonusMessage(userId, ret)
 	return ret, nil
+}
+
+func (s *predictBetService) pushFirstBetBonusMessage(userId int64, ret *PlaceBetResult) {
+	if ret == nil || ret.Bet == nil || ret.FirstBetBonus == nil || !ret.FirstBetBonus.Granted {
+		return
+	}
+	marketTitle := ""
+	marketId := ret.Bet.MarketId
+	if ret.Market != nil {
+		marketTitle = ret.Market.Title
+		marketId = ret.Market.Id
+	}
+	if strings.TrimSpace(marketTitle) == "" {
+		marketTitle = fmt.Sprintf("暗盘 %d", marketId)
+	}
+	detailUrl := fmt.Sprintf("/predict/markets/%d", marketId)
+	PetFirstBetBonusService.PushMessage(
+		userId,
+		ret.FirstBetBonus,
+		"first_bet_bonus_predict",
+		"暗盘",
+		marketTitle,
+		detailUrl,
+		strconv.FormatInt(ret.Bet.Id, 10),
+		map[string]any{
+			"marketId": marketId,
+			"betId":    ret.Bet.Id,
+			"option":   ret.Bet.Option,
+			"amount":   ret.Bet.Amount,
+		},
+	)
 }

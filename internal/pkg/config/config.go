@@ -83,6 +83,7 @@ type Config struct {
 	Polymarket     Polymarket     `yaml:"polymarket"`     // polymarket（只读同步）
 	DeepSeek       DeepSeek       `yaml:"deepseek"`       // DeepSeek API
 	AIChat         AIChat         `yaml:"aiChat"`         // AI 聊天
+	MessageNotify  MessageNotify  `yaml:"messageNotify"`  // 主站消息通知
 	LoginCaptcha   LoginCaptcha   `yaml:"loginCaptcha"`   // 登录/注册相关验证码开关（仅配置文件层面）
 }
 
@@ -166,6 +167,14 @@ type AIChat struct {
 	IdleTriggerMinutes      int  `yaml:"idleTriggerMinutes"`
 }
 
+type MessageNotify struct {
+	Enabled                   *bool `yaml:"enabled"`
+	DefaultPageSize           int   `yaml:"defaultPageSize"`
+	MaxPageSize               int   `yaml:"maxPageSize"`
+	RenderStrict              *bool `yaml:"renderStrict"`
+	ReadUpdateThrottleSeconds int   `yaml:"readUpdateThrottleSeconds"`
+}
+
 type IPLocator struct {
 	IPv4DataPath string `yaml:"ipv4DataPath"` // IPv4 数据文件路径
 	IPv6DataPath string `yaml:"ipv6DataPath"` // IPv6 数据文件路径
@@ -227,6 +236,7 @@ func ReadConfig() (cfg *Config, exists bool, err error) {
 		}
 		SetDbDefaults(&cfg.DB)
 		SetAIDefaults(cfg)
+		SetMessageNotifyDefaults(cfg)
 		SetNewsDefaults(cfg)
 		SetPolymarketDefaults(cfg)
 	} else {
@@ -244,6 +254,7 @@ func ReadConfig() (cfg *Config, exists bool, err error) {
 			DB: defaultDbConfig(),
 		}
 		SetAIDefaults(cfg)
+		SetMessageNotifyDefaults(cfg)
 		SetNewsDefaults(cfg)
 		SetPolymarketDefaults(cfg)
 	}
@@ -459,6 +470,29 @@ func SetAIDefaults(c *Config) {
 	}
 	if c.AIChat.IdleTriggerMinutes == 0 {
 		c.AIChat.IdleTriggerMinutes = 10
+	}
+}
+
+func SetMessageNotifyDefaults(c *Config) {
+	if c == nil {
+		return
+	}
+	if c.MessageNotify.DefaultPageSize == 0 {
+		c.MessageNotify.DefaultPageSize = 20
+	}
+	if c.MessageNotify.MaxPageSize == 0 {
+		c.MessageNotify.MaxPageSize = 100
+	}
+	if c.MessageNotify.MaxPageSize < c.MessageNotify.DefaultPageSize {
+		c.MessageNotify.MaxPageSize = c.MessageNotify.DefaultPageSize
+	}
+	if c.MessageNotify.Enabled == nil {
+		enabled := true
+		c.MessageNotify.Enabled = &enabled
+	}
+	if c.MessageNotify.RenderStrict == nil {
+		renderStrict := true
+		c.MessageNotify.RenderStrict = &renderStrict
 	}
 }
 

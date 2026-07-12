@@ -248,19 +248,53 @@ func (s *userService) SignUp(username, email, nickname, password, rePassword str
 		UpdateTime: dates.NowTimestamp(),
 	}
 
+	var signupBonus *SignupBonusResult
 	err = sqls.DB().Transaction(func(tx *gorm.DB) error {
 		if err := repositories.UserRepository.Create(tx, user); err != nil {
 			return err
 		}
-		return UserPetService.GrantAndEquipBasicOnSignup(tx, user.Id, dates.NowTimestamp())
+		ret, err := UserPetService.GrantAndEquipBasicOnSignup(tx, user.Id, dates.NowTimestamp())
+		if err != nil {
+			return err
+		}
+		signupBonus = ret
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	s.pushSignupBonusMessage(user.Id, signupBonus)
 	return user, nil
 }
 
 // SignIn 登录
+// pushSignupBonusMessage writes the signup reward notification after the signup transaction commits.
+func (s *userService) pushSignupBonusMessage(userId int64, bonus *SignupBonusResult) {
+	if bonus == nil || !bonus.Granted || bonus.Amount <= 0 {
+		return
+	}
+	petName := strings.TrimSpace(bonus.PetName)
+	if petName == "" {
+		petName = bonus.PetKey
+	}
+	_, _ = MessageNotifyService.PushByTemplate(MessageNotifyPushInput{
+		BusinessCode: MessageNotifyBusinessReward,
+		TemplateCode: "signup_bonus",
+		UserId:       userId,
+		Params: map[string]string{
+			"amount":  strconv.FormatInt(bonus.Amount, 10),
+			"petName": petName,
+		},
+		ExtraData: map[string]any{
+			"petKey":  bonus.PetKey,
+			"petName": petName,
+			"amount":  bonus.Amount,
+		},
+		BizId:          strconv.FormatInt(userId, 10),
+		IdempotencyKey: "signup_bonus:" + strconv.FormatInt(userId, 10),
+	})
+}
+
 func (s *userService) SignIn(username, password string) (*models.User, error) {
 	if strs.IsBlank(username) {
 		return nil, errors.New("用户名/邮箱不能为空")

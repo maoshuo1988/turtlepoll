@@ -106,6 +106,14 @@ aiChat:
   idlePushDailyLimit: 2
   idleTriggerMinutes: 10
 
+# 主站消息通知
+messageNotify:
+  enabled: true
+  defaultPageSize: 20
+  maxPageSize: 100
+  renderStrict: true
+  readUpdateThrottleSeconds: 0
+
 # login captcha
 loginCaptcha:
   rotateEnabled: true
