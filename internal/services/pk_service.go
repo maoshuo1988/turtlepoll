@@ -2095,18 +2095,32 @@ func countdownSeconds(round *models.PKRound, now int64) int64 {
 	if round == nil {
 		return 0
 	}
+	nowSec := pkTimestampToSeconds(now)
 	var target int64
-	if now < round.LockTime {
-		target = round.LockTime
-	} else if now < round.EndTime {
-		target = round.EndTime
-	} else if now < round.NextRoundTime {
-		target = round.NextRoundTime
+	lockSec := pkTimestampToSeconds(round.LockTime)
+	endSec := pkTimestampToSeconds(round.EndTime)
+	nextRoundSec := pkTimestampToSeconds(round.NextRoundTime)
+	if nowSec < lockSec {
+		target = lockSec
+	} else if nowSec < endSec {
+		target = endSec
+	} else if nowSec < nextRoundSec {
+		target = nextRoundSec
 	}
-	if target <= now {
+	if target <= nowSec {
 		return 0
 	}
-	return target - now
+	return target - nowSec
+}
+
+func pkTimestampToSeconds(ts int64) int64 {
+	if ts <= 0 {
+		return ts
+	}
+	if ts > 1_000_000_000_000 {
+		return ts / 1000
+	}
+	return ts
 }
 
 func betPayoutPreview(bet *models.PKBet, round *models.PKRound) int64 {

@@ -203,23 +203,32 @@ func (s *userLikeService) CommentLike(userId int64, commentId int64) error {
 	if comment == nil || comment.Status != constants.StatusOk {
 		return errors.New("comment not found")
 	}
-	if err := s.ensurePredictCommentLikeCamp(sqls.DB(), userId, comment); err != nil {
+	_, _, err := s.resolvePredictCommentLikeContext(sqls.DB(), userId, comment)
+	if err != nil {
 		return err
 	}
 
 	if err := sqls.WithTransaction(func(ctx *sqls.TxContext) error {
-		if err := s.ensurePredictCommentLikeCamp(ctx.Tx, userId, comment); err != nil {
+		marketIdTx, targetOptionTx, err := s.resolvePredictCommentLikeContext(ctx.Tx, userId, comment)
+		if err != nil {
 			return err
 		}
 		if err := s.like(ctx, userId, constants.EntityComment, commentId); err != nil {
 			return err
 		}
 		// 更新点赞数
-		return repositories.CommentRepository.UpdateColumn(ctx.Tx, commentId, "like_count", gorm.Expr("like_count + 1"))
+		if err := repositories.CommentRepository.UpdateColumn(ctx.Tx, commentId, "like_count", gorm.Expr("like_count + 1")); err != nil {
+			return err
+		}
+		if marketIdTx > 0 && targetOptionTx != "" {
+			if err := PredictTearStatService.RecordInteraction(ctx.Tx, marketIdTx, userId, targetOptionTx, "like", constants.EntityComment, commentId, 1, ""); err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
-
 	// 发送事件
 	event.Send(event.UserLikeEvent{
 		UserId:     userId,
@@ -276,8 +285,13 @@ func (s userLikeService) unlike(tx *gorm.DB, userId int64, entityType string, en
 }
 
 func (s *userLikeService) ensurePredictCommentLikeCamp(tx *gorm.DB, userId int64, comment *models.Comment) error {
+	_, _, err := s.resolvePredictCommentLikeContext(tx, userId, comment)
+	return err
+}
+
+func (s *userLikeService) resolvePredictCommentLikeContext(tx *gorm.DB, userId int64, comment *models.Comment) (int64, string, error) {
 	if tx == nil || comment == nil || userId <= 0 {
-		return nil
+		return 0, "", nil
 	}
 
 	var marketId int64
@@ -287,25 +301,25 @@ func (s *userLikeService) ensurePredictCommentLikeCamp(tx *gorm.DB, userId int64
 	} else if comment.EntityType == constants.EntityComment {
 		parent := repositories.CommentRepository.Get(tx, comment.EntityId)
 		if parent == nil || parent.EntityType != constants.EntityPredictMarket {
-			return nil
+			return 0, "", nil
 		}
 		marketId = parent.EntityId
 		targetCommentId = parent.Id
 	} else {
-		return nil
+		return 0, "", nil
 	}
 
 	if marketId <= 0 {
-		return nil
+		return 0, "", nil
 	}
 	targetOption := PredictCommentMetaService.OptionAtActionByCommentId(tx, targetCommentId)
 	if targetOption == "" {
-		return nil
+		return marketId, "", nil
 	}
 
 	now := dates.NowTimestamp()
 	if err := PredictCampLockService.EnsureInteractLock(tx, marketId, userId, targetOption, now); err != nil {
-		return err
+		return 0, "", err
 	}
-	return nil
+	return marketId, targetOption, nil
 }

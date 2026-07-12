@@ -40,6 +40,16 @@ func normalizeAdminPredictMarketStatus(v string) string {
 	}
 }
 
+func normalizeAdminPredictCloseTime(ts int64) int64 {
+	if ts <= 0 {
+		return 0
+	}
+	if ts > 1_000_000_000_000 {
+		return ts / 1000
+	}
+	return ts
+}
+
 // ensureMarketForContextUpdate 保证 context_update 对应的 market 存在：
 // - 传了 marketId：若存在直接返回；不存在则按该 ID 创建。
 // - 没传 marketId：创建新 market 并回填 form.MarketId。
@@ -60,9 +70,7 @@ func (c *PredictController) ensureMarketForContextUpdate(form *models.PredictCon
 	marketType := services.NormalizePredictMarketType(c.Ctx.FormValue("marketType"))
 	status := normalizeAdminPredictMarketStatus(c.Ctx.FormValue("status"))
 	closeTime, _ := params.GetInt64(c.Ctx, "closeTime")
-	if closeTime < 0 {
-		closeTime = 0
-	}
+	closeTime = normalizeAdminPredictCloseTime(closeTime)
 	sourceModel := strings.TrimSpace(c.Ctx.FormValue("sourceModel"))
 	if sourceModel == "" {
 		sourceModel = "AdminManual"

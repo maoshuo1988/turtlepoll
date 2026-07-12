@@ -50,10 +50,7 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 
 	nowMs := dates.NowTimestamp()
 	// 统一时间戳单位为“秒”，避免 ms/sec 混用导致 closeTime 判断错误。
-	nowSec := nowMs
-	if nowSec > 1_000_000_000_000 {
-		nowSec = nowSec / 1000
-	}
+	nowSec := predictTimestampToSeconds(nowMs)
 	ret := &PlaceBetResult{}
 
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
@@ -75,14 +72,30 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 		if !IsValidPredictOption(market.MarketType, option) {
 			return errors.New(PredictOptionErrMsg(market.MarketType))
 		}
-		if market.CloseTime > 0 && nowSec >= market.CloseTime {
+		closeTimeSec := predictTimestampToSeconds(market.CloseTime)
+		if closeTimeSec != market.CloseTime {
+			market.CloseTime = closeTimeSec
+			market.UpdateTime = nowSec
+			if err := tx.Model(market).Select("close_time", "update_time").Updates(market).Error; err != nil {
+				return err
+			}
+		}
+		if closeTimeSec > 0 && nowSec >= closeTimeSec {
+			if market.Status == "OPEN" {
+				market.Status = "CLOSED"
+				market.UpdateTime = nowSec
+				if err := tx.Model(market).Select("status", "update_time").Updates(market).Error; err != nil {
+					return err
+				}
+			}
 			slog.Warn("predict bet rejected: market closed by closeTime",
 				"marketId", market.Id,
 				"status", market.Status,
 				"closeTime", market.CloseTime,
+				"closeTimeSec", closeTimeSec,
 				"nowMs", nowMs,
 				"nowSec", nowSec,
-				"nowGteCloseTime", nowSec >= market.CloseTime,
+				"nowGteCloseTime", nowSec >= closeTimeSec,
 			)
 			return errors.New("market is closed")
 		}

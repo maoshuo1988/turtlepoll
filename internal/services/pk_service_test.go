@@ -56,6 +56,23 @@ func TestPKBetFormUnmarshalJSONUsesDefaultAmount(t *testing.T) {
 	}
 }
 
+func TestCountdownSecondsUsesSecondsForMillisecondTimestamps(t *testing.T) {
+	round := &models.PKRound{
+		LockTime:      1_700_003_000_000,
+		EndTime:       1_700_006_000_000,
+		NextRoundTime: 1_700_009_000_000,
+	}
+
+	// betting phase: now < lockTime
+	require.EqualValues(t, 3000, countdownSeconds(round, 1_700_000_000_000))
+	// locked phase: lockTime <= now < endTime
+	require.EqualValues(t, 1500, countdownSeconds(round, 1_700_004_500_000))
+	// cooldown phase: endTime <= now < nextRoundTime
+	require.EqualValues(t, 500, countdownSeconds(round, 1_700_008_500_000))
+	// after next round
+	require.EqualValues(t, 0, countdownSeconds(round, 1_700_009_100_000))
+}
+
 func TestPKServiceCommentReplies_Validation(t *testing.T) {
 	list, nextCursor, hasMore, err := PKService.CommentReplies(0, 0, 20, 0)
 	require.Error(t, err)
