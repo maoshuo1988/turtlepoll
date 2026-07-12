@@ -41,7 +41,7 @@ type TearCampMember struct {
 	Model
 	EventType       string `gorm:"size:32;not null;index;uniqueIndex:idx_tear_camp_event_user" json:"eventType"`
 	EventId         int64  `gorm:"not null;index" json:"eventId"`
-	TopicId         int64  `gorm:"not null;index" json:"topicId"`
+	TopicId         int64  `gorm:"not null;index;uniqueIndex:idx_tear_camp_event_user" json:"topicId"`
 	RoundId         int64  `gorm:"not null;index;uniqueIndex:idx_tear_camp_event_user" json:"roundId"`
 	UserId          int64  `gorm:"not null;index;uniqueIndex:idx_tear_camp_event_user" json:"userId"`
 	Option          string `gorm:"size:16;not null;index" json:"option"`
