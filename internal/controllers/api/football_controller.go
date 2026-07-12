@@ -161,6 +161,8 @@ func (c *FootballController) GetPredict_tagsHot() *web.JsonResult {
 // 按标签查询预测市场：GET /api/football/markets/by_tag?tag=xxx&page=1&limit=20
 // 返回结构与 /api/football/markets 类似：market + context。
 func (c *FootballController) GetMarketsBy_tag() *web.JsonResult {
+	_, _ = services.CloseExpiredOpenMarkets(0)
+
 	tag := strings.TrimSpace(c.Ctx.URLParamDefault("tag", ""))
 	if tag == "" {
 		return web.JsonErrorMsg("tag is required")
@@ -435,6 +437,8 @@ func (c *FootballController) GetBet_settle_result() *web.JsonResult {
 
 // 查询预测市场：GET /api/football/markets?page=1&limit=20
 func (c *FootballController) GetMarkets() *web.JsonResult {
+	_, _ = services.CloseExpiredOpenMarkets(0)
+
 	p := params.NewQueryParams(c.Ctx)
 	currentUser := common.GetCurrentUser(c.Ctx)
 	sourceModel := c.Ctx.URLParamDefault("sourceModel", "")
@@ -564,6 +568,8 @@ func (c *FootballController) GetMarkets() *web.JsonResult {
 // - 使用 EXISTS 子查询避免 JOIN 导致 count/分页重复行的问题。
 // - 返回结构尽量与 /api/football/markets 一致（market + context + betSettleResult + hasBet）。
 func (c *FootballController) GetMarketsBy_name() *web.JsonResult {
+	_, _ = services.CloseExpiredOpenMarkets(0)
+
 	q := strings.TrimSpace(c.Ctx.URLParamDefault("q", ""))
 	if q == "" {
 		return web.JsonErrorMsg("q is required")

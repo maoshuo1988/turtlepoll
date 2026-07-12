@@ -70,6 +70,8 @@ func (c *PredictController) GetMarketsByTag() *web.JsonResult {
 // GetMyMarkets 查询当前用户参与下注的市场列表。
 // 返回结构与 /api/predict/markets 对齐：market/context/schedule/matchPhase/hasBet/betSettleResult/tearSettlement。
 func (c *PredictController) GetMyMarkets() *web.JsonResult {
+	_, _ = services.CloseExpiredOpenMarkets(0)
+
 	user := common.GetCurrentUser(c.Ctx)
 	if user == nil {
 		return web.JsonError(errs.NotLogin())

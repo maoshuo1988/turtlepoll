@@ -74,6 +74,13 @@ func (s *predictBetService) PlaceBet(userId, marketId int64, option string, amou
 			return errors.New(PredictOptionErrMsg(market.MarketType))
 		}
 		if market.CloseTime > 0 && nowSec >= market.CloseTime {
+			if market.Status == "OPEN" {
+				market.Status = "CLOSED"
+				market.UpdateTime = nowSec
+				if err := tx.Model(market).Select("status", "update_time").Updates(market).Error; err != nil {
+					return err
+				}
+			}
 			slog.Warn("predict bet rejected: market closed by closeTime",
 				"marketId", market.Id,
 				"status", market.Status,
