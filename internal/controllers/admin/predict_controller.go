@@ -468,11 +468,11 @@ type adminSettlePredictMarketForm struct {
 	Result     string `json:"result"`     // A/B/DRAW（DRAW only for 1x2）
 	RequestId  string `json:"requestId"`  // for audit
 	Remark     string `json:"remark"`     // optional
-	AllowReset bool   `json:"allowReset"` // if true: allow SETTLED -> SETTLED (admin fix), default false
+	AllowReset bool   `json:"allowReset"` // deprecated: kept for backward compatibility
 }
 
 // PostMarketSettle POST /api/admin/predict/market/settle
-// 管理员结算：将 market 从 CLOSED 结算为 SETTLED，并写入最终结果（A/B/DRAW）。
+// 管理员强制结算：忽略 market 当前状态，直接写入 SETTLED 与最终结果（A/B/DRAW）。
 func (c *PredictController) PostMarket_settle() *web.JsonResult {
 	adminUser := common.GetCurrentUser(c.Ctx)
 	if adminUser == nil {
@@ -504,16 +504,6 @@ func (c *PredictController) PostMarket_settle() *web.JsonResult {
 		}
 		if !services.IsValidPredictOption(m.MarketType, result) {
 			return errors.New(services.PredictOptionErrMsg(m.MarketType))
-		}
-
-		// 默认仅允许 CLOSED -> SETTLED
-		if m.Status == "SETTLED" {
-			if !form.AllowReset {
-				return errors.New("market already settled")
-			}
-		}
-		if m.Status != "CLOSED" && m.Status != "CLOSE" && !(form.AllowReset && m.Status == "SETTLED") {
-			return fmt.Errorf("market status must be CLOSED (or SETTLED with allowReset), got=%s", m.Status)
 		}
 
 		m.Status = "SETTLED"
