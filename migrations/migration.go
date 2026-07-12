@@ -148,4 +148,6 @@ func init() {
 	register(26, "tear heat support tables", migrate_tear_heat_support_tables)
 	register(27, "tear heat snapshot and camp tables", migrate_tear_heat_snapshot_and_camp_tables)
 	register(28, "predict comment reward audit fields", migrate_predict_comment_reward_audit_fields)
+	register(29, "main site message notify tables and seed templates", migrate_message_notify_tables)
+	register(30, "main site reward message notify scene templates", migrate_message_notify_reward_scene_templates)
 }

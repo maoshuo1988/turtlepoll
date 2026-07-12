@@ -15,7 +15,7 @@ var Models = []interface{}{
 	&UserRole{}, &Role{}, &Menu{}, &RoleMenu{}, &Api{}, &MenuApi{}, &DictType{}, &Dict{},
 
 	&User{}, &UserToken{}, &ThirdUser{}, &Tag{}, &Article{}, &ArticleTag{}, &Comment{}, &Favorite{}, &Topic{}, &TopicNode{},
-	&TopicTag{}, &UserLike{}, &UserDislike{}, &Message{}, &SysConfig{}, &Link{},
+	&TopicTag{}, &UserLike{}, &UserDislike{}, &Message{}, &MessageNotifyTemplate{}, &UserMessageNotifyRecord{}, &SysConfig{}, &Link{},
 	&NewsArticle{}, &NewsSource{}, &NewsCategory{}, &NewsTag{}, &NewsArticleCategory{}, &NewsArticleTag{}, &NewsCrawlTask{},
 	&TaskConfig{}, &UserTaskEvent{}, &UserTaskLog{},
 	&Badge{}, &UserBadge{},

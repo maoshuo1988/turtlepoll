@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/mlogclub/simple/common/dates"
@@ -46,6 +47,7 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 	now := dates.NowTimestamp()
 	results := make([]*SettleMyBetResult, 0)
 	pushEvents := make([]AISettlementEvent, 0)
+	marketTitle := ""
 
 	err := sqls.DB().Transaction(func(tx *gorm.DB) error {
 		market := &models.PredictMarket{}
@@ -56,6 +58,7 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 		if market.Status != "SETTLED" {
 			return errors.New("market is not settled")
 		}
+		marketTitle = market.Title
 		winner := strings.ToUpper(strings.TrimSpace(market.Result))
 		if !IsValidPredictOption(market.MarketType, winner) {
 			return errors.New("market result must match market options")
@@ -148,5 +151,45 @@ func (s *predictSettleService) SettleMyBet(userId, marketId int64) ([]*SettleMyB
 	for _, event := range pushEvents {
 		_, _ = AIPushService.OnSettlement(event)
 	}
+	for _, result := range results {
+		s.pushPredictSettleMessage(userId, marketId, marketTitle, result)
+	}
 	return results, nil
+}
+
+func (s *predictSettleService) pushPredictSettleMessage(userId, marketId int64, marketTitle string, result *SettleMyBetResult) {
+	if result == nil || result.Bet == nil {
+		return
+	}
+	templateCode := "predict_settle_lose"
+	settleResult := strings.ToLower(strings.TrimSpace(result.Bet.SettleResult))
+	if settleResult == "win" {
+		templateCode = "predict_settle_win"
+	}
+	if settleResult == "refund" || settleResult == "draw" {
+		templateCode = "predict_settle_refund"
+	}
+	if strings.TrimSpace(marketTitle) == "" {
+		marketTitle = fmt.Sprintf("预测市场 %d", marketId)
+	}
+	_, _ = MessageNotifyService.PushByTemplate(MessageNotifyPushInput{
+		BusinessCode: MessageNotifyBusinessDarkMarket,
+		TemplateCode: templateCode,
+		UserId:       userId,
+		Params: map[string]string{
+			"marketTitle": marketTitle,
+			"payout":      strconv.FormatInt(result.Payout, 10),
+			"amount":      strconv.FormatInt(result.Bet.Amount, 10),
+			"marketId":    strconv.FormatInt(marketId, 10),
+		},
+		ExtraData: map[string]any{
+			"betId":        result.Bet.Id,
+			"marketId":     marketId,
+			"option":       result.Bet.Option,
+			"settleResult": result.Bet.SettleResult,
+			"payout":       result.Payout,
+		},
+		BizId:          strconv.FormatInt(result.Bet.Id, 10),
+		IdempotencyKey: fmt.Sprintf("predict_settle:%d:%s", result.Bet.Id, settleResult),
+	})
 }

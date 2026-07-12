@@ -6,6 +6,7 @@ import (
 	"bbs-go/internal/repositories"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/mlogclub/simple/common/dates"
 	"github.com/mlogclub/simple/common/jsons"
@@ -300,5 +301,41 @@ func (s *petDailySettleService) SettleOnLogin(userId int64) *DailySettleResult {
 		ret.ErrorCode = "DAILY_SETTLE_ERR"
 		ret.ErrorMsg = err.Error()
 	}
+	if ret.ErrorCode == "" && !ret.AlreadySettled {
+		s.pushDailyLoginRewardMessage(userId, dayName, ret)
+	}
 	return ret
+}
+
+func (s *petDailySettleService) pushDailyLoginRewardMessage(userId int64, dayName int, ret *DailySettleResult) {
+	if ret == nil || len(ret.Items) == 0 {
+		return
+	}
+	total := int64(0)
+	for _, item := range ret.Items {
+		if item.Amount > 0 {
+			total += item.Amount
+		}
+	}
+	if total <= 0 {
+		return
+	}
+	_, _ = MessageNotifyService.PushByTemplate(MessageNotifyPushInput{
+		BusinessCode: MessageNotifyBusinessReward,
+		TemplateCode: "daily_login_reward",
+		UserId:       userId,
+		Params: map[string]string{
+			"amount":      strconv.FormatInt(total, 10),
+			"loginStreak": strconv.Itoa(ret.Streak.LoginStreak),
+		},
+		ExtraData: map[string]any{
+			"date":          ret.Date,
+			"items":         ret.Items,
+			"balanceBefore": ret.BalanceBefore,
+			"balanceAfter":  ret.BalanceAfter,
+			"pet":           ret.Pet,
+		},
+		BizId:          strconv.Itoa(dayName),
+		IdempotencyKey: fmt.Sprintf("daily_login_reward:%d:%d", userId, dayName),
+	})
 }

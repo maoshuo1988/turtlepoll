@@ -6,6 +6,7 @@ import (
 	"bbs-go/internal/repositories"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,6 +129,39 @@ func (s *petFirstBetBonusService) GrantOnBetPlaced(tx *gorm.DB, userId, marketId
 	ret.Amount = params.Amount
 	ret.Reason = "GRANTED"
 	return ret, nil
+}
+
+func (s *petFirstBetBonusService) PushMessage(userId int64, bonus *FirstBetBonusResult, templateCode, sceneName, targetTitle, detailUrl, bizId string, extraData map[string]any) {
+	if bonus == nil || !bonus.Granted || bonus.Amount <= 0 {
+		return
+	}
+	if strings.TrimSpace(sceneName) == "" {
+		sceneName = "下注"
+	}
+	if strings.TrimSpace(targetTitle) == "" {
+		targetTitle = sceneName
+	}
+	params := map[string]string{
+		"amount":      strconv.FormatInt(bonus.Amount, 10),
+		"sceneName":   sceneName,
+		"targetTitle": targetTitle,
+		"detailUrl":   detailUrl,
+	}
+	if extraData == nil {
+		extraData = map[string]any{}
+	}
+	extraData["amount"] = bonus.Amount
+	extraData["sceneName"] = sceneName
+	extraData["targetTitle"] = targetTitle
+	_, _ = MessageNotifyService.PushByTemplate(MessageNotifyPushInput{
+		BusinessCode:   MessageNotifyBusinessReward,
+		TemplateCode:   templateCode,
+		UserId:         userId,
+		Params:         params,
+		ExtraData:      extraData,
+		BizId:          bizId,
+		IdempotencyKey: fmt.Sprintf("%s:%d:%s", templateCode, userId, bizId),
+	})
 }
 
 func decodeFirstBetBonusParams(v any) (*firstBetBonusParams, error) {
